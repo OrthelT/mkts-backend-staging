@@ -6,11 +6,18 @@ import requests
 from requests import ReadTimeout
 from logging_config import configure_logging
 from ESI_OAUTH_FLOW import get_token
-from dbhandler import *
-from models import *
-from utils import *
-from data_processing import *
+from dbhandler import get_watchlist, get_table_length, update_database
+from models import MarketOrders, MarketHistory, MarketStats, Doctrines
+from utils import get_type_names, validate_columns, add_timestamp, add_autoincrement
+from data_processing import calculate_market_stats, calculate_doctrine_stats
 from utils import get_status
+import sqlalchemy as sa
+from sqlalchemy import text
+
+
+local_mkt_path = "wcmkt2.db"
+
+
 # ---------------------------------------------
 # ESI Structure Market Tools for Eve Online
 # ---------------------------------------------
@@ -162,28 +169,37 @@ def check_tables():
         print("\n")
     engine.dispose()
 
+def run_diagnostics():
+    function_choice = input("Enter the number of the function you want to run: \n1. Check tables\n2. Fetch market orders\n3. Fetch market history\n4. Calculate market stats\n5. Calculate doctrine stats\n")
+    if function_choice == "1":
+        check_tables()
+    elif function_choice == "2":
+        orders = fetch_market_orders()
+        return orders
+    elif function_choice == "3":
+        history = fetch_history(pd.read_csv("data/watchlist.csv"))
+        return history
+    elif function_choice == "4":
+        calculate_market_stats()
+    elif function_choice == "5":
+        calculate_doctrine_stats()
+
 
 def main():
     logger.info("Starting mkts-backend")
 
-    # Configure memory management for large datasets
-    import gc
-
-    gc.collect()  # Force garbage collection before starting
-
-    # Set pandas options for memory efficiency
-    pd.set_option(
-        "mode.chained_assignment", None
-    )  # Disable warnings for large datasets
-
     valid_columns = MarketOrders.__table__.columns.keys()
+    valid_columns = [col for col in valid_columns]
 
     data = fetch_market_orders()
 
     if data:
         orders_df = pd.DataFrame.from_records(data)
-        orders_df = get_type_names(orders_df)
+        type_names = get_type_names(orders_df)
+        orders_df = orders_df.merge(type_names, on="type_id", how="left")
         orders_df = orders_df[valid_columns]
+        orders_df = add_timestamp(orders_df)
+        orders_df = add_autoincrement(orders_df)
         orders_df = validate_columns(orders_df, valid_columns)
 
         print(f"Orders fetched:{len(orders_df)} items")
@@ -214,7 +230,6 @@ def main():
             logger.error(f"Failed to update market history: {e}")
             logger.info("Attempting to clear memory and retry...")
             del history_df
-            gc.collect()
 
             # Recreate the DataFrame and try again with smaller chunks
             history_df = pd.DataFrame.from_records(history)
@@ -268,17 +283,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # Uncomment the line below to check the database tables
-    # check_tables()
-
-    # Uncomment the line below to fetch market orders
-    # fetch_market_orders()
-
-    # Uncomment the line below to fetch market history
-    # fetch_history(pd.read_csv("data/watchlist.csv"))
-
-    # Uncomment the line below to calculate market stats
-    # calculate_market_stats()
-
-    # Uncomment the line below to calculate doctrine stats
-    # calculate_doctrine_stats()

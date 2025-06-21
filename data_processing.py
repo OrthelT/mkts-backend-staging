@@ -73,14 +73,18 @@ def calculate_market_stats() -> pd.DataFrame:
     ) AS h ON w.type_id = h.type_id
     """
 
-    engine = sa.create_engine(f"sqlite:///{local_mkt_path}")
+    engine = sa.create_engine(f"sqlite+libsql:///{local_mkt_path}")
 
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
+
     engine.dispose()
 
     df2 = calculate_5_percentile_price()
+
     df = df.merge(df2, on="type_id", how="left")
+
+
     df.days_remaining = df.days_remaining.apply(lambda x: round(x, 1))
     df = df.rename(columns={"5_perc_price": "price"})
     df["last_update"] = pd.Timestamp.now(tz="UTC")

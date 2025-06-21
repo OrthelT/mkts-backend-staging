@@ -8,6 +8,14 @@ from models import wcmkt_path
 
 logger = configure_logging(__name__)
 
+def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
+    engine = sa.create_engine(f"sqlite:///{wcmkt_path}")
+    with engine.connect() as conn:
+        stmt = text("SELECT type_id, type_name FROM watchlist")
+        res = conn.execute(stmt)
+        df = pd.DataFrame(res.fetchall(), columns=["type_id", "type_name"])
+    engine.dispose()
+    return df[["type_id", "type_name"]] 
 
 def get_null_count(df):
     return df.isnull().sum()
@@ -103,4 +111,4 @@ def get_status() -> dict:
 
 
 if __name__ == "__main__":
-    pass
+     pass

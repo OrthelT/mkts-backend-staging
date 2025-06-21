@@ -1,34 +1,62 @@
 import os
-from sqlalchemy import create_engine
-import libsql_experimental as libsql
+import libsql
 import json
 import requests
 import pandas as pd
-from sqlalchemy import text
-from models import Base
+from sqlalchemy import text, create_engine
 from datetime import datetime, timezone
 import time
-from utils import *
+from utils import standby, logger, configure_logging
 from dotenv import load_dotenv
-
-load_dotenv()
-
-wcmkt_path = "wcmkt2.db"
-wcmkt_url = f"sqlite:///{wcmkt_path}"
-sde_path = "sde.db"
-sde_url = f"sqlite:///{sde_path}"
-
-turso_url = os.getenv("TURSO_URL")
-turso_token = os.getenv("TURSO_AUTH_TOKEN")
-
 from logging_config import configure_logging
 
+load_dotenv()
 logger = configure_logging(__name__)
 
+wcmkt_path = "wcmkt2.db"
+wcmkt_local_url = f"sqlite+libsql:///{wcmkt_path}"
+sde_path = "sde.db"
+sde_local_url = f"sqlite+libsql:///{sde_path}"
 
-def create_db():
-    engine = create_engine(wcmkt_url)
-    Base.metadata.create_all(engine)
+turso_url = os.getenv("TURSO_URL")
+turso_auth_token = os.getenv("TURSO_AUTH_TOKEN")
+
+sde_url = os.getenv("SDE_URL")
+sde_token = os.getenv("SDE_AUTH_TOKEN")
+
+mktorders_db = "market_orders.sqlite"
+mktorders_local_url = f"sqlite+libsql:///{mktorders_db}"
+
+# SDE connection
+def sde_conn():
+    conn = libsql.connect("sde.db", sync_url=sde_url, auth_token=sde_token)
+    return conn
+
+# WCMKT connection
+def wcmkt_conn():
+    conn = libsql.connect(wcmkt_path, sync_url=turso_url, auth_token=turso_auth_token)
+    return conn
+
+def sde_remote_engine():
+    engine = create_engine(sde_url, connect_args={"auth_token": sde_token}, echo=True)
+    return engine
+
+def sde_local_engine():
+    engine = create_engine(sde_local_url)
+    return engine
+
+def get_wcmkt_remote_engine():
+    engine = create_engine(
+    f"sqlite+{turso_url}?secure=true",
+    connect_args={
+        "auth_token": turso_auth_token,
+    },echo_pool=True, echo=True)
+    return engine
+
+def get_wcmkt_local_engine():
+    engine = create_engine(wcmkt_local_url, echo_pool=True, echo=True)
+    return engine
+
 
 
 def insert_type_data(data: list[dict]):
@@ -141,7 +169,7 @@ def load_data(table: str, df: pd.DataFrame):
 
 
 def update_database(table: str, df: pd.DataFrame):
-    engine = create_engine(wcmkt_url, echo=False)
+    engine = create_engine(wcmkt_local_url, echo=False)
     with engine.connect() as conn:
         conn.execute(text(f"DELETE FROM {table};"))
         conn.commit()
@@ -208,8 +236,8 @@ def read_data(table: str, condition: dict = None) -> pd.DataFrame:
 def get_valid_columns(table: str) -> list[str]:
     conn = libsql.connect(wcmkt_path)
     cursor = conn.cursor()
-    query = f"SELECT * FROM {table}"
-    cursor.execute(query)
+    stmt = text(f"SELECT * FROM {table}")
+    cursor.execute(stmt)
     headers = [col[0] for col in cursor.description]
     return headers
 
@@ -222,16 +250,16 @@ def get_valid_columns_df(table: str) -> pd.DataFrame:
 def get_table_names() -> list[str]:
     conn = libsql.connect(wcmkt_path)
     cursor = conn.cursor()
-    query = "SELECT name FROM sqlite_master WHERE type='table'"
-    cursor.execute(query)
+    stmt = text("SELECT name FROM sqlite_master WHERE type='table'")
+    cursor.execute(stmt)
     return [row[0] for row in cursor.fetchall()]
 
 
 def get_table_schema(table: str) -> pd.DataFrame:
     conn = libsql.connect(wcmkt_path)
     cursor = conn.cursor()
-    query = f"PRAGMA table_info({table})"
-    cursor.execute(query)
+    stmt = text(f"PRAGMA table_info({table})")
+    cursor.execute(stmt)
     return pd.DataFrame(
         cursor.fetchall(),
         columns=["cid", "name", "type", "notnull", "dflt_value", "pk"],
@@ -239,7 +267,7 @@ def get_table_schema(table: str) -> pd.DataFrame:
 
 
 def get_watchlist() -> pd.DataFrame:
-    engine = create_engine(wcmkt_url)
+    engine = create_engine(wcmkt_local_url)
     with engine.connect() as conn:
         df = pd.read_sql_table("watchlist", conn)
         if len(df) == 0:
@@ -262,7 +290,7 @@ def get_watchlist() -> pd.DataFrame:
 
 def update_watchlist_data():
     df = pd.read_csv("data/all_watchlist.csv")
-    engine = create_engine(wcmkt_url)
+    engine = create_engine(wcmkt_local_url)
     with engine.connect() as conn:
         df.to_sql("watchlist", conn, if_exists="replace", index=False)
         conn.commit()
@@ -272,8 +300,8 @@ def update_watchlist_data():
 def get_market_orders(type_id: int) -> pd.DataFrame:
     conn = libsql.connect(wcmkt_path)
     cursor = conn.cursor()
-    query = "SELECT * FROM marketorders WHERE type_id = ?"
-    cursor.execute(query, (type_id,))
+    stmt = text("SELECT * FROM marketorders WHERE type_id = ?")
+    cursor.execute(stmt, (type_id,))
     headers = [col[0] for col in cursor.description]
     return pd.DataFrame(cursor.fetchall(), columns=headers)
 
@@ -281,8 +309,8 @@ def get_market_orders(type_id: int) -> pd.DataFrame:
 def get_market_history(type_id: int) -> pd.DataFrame:
     conn = libsql.connect(wcmkt_path)
     cursor = conn.cursor()
-    query = "SELECT * FROM market_history WHERE type_id = ?"
-    cursor.execute(query, (type_id,))
+    stmt = text("SELECT * FROM market_history WHERE type_id = ?")
+    cursor.execute(stmt, (type_id,))
     headers = [col[0] for col in cursor.description]
     return pd.DataFrame(cursor.fetchall(), columns=headers)
 
@@ -290,22 +318,22 @@ def get_market_history(type_id: int) -> pd.DataFrame:
 def get_table_length(table: str) -> int:
     conn = libsql.connect(wcmkt_path)
     cursor = conn.cursor()
-    query = f"SELECT COUNT(*) FROM {table}"
-    cursor.execute(query)
+    stmt = text(f"SELECT COUNT(*) FROM {table}")
+    cursor.execute(stmt)
     return cursor.fetchone()[0]
 
 
 def load_additional_tables():
     df = pd.read_csv("data/doctrine_map.csv")
     targets = pd.read_csv("data/ship_targets.csv")
-    engine = create_engine(wcmkt_url)
+    engine = create_engine(wcmkt_local_url)
     with engine.connect() as conn:
         df.to_sql("doctrine_map", conn, if_exists="replace", index=False)
         targets.to_sql("ship_targets", conn, if_exists="replace", index=False)
         conn.commit()
 
 
-def sync_db(db_url="wcmkt2.db", sync_url=turso_url, auth_token=turso_token):
+def sync_db(db_url="wcmkt2.db", sync_url=turso_url, auth_token=turso_auth_token):
     logger.info("database sync started")
     # Skip sync in development mode or when sync_url/auth_token are not provided
     if not sync_url or not auth_token:
@@ -340,7 +368,7 @@ def sync_db(db_url="wcmkt2.db", sync_url=turso_url, auth_token=turso_token):
             )
         else:
             logger.error(f"Sync failed: {str(e)}")
-
+    
 
 if __name__ == "__main__":
     pass

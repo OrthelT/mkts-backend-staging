@@ -14,4 +14,4 @@ logs/
 *.db
 *.db*
 *.csv
-
+market_orders.sqlite
