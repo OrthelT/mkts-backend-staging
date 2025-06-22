@@ -8,7 +8,7 @@ from logging_config import configure_logging
 from ESI_OAUTH_FLOW import get_token
 from dbhandler import get_watchlist, get_table_length, update_database
 from models import MarketOrders, MarketHistory, MarketStats, Doctrines
-from utils import get_type_names, validate_columns, add_timestamp, add_autoincrement
+from utils import get_type_names, validate_columns, add_timestamp, add_autoincrement, sleep_for_seconds
 from data_processing import calculate_market_stats, calculate_doctrine_stats
 from utils import get_status
 import sqlalchemy as sa
@@ -98,6 +98,9 @@ def fetch_market_orders() -> list[dict]:
 
 
 def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
+    #Watchlist truncated for testing purposes
+    watchlist = watchlist.iloc[:50]
+
     logger.info("Fetching history")
     if watchlist is None or watchlist.empty:
         logger.error("No watchlist provided or watchlist is empty")
@@ -115,6 +118,7 @@ def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
     }
 
     history = []
+
     watchlist_length = len(watchlist)
     for i, type_id in enumerate(type_ids):
         item_name = watchlist[watchlist["type_id"] == type_id]["type_name"].values[0]
@@ -250,7 +254,10 @@ def main():
                 print("Critical error: Unable to update market history")
     else:
         logger.error("No history found")
+    logger.info("Sleeping for 5 seconds")
+    sleep_for_seconds(5)
 
+    logger.info("Calculating market stats")
     valid_market_stats_columns = MarketStats.__table__.columns.keys()
     market_stats = calculate_market_stats()
 

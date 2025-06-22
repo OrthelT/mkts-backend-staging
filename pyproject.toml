@@ -7,16 +7,13 @@ requires-python = ">=3.12"
 dependencies = [
     "dotenv>=0.9.9",
     "libsql>=0.1.2",
+    "mydbtools>=0.1.0",
     "pandas>=2.3.0",
     "requests>=2.32.4",
     "requests-oauthlib>=2.0.0",
     "sqlalchemy>=2.0.41",
     "sqlalchemy-libsql>=0.2.0",
-]
-
-[dependency-groups]
-dev = [
-    "mydbtools>=0.1.0",
+    "sqlalchemy-orm>=1.2.10",
 ]
 
 [tool.uv.sources]

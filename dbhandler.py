@@ -29,7 +29,7 @@ mktorders_local_url = f"sqlite+libsql:///{mktorders_db}"
 
 # SDE connection
 def sde_conn():
-    conn = libsql.connect("sde.db", sync_url=sde_url, auth_token=sde_token)
+    conn = libsql.connect(sde_path, sync_url=sde_url, auth_token=sde_token)
     return conn
 
 # WCMKT connection
@@ -56,8 +56,6 @@ def get_wcmkt_remote_engine():
 def get_wcmkt_local_engine():
     engine = create_engine(wcmkt_local_url, echo_pool=True, echo=True)
     return engine
-
-
 
 def insert_type_data(data: list[dict]):
     conn = libsql.connect(sde_path)
@@ -163,7 +161,7 @@ def load_data(table: str, df: pd.DataFrame):
             logger.error(f"Error: {e}")
             continue
 
-    print()  # New line after progress display
+   # New line after progress display
     logger.info(f"Successfully inserted {total_rows} rows into {table}")
     conn.close()
 
@@ -236,7 +234,7 @@ def read_data(table: str, condition: dict = None) -> pd.DataFrame:
 def get_valid_columns(table: str) -> list[str]:
     conn = libsql.connect(wcmkt_path)
     cursor = conn.cursor()
-    stmt = text(f"SELECT * FROM {table}")
+    stmt = f"SELECT * FROM {table}"
     cursor.execute(stmt)
     headers = [col[0] for col in cursor.description]
     return headers
@@ -250,7 +248,7 @@ def get_valid_columns_df(table: str) -> pd.DataFrame:
 def get_table_names() -> list[str]:
     conn = libsql.connect(wcmkt_path)
     cursor = conn.cursor()
-    stmt = text("SELECT name FROM sqlite_master WHERE type='table'")
+    stmt = "SELECT name FROM sqlite_master WHERE type='table'"
     cursor.execute(stmt)
     return [row[0] for row in cursor.fetchall()]
 
@@ -258,7 +256,7 @@ def get_table_names() -> list[str]:
 def get_table_schema(table: str) -> pd.DataFrame:
     conn = libsql.connect(wcmkt_path)
     cursor = conn.cursor()
-    stmt = text(f"PRAGMA table_info({table})")
+    stmt = f"PRAGMA table_info({table})"
     cursor.execute(stmt)
     return pd.DataFrame(
         cursor.fetchall(),
@@ -300,7 +298,7 @@ def update_watchlist_data():
 def get_market_orders(type_id: int) -> pd.DataFrame:
     conn = libsql.connect(wcmkt_path)
     cursor = conn.cursor()
-    stmt = text("SELECT * FROM marketorders WHERE type_id = ?")
+    stmt = "SELECT * FROM marketorders WHERE type_id = ?"
     cursor.execute(stmt, (type_id,))
     headers = [col[0] for col in cursor.description]
     return pd.DataFrame(cursor.fetchall(), columns=headers)
@@ -309,7 +307,7 @@ def get_market_orders(type_id: int) -> pd.DataFrame:
 def get_market_history(type_id: int) -> pd.DataFrame:
     conn = libsql.connect(wcmkt_path)
     cursor = conn.cursor()
-    stmt = text("SELECT * FROM market_history WHERE type_id = ?")
+    stmt = "SELECT * FROM market_history WHERE type_id = ?"
     cursor.execute(stmt, (type_id,))
     headers = [col[0] for col in cursor.description]
     return pd.DataFrame(cursor.fetchall(), columns=headers)
@@ -318,7 +316,7 @@ def get_market_history(type_id: int) -> pd.DataFrame:
 def get_table_length(table: str) -> int:
     conn = libsql.connect(wcmkt_path)
     cursor = conn.cursor()
-    stmt = text(f"SELECT COUNT(*) FROM {table}")
+    stmt = f"SELECT COUNT(*) FROM {table}"
     cursor.execute(stmt)
     return cursor.fetchone()[0]
 

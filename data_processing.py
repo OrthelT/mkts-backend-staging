@@ -1,16 +1,18 @@
 
 import pandas as pd
 import sqlalchemy as sa
-
+from logging_config import configure_logging
 from models import MarketStats, Doctrines
+import libsql
 
 local_mkt_path = "wcmkt2.db"
 local_sde_path = "sde.db"
-engine = sa.create_engine(f"sqlite:///{local_mkt_path}")
+engine = sa.create_engine(f"sqlite+libsql:///{local_mkt_path}")
 from dbhandler import get_watchlist
 
 watchlist = get_watchlist()
 
+logger = configure_logging(__name__)
 
 def calculate_5_percentile_price() -> pd.DataFrame:
     query = """
@@ -21,7 +23,7 @@ def calculate_5_percentile_price() -> pd.DataFrame:
     WHERE is_buy_order = 0
     """
 
-    engine = sa.create_engine(f"sqlite:///{local_mkt_path}")
+    engine = sa.create_engine(f"sqlite+libsql:///{local_mkt_path}")
 
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
@@ -73,18 +75,25 @@ def calculate_market_stats() -> pd.DataFrame:
     ) AS h ON w.type_id = h.type_id
     """
 
-    engine = sa.create_engine(f"sqlite+libsql:///{local_mkt_path}")
+    engine = sa.create_engine(f"sqlite+libsql:///{local_mkt_path}", echo="debug")
+    logger.info(f"Calculating market stats with {engine}")
+
+    logger.info(f"Querying market stats with {query}")
+    logger.info(f"Engine: {engine}")
 
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
+        logger.info(f"df: {df}")
+        logger.info(f"Market stats queried: {df.shape[0]} items")
 
     engine.dispose()
 
+    logger.info(f"Calculating 5 percentile price")
     df2 = calculate_5_percentile_price()
-
+    logger.info(f"Merging 5 percentile price with market stats")
     df = df.merge(df2, on="type_id", how="left")
 
-
+    logger.info(f"Renaming columns")
     df.days_remaining = df.days_remaining.apply(lambda x: round(x, 1))
     df = df.rename(columns={"5_perc_price": "price"})
     df["last_update"] = pd.Timestamp.now(tz="UTC")
@@ -96,6 +105,7 @@ def calculate_market_stats() -> pd.DataFrame:
     df = df.infer_objects()
     df = df.fillna(0)
     df["total_volume_remain"] = df["total_volume_remain"].astype(int)
+    logger.info(f"Market stats calculated: {df.shape[0]} items")
     return df
 
 
@@ -110,7 +120,7 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     *
     FROM marketstats
     """
-    engine = sa.create_engine(f"sqlite:///{local_mkt_path}")
+    engine = sa.create_engine(f"sqlite+libsql:///{local_mkt_path}")
 
     with engine.connect() as conn:
         doctrine_stats = pd.read_sql_query(doctrine_query, conn)
