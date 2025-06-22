@@ -13,7 +13,7 @@ from data_processing import calculate_market_stats, calculate_doctrine_stats
 from utils import get_status
 import sqlalchemy as sa
 from sqlalchemy import text
-
+from mydbtools import TableInfo, ColumnInfo, DatabaseInfo
 
 local_mkt_path = "wcmkt2.db"
 

@@ -13,3 +13,11 @@ dependencies = [
     "sqlalchemy>=2.0.41",
     "sqlalchemy-libsql>=0.2.0",
 ]
+
+[dependency-groups]
+dev = [
+    "mydbtools>=0.1.0",
+]
+
+[tool.uv.sources]
+mydbtools = { path = "../../tools/dbtools" }
