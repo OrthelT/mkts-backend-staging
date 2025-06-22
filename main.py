@@ -98,8 +98,6 @@ def fetch_market_orders() -> list[dict]:
 
 
 def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
-    #Watchlist truncated for testing purposes
-    watchlist = watchlist.iloc[:50]
 
     logger.info("Fetching history")
     if watchlist is None or watchlist.empty:

@@ -204,6 +204,7 @@ def update_database(table: str, df: pd.DataFrame):
         if total_rows > chunk_size:
             print()  # New line after progress display
     conn.close()
+    engine.dispose()
 
 
 def read_data(table: str, condition: dict = None) -> pd.DataFrame:
