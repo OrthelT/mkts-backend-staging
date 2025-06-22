@@ -252,14 +252,11 @@ def main():
                 print("Critical error: Unable to update market history")
     else:
         logger.error("No history found")
-    logger.info("Sleeping for 5 seconds")
-    sleep_for_seconds(5)
 
     logger.info("Calculating market stats")
     valid_market_stats_columns = MarketStats.__table__.columns.keys()
-    market_stats = calculate_market_stats()
+    market_stats_df = calculate_market_stats()
 
-    market_stats_df = pd.DataFrame.from_records(market_stats)
     market_stats_df = validate_columns(market_stats_df, valid_market_stats_columns)
     update_database("marketstats", market_stats_df)
     logger.info(f"Market stats updated:{get_table_length('marketstats')} items")
@@ -274,8 +271,7 @@ def main():
     logger.info(f"Doctrines updated:{get_table_length('doctrines')} items")
 
     valid_doctrine_columns = Doctrines.__table__.columns.keys()
-    doctrine_stats = calculate_doctrine_stats()
-    doctrine_stats_df = pd.DataFrame.from_records(doctrine_stats)
+    doctrine_stats_df = calculate_doctrine_stats()
     doctrine_stats_df = add_autoincrement(doctrine_stats_df)
     doctrine_stats_df = validate_columns(doctrine_stats_df, valid_doctrine_columns)
 
