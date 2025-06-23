@@ -4,6 +4,8 @@ import sqlalchemy as sa
 from logging_config import configure_logging
 from models import MarketStats, Doctrines
 import libsql
+import json
+from mydbtools import DatabaseInfo
 
 local_mkt_path = "wcmkt2.db"
 local_sde_path = "sde.db"
@@ -156,6 +158,11 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     val_cols = Doctrines.__table__.columns.keys()
     col_compare = set(doctrine_stats.columns) - set(val_cols)
     return doctrine_stats
+
+def generate_csv_tables():
+    engine = sa.create_engine(f"sqlite+libsql:///{local_mkt_path}")
+    db_info = DatabaseInfo(engine).get_tables_with_columns_as_json()
+    print(db_info)
 
 
 if __name__ == "__main__":
