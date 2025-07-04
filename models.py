@@ -1,9 +1,7 @@
-from sqlalchemy import String, Integer, DateTime, Float, Boolean
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
-wcmkt_path = "wcmkt2.db"
-wcmkt_url = f"sqlite:///{wcmkt_path}"
-
+from sqlalchemy import String, Integer, DateTime, Float, Boolean, create_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+import libsql
+from proj_config import wcmkt_url, db_path
 
 class Base(DeclarativeBase):
     pass
@@ -196,6 +194,36 @@ class DoctrineInfo(Base):
     doctrine_id: Mapped[int] = mapped_column(Integer)
     doctrine_name: Mapped[str] = mapped_column(String)
 
+class RegionOrders(Base):
+    __tablename__ = "region_orders"
+    order_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    duration:  Mapped[int] = mapped_column(Integer)
+    is_buy_order: Mapped[bool] = mapped_column(Boolean)
+    issued: Mapped[DateTime] = mapped_column(DateTime)
+    location_id: Mapped[int] = mapped_column(Integer)
+    min_volume: Mapped[int] = mapped_column(Integer)
+    price: Mapped[float] = mapped_column(Float)
+    range: Mapped[str] = mapped_column(String)
+    system_id: Mapped[int] = mapped_column(Integer)
+    type_id: Mapped[int] = mapped_column(Integer)
+    volume_remain: Mapped[int] = mapped_column(Integer)
+    volume_total: Mapped[int] = mapped_column(Integer)
+
+    def __repr__(self) -> str:
+        return f"""region_orders(
+        order_id={self.order_id!r},
+        duration={self.duration!r},
+        is_buy_order={self.is_buy_order!r},
+        issued={self.issued!r},
+        location_id={self.location_id!r},
+        min_volume={self.min_volume!r},
+        price={self.price!r},
+        range={self.range!r},
+        system_id={self.system_id!r},
+        type_id={self.type_id!r},
+        volume_remain={self.volume_remain!r},
+        volume_total={self.volume_total!r}
+        )"""
 
 if __name__ == "__main__":
     pass

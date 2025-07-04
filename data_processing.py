@@ -6,10 +6,8 @@ from models import MarketStats, Doctrines
 import libsql
 import json
 from mydbtools import DatabaseInfo
+from proj_config import db_path, wcmkt_url, sde_path, sde_url
 
-local_mkt_path = "wcmkt2.db"
-local_sde_path = "sde.db"
-engine = sa.create_engine(f"sqlite+libsql:///{local_mkt_path}")
 from dbhandler import get_watchlist
 
 watchlist = get_watchlist()
@@ -25,7 +23,7 @@ def calculate_5_percentile_price() -> pd.DataFrame:
     WHERE is_buy_order = 0
     """
 
-    engine = sa.create_engine(f"sqlite+libsql:///{local_mkt_path}")
+    engine = sa.create_engine(wcmkt_url)
 
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
@@ -77,11 +75,7 @@ def calculate_market_stats() -> pd.DataFrame:
     ) AS h ON w.type_id = h.type_id
     """
 
-    engine = sa.create_engine(f"sqlite+libsql:///{local_mkt_path}", echo="debug")
-    logger.info(f"Calculating market stats with {engine}")
-
-    logger.info(f"Querying market stats with {query}")
-    logger.info(f"Engine: {engine}")
+    engine = sa.create_engine(wcmkt_url)
 
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
@@ -122,7 +116,7 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     *
     FROM marketstats
     """
-    engine = sa.create_engine(f"sqlite+libsql:///{local_mkt_path}")
+    engine = sa.create_engine(wcmkt_url)
 
     with engine.connect() as conn:
         doctrine_stats = pd.read_sql_query(doctrine_query, conn)
@@ -160,7 +154,7 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     return doctrine_stats
 
 def generate_csv_tables():
-    engine = sa.create_engine(f"sqlite+libsql:///{local_mkt_path}")
+    engine = sa.create_engine(wcmkt_url)
     db_info = DatabaseInfo(engine).get_tables_with_columns_as_json()
     print(db_info)
 

@@ -16,3 +16,4 @@ logs/
 *.csv
 market_orders.sqlite
 CLAUDE.md
+tests/

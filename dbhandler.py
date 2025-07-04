@@ -3,12 +3,15 @@ import libsql
 import json
 import requests
 import pandas as pd
-from sqlalchemy import text, create_engine
+from sqlalchemy import inspect, text, create_engine, select, insert
+from sqlalchemy.orm import Session, sessionmaker, query
 from datetime import datetime, timezone
 import time
 from utils import standby, logger, configure_logging
 from dotenv import load_dotenv
 from logging_config import configure_logging
+from models import Base
+from proj_config import wcmkt_url
 
 load_dotenv()
 logger = configure_logging(__name__)
@@ -24,8 +27,6 @@ turso_auth_token = os.getenv("TURSO_AUTH_TOKEN")
 sde_url = os.getenv("SDE_URL")
 sde_token = os.getenv("SDE_AUTH_TOKEN")
 
-mktorders_db = "market_orders.sqlite"
-mktorders_local_url = f"sqlite+libsql:///{mktorders_db}"
 
 # SDE connection
 def sde_conn():
@@ -50,11 +51,11 @@ def get_wcmkt_remote_engine():
     f"sqlite+{turso_url}?secure=true",
     connect_args={
         "auth_token": turso_auth_token,
-    },echo_pool=True, echo=True)
+    },echo_pool=True, echo=False)
     return engine
 
 def get_wcmkt_local_engine():
-    engine = create_engine(wcmkt_local_url, echo_pool=True, echo=True)
+    engine = create_engine(wcmkt_local_url, echo_pool=True, echo=False)
     return engine
 
 def insert_type_data(data: list[dict]):
@@ -166,9 +167,9 @@ def load_data(table: str, df: pd.DataFrame):
     conn.close()
 
 
-def update_database(table: str, df: pd.DataFrame):
-    engine = create_engine(wcmkt_local_url, echo=False)
-    with engine.connect() as conn:
+def update_remote_database(table: str, df: pd.DataFrame):
+    remote_engine = get_wcmkt_remote_engine()
+    with remote_engine.connect() as conn:
         conn.execute(text(f"DELETE FROM {table};"))
         conn.commit()
         logger.info(f"Deleted {table} table")
@@ -204,8 +205,44 @@ def update_database(table: str, df: pd.DataFrame):
         if total_rows > chunk_size:
             print()  # New line after progress display
     conn.close()
-    engine.dispose()
+    remote_engine.dispose()
 
+def update_remote_database_with_orm_session(table: Base, df: pd.DataFrame):
+    df = prepare_data_for_insertion(df, table)
+    
+    remote_engine = get_wcmkt_remote_engine()
+    session = Session(bind=remote_engine)
+    print(f"Updating {table} with {len(df)} rows")
+    data = df.to_dict(orient="records")
+    chunk_size = 1000
+    session.query(table).delete()
+    session.commit()
+    with session.begin():
+        for i in range(0, len(data), chunk_size):
+            chunk = data[i : i + chunk_size]
+            stmt = insert(table).values(chunk)
+            session.execute(stmt)
+            print(f"Processing chunk {i // chunk_size + 1}, size: {len(chunk)}")
+
+    session.commit()
+
+
+    print(f"Updated {table} with {len(df)} rows")
+
+    session.close()
+    remote_engine.dispose()
+
+    status = get_remote_status()
+    print(status)
+    
+    table_name = table.__tablename__
+    print(f"Table {table_name} updated with {len(df)} rows")
+    if status[table_name] == len(df):
+        print(f"Table {table_name} updated successfully")
+        return True
+    else:
+        print(f"Table {table_name} update failed")
+        return False
 
 def read_data(table: str, condition: dict = None) -> pd.DataFrame:
     conn = libsql.connect(wcmkt_path)
@@ -367,7 +404,51 @@ def sync_db(db_url="wcmkt2.db", sync_url=turso_url, auth_token=turso_auth_token)
             )
         else:
             logger.error(f"Sync failed: {str(e)}")
-    
 
+def get_remote_table_list():
+    remote_engine = get_wcmkt_remote_engine()
+    with remote_engine.connect() as conn:
+        tables = conn.execute(text("PRAGMA table_list"))
+        return tables.fetchall()
+    remote_engine.dispose()
+
+def get_remote_status():
+    status_dict = {}
+    remote_engine = get_wcmkt_remote_engine()
+    with remote_engine.connect() as conn:
+        tables = get_remote_table_list()
+        for table in tables:
+            table_name = table[1]
+            count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+            count = count.fetchone()[0]
+            status_dict[table_name] = count
+
+    remote_engine.dispose()
+
+    print("Remote Status:")
+    print("-" * 20)
+    print(status_dict)
+    return status_dict
+
+def prepare_data_for_insertion(df, model_class):
+    """Convert datetime strings to datetime objects for a model DataFrame"""
+    inspector = inspect(model_class)
+
+    for column in inspector.columns:
+        column_name = column.key
+        if column_name in df.columns:
+            # Check if it's a DateTime column
+            if hasattr(column.type, '__class__') and 'DateTime' in str(column.type.__class__):
+                try:
+                    # Convert the entire Series to datetime
+                    df[column_name] = pd.to_datetime(df[column_name])
+                    # Convert to Python datetime objects for SQLAlchemy
+                    df[column_name] = df[column_name].dt.to_pydatetime()
+                except Exception as e:
+                    print(f"Error converting {column_name}: {e}")
+                    # Set to current datetime as fallback for the entire column
+                    df[column_name] = datetime.now()
+
+    return df
 if __name__ == "__main__":
-    pass
+    get_remote_status()

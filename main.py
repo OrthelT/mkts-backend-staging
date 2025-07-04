@@ -6,14 +6,15 @@ import requests
 from requests import ReadTimeout
 from logging_config import configure_logging
 from ESI_OAUTH_FLOW import get_token
-from dbhandler import get_watchlist, get_table_length, update_database
-from models import MarketOrders, MarketHistory, MarketStats, Doctrines
+from dbhandler import get_watchlist, get_table_length, prepare_data_for_insertion, update_remote_database, update_remote_database_with_orm_session
+from models import MarketOrders, MarketHistory, MarketStats, Doctrines, RegionOrders, Watchlist
 from utils import get_type_names, validate_columns, add_timestamp, add_autoincrement, sleep_for_seconds
 from data_processing import calculate_market_stats, calculate_doctrine_stats
-from utils import get_status
+from dbhandler import get_remote_status
 import sqlalchemy as sa
 from sqlalchemy import text
 from mydbtools import TableInfo, ColumnInfo, DatabaseInfo
+from nakah import get_region_orders_from_db, update_region_orders
 
 local_mkt_path = "wcmkt2.db"
 
@@ -27,6 +28,8 @@ local_mkt_path = "wcmkt2.db"
 # Currently set for the 4-HWWF Keepstar. You can enter another structure ID for a player-owned structure that you have access to.
 structure_id = 1035466617946
 region_id = 10000003
+deployment_region_id = 10000001
+deployment_system_id = 30000072
 
 
 # set variables for ESI requests
@@ -171,23 +174,49 @@ def check_tables():
         print("\n")
     engine.dispose()
 
-def run_diagnostics():
-    function_choice = input("Enter the number of the function you want to run: \n1. Check tables\n2. Fetch market orders\n3. Fetch market history\n4. Calculate market stats\n5. Calculate doctrine stats\n")
-    if function_choice == "1":
-        check_tables()
-    elif function_choice == "2":
-        orders = fetch_market_orders()
-        return orders
-    elif function_choice == "3":
-        history = fetch_history(pd.read_csv("data/watchlist.csv"))
-        return history
-    elif function_choice == "4":
-        calculate_market_stats()
-    elif function_choice == "5":
-        calculate_doctrine_stats()
+def process_history(watchlist: pd.DataFrame):
+    history = fetch_history(watchlist)
+    valid_history_columns = MarketHistory.__table__.columns.keys()
+    history_df = pd.DataFrame.from_records(history)
+    history_df = add_timestamp(history_df)
+    history_df = add_autoincrement(history_df)
+    history_df = validate_columns(history_df, valid_history_columns)
 
+    try:
+        update_remote_database_with_orm_session(MarketHistory, history_df)
+        logger.info(f"History updated:{get_table_length('market_history')} items")
+        print(f"History updated:{get_table_length('market_history')} items")
+    except Exception as e:
+        logger.error(f"Failed to update market history: {e}")
+        logger.info("Attempting to clear memory and retry...")
+        del history_df
 
-def main():
+        # Recreate the DataFrame and try again with smaller chunks
+        history_df = pd.DataFrame.from_records(history)
+        history_df = add_timestamp(history_df)
+        history_df = add_autoincrement(history_df)
+        history_df = validate_columns(history_df, valid_history_columns)
+
+        try:
+            update_remote_database_with_orm_session(MarketHistory, history_df)
+            logger.info(
+                f"History updated on retry:{get_table_length('market_history')} items"
+            )
+            print(
+                f"History updated on retry:{get_table_length('market_history')} items"
+            )
+        except Exception as retry_error:
+            logger.error(f"Failed to update market history on retry: {retry_error}")
+            print("Critical error: Unable to update market history")
+
+        status = get_remote_status()
+        if status["market_history"] == get_table_length("market_history"):
+            print("Market history updated successfully")
+        else:
+            print("Market history update failed")
+   
+
+def main(history: bool = False):
     logger.info("Starting mkts-backend")
 
     valid_columns = MarketOrders.__table__.columns.keys()
@@ -201,64 +230,42 @@ def main():
         orders_df = orders_df.merge(type_names, on="type_id", how="left")
         orders_df = orders_df[valid_columns]
         orders_df = add_timestamp(orders_df)
+
+        orders_df = orders_df.infer_objects()
+        orders_df = orders_df.fillna(0)
+
         orders_df = add_autoincrement(orders_df)
         orders_df = validate_columns(orders_df, valid_columns)
 
         print(f"Orders fetched:{len(orders_df)} items")
         logger.info(f"Orders fetched:{len(orders_df)} items")
 
-        update_database("marketorders", orders_df)
+        update_remote_database_with_orm_session(MarketOrders, orders_df)
         logger.info(f"Orders updated:{get_table_length('marketorders')} items")
     else:
         logger.error("No orders found")
 
     watchlist = get_watchlist()
 
-    history = fetch_history(watchlist)
-
-    valid_history_columns = MarketHistory.__table__.columns.keys()
-
+    try:
+        update_remote_database_with_orm_session(Watchlist, watchlist)
+        logger.info(f"Watchlist updated:{get_table_length('watchlist')} items")
+    except Exception as e:
+        logger.error(f"Failed to update watchlist: {e}")
+    
     if history:
-        history_df = pd.DataFrame.from_records(history)
-        history_df = add_timestamp(history_df)
-        history_df = add_autoincrement(history_df)
-        history_df = validate_columns(history_df, valid_history_columns)
-
-        try:
-            update_database("market_history", history_df)
-            logger.info(f"History updated:{get_table_length('market_history')} items")
-            print(f"History updated:{get_table_length('market_history')} items")
-        except Exception as e:
-            logger.error(f"Failed to update market history: {e}")
-            logger.info("Attempting to clear memory and retry...")
-            del history_df
-
-            # Recreate the DataFrame and try again with smaller chunks
-            history_df = pd.DataFrame.from_records(history)
-            history_df = add_timestamp(history_df)
-            history_df = add_autoincrement(history_df)
-            history_df = validate_columns(history_df, valid_history_columns)
-
-            try:
-                update_database("market_history", history_df)
-                logger.info(
-                    f"History updated on retry:{get_table_length('market_history')} items"
-                )
-                print(
-                    f"History updated on retry:{get_table_length('market_history')} items"
-                )
-            except Exception as retry_error:
-                logger.error(f"Failed to update market history on retry: {retry_error}")
-                print("Critical error: Unable to update market history")
+        logger.info("Processing history")
+        process_history(watchlist)
     else:
-        logger.error("No history found")
+        logger.info("Skipping history processing")
 
     logger.info("Calculating market stats")
     valid_market_stats_columns = MarketStats.__table__.columns.keys()
     market_stats_df = calculate_market_stats()
 
     market_stats_df = validate_columns(market_stats_df, valid_market_stats_columns)
-    update_database("marketstats", market_stats_df)
+
+    update_remote_database_with_orm_session(MarketStats, market_stats_df)
     logger.info(f"Market stats updated:{get_table_length('marketstats')} items")
 
     valid_doctrine_columns = Doctrines.__table__.columns.keys()
@@ -267,7 +274,7 @@ def main():
 
     doctrine_stats_df = pd.DataFrame.from_records(doctrine_stats)
     doctrine_stats_df = validate_columns(doctrine_stats_df, valid_doctrine_columns)
-    update_database("doctrines", doctrine_stats_df)
+    update_remote_database_with_orm_session(Doctrines, doctrine_stats_df)
     logger.info(f"Doctrines updated:{get_table_length('doctrines')} items")
 
     valid_doctrine_columns = Doctrines.__table__.columns.keys()
@@ -275,11 +282,15 @@ def main():
     doctrine_stats_df = add_autoincrement(doctrine_stats_df)
     doctrine_stats_df = validate_columns(doctrine_stats_df, valid_doctrine_columns)
 
-    update_database("doctrines", doctrine_stats_df)
+    update_remote_database_with_orm_session(Doctrines, doctrine_stats_df)
     logger.info(f"Doctrines updated:{get_table_length('doctrines')} items")
     print(f"Doctrines updated:{get_table_length('doctrines')} items")
 
-    get_status()
+    update_region_orders(deployment_region_id)
+    region_orders = get_region_orders_from_db(deployment_region_id)
+    update_remote_database_with_orm_session(RegionOrders, region_orders)
+
+    get_remote_status()
 
 
 if __name__ == "__main__":

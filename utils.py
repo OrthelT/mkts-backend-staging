@@ -4,12 +4,12 @@ import time
 import json
 import sqlalchemy as sa
 from sqlalchemy import text
-from models import wcmkt_path
+from proj_config import wcmkt_url
 
 logger = configure_logging(__name__)
 
 def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
-    engine = sa.create_engine(f"sqlite:///{wcmkt_path}")
+    engine = sa.create_engine(wcmkt_url)
     with engine.connect() as conn:
         stmt = text("SELECT type_id, type_name FROM watchlist")
         res = conn.execute(stmt)
@@ -38,7 +38,8 @@ def validate_order_ids(df):
 
 
 def add_timestamp(df):
-    df["timestamp"] = pd.Timestamp.now()
+    df["timestamp"] = pd.Timestamp.now(tz="UTC")
+    df["timestamp"] = df["timestamp"].dt.to_pydatetime()
     return df
 
 
@@ -81,8 +82,8 @@ def simulate_market_history() -> dict:
     return df.to_dict(orient="records")
 
 
-def get_status() -> dict:
-    engine = sa.create_engine(f"sqlite:///{wcmkt_path}")
+def get_status():
+    engine = sa.create_engine(wcmkt_url)
     with engine.connect() as conn:
         dcount = conn.execute(text("SELECT COUNT(id) FROM doctrines"))
         doctrine_count = dcount.fetchone()[0]
@@ -92,22 +93,27 @@ def get_status() -> dict:
         history_count = history_count.fetchone()[0]
         stats_count = conn.execute(text("SELECT COUNT(type_id) FROM marketstats"))
         stats_count = stats_count.fetchone()[0]
+        region_orders_count = conn.execute(text("SELECT COUNT(order_id) FROM region_orders"))
+        region_orders_count = region_orders_count.fetchone()[0]
     engine.dispose()
     print(f"Doctrines: {doctrine_count}")
     print(f"Market Orders: {order_count}")
     print(f"Market History: {history_count}")
     print(f"Market Stats: {stats_count}")
-
+    print(f"Region Orders: {region_orders_count}")
     status_dict = {
         "doctrines": doctrine_count,
         "market_orders": order_count,
         "market_history": history_count,
         "market_stats": stats_count,
+        "region_orders": region_orders_count,
     }
 
-    timestamp = time.time()
-    with open(f"status_{timestamp}.json", "w") as f:
-        json.dump(status_dict, f)
+
+
+    # timestamp = time.time()
+    # with open(f"status_{timestamp}.json", "w") as f:
+    #     json.dump(status_dict, f)
 
 def sleep_for_seconds(seconds: int):
     for i in range(seconds):
@@ -116,5 +122,6 @@ def sleep_for_seconds(seconds: int):
         time.sleep(1)
     print()
 
+
 if __name__ == "__main__":
-     pass
+     get_remote_status()
