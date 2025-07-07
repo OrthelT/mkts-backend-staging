@@ -10,7 +10,7 @@ from logging_config import configure_logging
 from models import RegionOrders, Base
 import pandas as pd
 logger = configure_logging(__name__)
-
+from utils import get_type_name_from_sde
 sys_id = 30000072
 reg_id = 10000001
 
@@ -178,10 +178,23 @@ def get_system_orders_from_db(system_id: int) -> pd.DataFrame:
     session.close()
     return pd.DataFrame(orders_data)
 
+def process_system_orders(system_id: int) -> pd.DataFrame:
+    df = get_system_orders_from_db(system_id)
+    df = df[df['is_buy_order'] == False]
+    df2 = df.copy()
+    nakah = 60014068
+    nakah_df = df[df.location_id == nakah].reset_index(drop=True)
+    nakah_df = nakah_df[["price","type_id","volume_remain"]]
+    nakah_df = nakah_df.groupby("type_id").agg({"price": "mean", "volume_remain": "sum"}).reset_index()
+    nakah_ids = nakah_df["type_id"].unique().tolist()
+    print(nakah_ids)
 
 
 if __name__ == "__main__":
-    pass
+    df = process_system_orders(sys_id)
+    print(df)
+    
+
 
 
 

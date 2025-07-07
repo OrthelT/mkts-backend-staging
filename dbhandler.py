@@ -451,4 +451,12 @@ def prepare_data_for_insertion(df, model_class):
 
     return df
 if __name__ == "__main__":
-    get_remote_status()
+    engine = get_wcmkt_remote_engine()
+    with engine.connect() as conn:
+        tables = get_remote_table_list()
+        for table in tables:
+            table_name = table[1]
+            count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+            count = count.fetchone()[0]
+            print(f"{table_name}: {count}")
+    engine.dispose()

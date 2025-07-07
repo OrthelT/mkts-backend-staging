@@ -17,3 +17,4 @@ logs/
 market_orders.sqlite
 CLAUDE.md
 tests/
+archive/

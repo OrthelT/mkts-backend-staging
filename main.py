@@ -294,4 +294,4 @@ def main(history: bool = False):
 
 
 if __name__ == "__main__":
-    main()
+    main(history=True)
