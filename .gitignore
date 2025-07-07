@@ -18,3 +18,4 @@ market_orders.sqlite
 CLAUDE.md
 tests/
 archive/
+db_cleanup.py

@@ -14,7 +14,7 @@ from dbhandler import get_remote_status
 import sqlalchemy as sa
 from sqlalchemy import text
 from mydbtools import TableInfo, ColumnInfo, DatabaseInfo
-from nakah import get_region_orders_from_db, update_region_orders
+from nakah import get_region_orders_from_db, update_region_orders, process_system_orders
 
 local_mkt_path = "wcmkt2.db"
 
@@ -289,9 +289,9 @@ def main(history: bool = False):
     update_region_orders(deployment_region_id)
     region_orders = get_region_orders_from_db(deployment_region_id)
     update_remote_database_with_orm_session(RegionOrders, region_orders)
-
+    system_orders = process_system_orders(deployment_system_id)
     get_remote_status()
 
 
 if __name__ == "__main__":
-    main(history=True)
+    main(history=False)
