@@ -14,8 +14,9 @@ from dbhandler import get_remote_status
 import sqlalchemy as sa
 from sqlalchemy import text
 from mydbtools import TableInfo, ColumnInfo, DatabaseInfo
-from nakah import get_region_orders_from_db, update_region_orders, process_system_orders
+from nakah import get_region_orders_from_db, update_region_orders, process_system_orders, get_system_market_value, get_system_ship_count
 from proj_config import db_path, sde_path
+from google_sheets_utils import update_google_sheet
 
 
 # ---------------------------------------------
@@ -289,9 +290,20 @@ def main(history: bool = False):
     region_orders = get_region_orders_from_db(deployment_region_id)
     update_remote_database_with_orm_session(RegionOrders, region_orders)
     system_orders = process_system_orders(deployment_system_id)
+    
+    # Update Google Sheet with system orders data
+    try:
+        update_google_sheet(system_orders)
+        logger.info("Google Sheet updated successfully with system orders")
+    except Exception as e:
+        logger.error(f"Failed to update Google Sheet: {e}")
 
     get_remote_status()
-
+    print("Calculating system market value and ship count")
+    print("=" * 80)
+    get_system_market_value(deployment_system_id)
+    get_system_ship_count(deployment_system_id)
+    print("=" * 80)
 
 if __name__ == "__main__":
     main(history=False)

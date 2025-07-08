@@ -6,7 +6,10 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "dotenv>=0.9.9",
+    "google-auth>=2.40.3",
+    "gspread>=6.2.1",
     "libsql>=0.1.2",
+    "millify>=0.1.1",
     "mydbtools>=0.1.0",
     "pandas>=2.3.0",
     "requests>=2.32.4",

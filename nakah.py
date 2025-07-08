@@ -5,7 +5,7 @@ import time
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker, Session
 from proj_config import wcmkt_url, db_path
-from datetime import datetime
+from datetime import datetime, timezone
 from logging_config import configure_logging
 from models import RegionOrders, Base
 import pandas as pd
@@ -13,6 +13,7 @@ logger = configure_logging(__name__)
 from utils import get_type_names
 sys_id = 30000072
 reg_id = 10000001
+from millify import millify
 
 
 def get_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
@@ -190,13 +191,106 @@ def process_system_orders(system_id: int) -> pd.DataFrame:
     type_names = get_type_names(nakah_ids)
     nakah_df = nakah_df.merge(type_names, on="type_id", how="left")
     nakah_df = nakah_df[["type_id", "type_name", "group_name", "category_name", "price", "volume_remain"]]
-    nakah_df['timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    nakah_df['timestamp'] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     nakah_df.to_csv("nakah_stats.csv", index=False)
     return nakah_df
 
 
+def calculate_total_market_value(market_data: pd.DataFrame) -> float:
+    """
+    Calculate the total market value from process_system_orders output
+    
+    Args:
+        market_data: DataFrame from process_system_orders containing price and volume_remain columns
+        
+    Returns:
+        Total market value as float
+    """
+    if market_data is None or market_data.empty:
+        logger.warning("No market data provided for value calculation")
+        return 0.0
+    
+    # Filter out Blueprint and Skill categories
+    filtered_data = market_data[
+        (~market_data['category_name'].isin(['Blueprint', 'Skill']))
+    ].copy()
+    
+    if filtered_data.empty:
+        logger.warning("No market data after filtering out Blueprint and Skill categories")
+        print("No market data after filtering out Blueprint and Skill categories")
+        return 0.0
+    
+    # Calculate total value for each item (price * volume_remain)
+    filtered_data['total_value'] = filtered_data['price'] * filtered_data['volume_remain']
+    
+    # Sum all individual totals to get overall market value
+    total_market_value = filtered_data['total_value'].sum()
+    
+    logger.info(f"Total market value calculated: {millify(total_market_value, precision=2)} ISK")
+    print(f"Total market value calculated: {millify(total_market_value, precision=2)} ISK")
+    return total_market_value
+
+
+def get_system_market_value(system_id: int) -> float:
+    """
+    Convenience function to get total market value for a system
+    
+    Args:
+        system_id: System ID to calculate market value for
+        
+    Returns:
+        Total market value as float
+    """
+    market_data = process_system_orders(system_id)
+    return calculate_total_market_value(market_data)
+
+
+def calculate_total_ship_count(market_data: pd.DataFrame) -> int:
+    """
+    Calculate the total number of ships on the market
+    
+    Args:
+        market_data: DataFrame from process_system_orders containing category_name and volume_remain columns
+        
+    Returns:
+        Total ship count as int
+    """
+    if market_data is None or market_data.empty:
+        logger.warning("No market data provided for ship count calculation")
+        print("No market data provided for ship count calculation")
+        return 0
+    
+    # Filter for ships only and sum volume_remain
+    ships_data = market_data[market_data['category_name'] == 'Ship']
+    total_ship_count = ships_data['volume_remain'].sum()
+    
+    logger.info(f"Total ships on market: {total_ship_count:,}")
+    print(f"Total ships on market: {total_ship_count:,}")
+    return int(total_ship_count)
+
+
+def get_system_ship_count(system_id: int) -> int:
+    """
+    Convenience function to get total ship count for a system
+    
+    Args:
+        system_id: System ID to calculate ship count for
+        
+    Returns:
+        Total ship count as int
+    """
+    market_data = process_system_orders(system_id)
+    return calculate_total_ship_count(market_data)
+
+
 if __name__ == "__main__":
-    pass
+    
+    print("=" * 40)
+    print("Nakah market value and ship count")
+    print("-" * 40)
+    get_system_market_value(sys_id)
+    get_system_ship_count(sys_id)
+    print("=" * 40)
 
 
 
