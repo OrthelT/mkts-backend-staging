@@ -15,8 +15,7 @@ import sqlalchemy as sa
 from sqlalchemy import text
 from mydbtools import TableInfo, ColumnInfo, DatabaseInfo
 from nakah import get_region_orders_from_db, update_region_orders, process_system_orders
-
-local_mkt_path = "wcmkt2.db"
+from proj_config import db_path, sde_path
 
 
 # ---------------------------------------------
@@ -163,7 +162,7 @@ def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
 
 def check_tables():
     tables = ["doctrines", "marketstats", "marketorders", "market_history"]
-    engine = sa.create_engine(f"sqlite:///{local_mkt_path}")
+    engine = sa.create_engine(f"sqlite:///{db_path}")
     for table in tables:
         print(f"Table: {table}")
         print("=" * 80)
@@ -290,6 +289,7 @@ def main(history: bool = False):
     region_orders = get_region_orders_from_db(deployment_region_id)
     update_remote_database_with_orm_session(RegionOrders, region_orders)
     system_orders = process_system_orders(deployment_system_id)
+
     get_remote_status()
 
 

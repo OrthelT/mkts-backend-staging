@@ -190,14 +190,13 @@ def process_system_orders(system_id: int) -> pd.DataFrame:
     type_names = get_type_names(nakah_ids)
     nakah_df = nakah_df.merge(type_names, on="type_id", how="left")
     nakah_df = nakah_df[["type_id", "type_name", "group_name", "category_name", "price", "volume_remain"]]
-    
+    nakah_df['timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    nakah_df.to_csv("nakah_stats.csv", index=False)
     return nakah_df
 
 
 if __name__ == "__main__":
-    df = process_system_orders(sys_id)
-    df.to_csv("nakah_stats.csv", index=False)
-
+    pass
 
 
 
