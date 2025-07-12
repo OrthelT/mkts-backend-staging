@@ -306,4 +306,12 @@ def main(history: bool = False):
     print("=" * 80)
 
 if __name__ == "__main__":
-    main(history=False)
+    import sys
+    
+    # Check for command line arguments
+    include_history = False
+    if len(sys.argv) > 1:
+        if "--history" in sys.argv:
+            include_history = True
+    
+    main(history=include_history)

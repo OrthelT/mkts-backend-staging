@@ -284,14 +284,4 @@ def get_system_ship_count(system_id: int) -> int:
 
 
 if __name__ == "__main__":
-    
-    print("=" * 40)
-    print("Nakah market value and ship count")
-    print("-" * 40)
-    get_system_market_value(sys_id)
-    get_system_ship_count(sys_id)
-    print("=" * 40)
-
-
-
- 
+    pass

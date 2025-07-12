@@ -10,7 +10,7 @@ import time
 from utils import standby, logger, configure_logging
 from dotenv import load_dotenv
 from logging_config import configure_logging
-from models import Base
+from models import Base, Doctrines
 from proj_config import wcmkt_url
 
 load_dotenv()
@@ -451,12 +451,4 @@ def prepare_data_for_insertion(df, model_class):
 
     return df
 if __name__ == "__main__":
-    engine = get_wcmkt_remote_engine()
-    with engine.connect() as conn:
-        tables = get_remote_table_list()
-        for table in tables:
-            table_name = table[1]
-            count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
-            count = count.fetchone()[0]
-            print(f"{table_name}: {count}")
-    engine.dispose()
+    pass
