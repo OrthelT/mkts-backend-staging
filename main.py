@@ -13,7 +13,6 @@ from data_processing import calculate_market_stats, calculate_doctrine_stats
 from dbhandler import get_remote_status
 import sqlalchemy as sa
 from sqlalchemy import text
-from mydbtools import TableInfo, ColumnInfo, DatabaseInfo
 from nakah import get_region_orders_from_db, update_region_orders, process_system_orders, get_system_market_value, get_system_ship_count
 from proj_config import db_path, sde_path
 from google_sheets_utils import update_google_sheet

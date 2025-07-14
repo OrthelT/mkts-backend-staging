@@ -19,3 +19,4 @@ CLAUDE.md
 tests/
 archive/
 db_cleanup.py
+parse_fits.py
