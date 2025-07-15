@@ -11,8 +11,6 @@ wheels/
 .env
 logs/
 *.json
-*.db
-*.db*
 *.csv
 market_orders.sqlite
 CLAUDE.md
@@ -20,3 +18,5 @@ tests/
 archive/
 db_cleanup.py
 hfi.txt
+*.db-info
+model.db
