@@ -3,7 +3,7 @@ import libsql
 import json
 import requests
 import pandas as pd
-from sqlalchemy import inspect, text, create_engine, select, insert
+from sqlalchemy import inspect, text, create_engine, select, insert, MetaData
 from sqlalchemy.orm import Session, sessionmaker, query
 from datetime import datetime, timezone
 import time
@@ -11,15 +11,17 @@ from utils import standby, logger, configure_logging
 from dotenv import load_dotenv
 from logging_config import configure_logging
 from models import Base, Doctrines
-from proj_config import wcmkt_url
+from proj_config import db_path, wcmkt_url, sde_path, sde_url, fittings_path, fittings_path, fittings_url
 
 load_dotenv()
 logger = configure_logging(__name__)
 
-wcmkt_path = "wcmkt2.db"
-wcmkt_local_url = f"sqlite+libsql:///{wcmkt_path}"
-sde_path = "sde.db"
-sde_local_url = f"sqlite+libsql:///{sde_path}"
+wcmkt_path = db_path
+wcmkt_local_url = wcmkt_url
+sde_path = sde_path
+sde_local_url = sde_url
+fittings_path = fittings_path
+fittings_local_url = fittings_url
 
 turso_url = os.getenv("TURSO_URL")
 turso_auth_token = os.getenv("TURSO_AUTH_TOKEN")
@@ -308,8 +310,14 @@ def get_watchlist() -> pd.DataFrame:
         df = pd.read_sql_table("watchlist", conn)
         if len(df) == 0:
             logger.error("No watchlist found")
-            update_watchlist_data()
-            df = pd.read_sql_table("watchlist", conn)
+            update_choice = input("No watchlist found, press Y to update from csv (data/all_watchlist.csv)")
+            if update_choice == "Y":
+                update_watchlist_data()
+                df = pd.read_sql_table("watchlist", conn)
+            else:
+                logger.error("No watchlist found")
+                return None
+
 
             if len(df) == 0:
                 print("watchlist loading")
@@ -367,7 +375,6 @@ def load_additional_tables():
         df.to_sql("doctrine_map", conn, if_exists="replace", index=False)
         targets.to_sql("ship_targets", conn, if_exists="replace", index=False)
         conn.commit()
-
 
 def sync_db(db_url="wcmkt2.db", sync_url=turso_url, auth_token=turso_auth_token):
     logger.info("database sync started")
@@ -452,3 +459,4 @@ def prepare_data_for_insertion(df, model_class):
     return df
 if __name__ == "__main__":
     pass
+
