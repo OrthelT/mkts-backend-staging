@@ -1,4 +1,3 @@
-
 import pandas as pd
 import sqlalchemy as sa
 from logging_config import configure_logging

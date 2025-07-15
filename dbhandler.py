@@ -12,6 +12,8 @@ from dotenv import load_dotenv
 from logging_config import configure_logging
 from models import Base, Doctrines
 from proj_config import db_path, wcmkt_url, sde_path, sde_url, fittings_path, fittings_path, fittings_url
+from dataclasses import dataclass, field
+import sqlalchemy as sa
 
 load_dotenv()
 logger = configure_logging(__name__)
@@ -29,6 +31,31 @@ turso_auth_token = os.getenv("TURSO_AUTH_TOKEN")
 sde_url = os.getenv("SDE_URL")
 sde_token = os.getenv("SDE_AUTH_TOKEN")
 
+@dataclass
+class TypeInfo:
+    type_id: int
+    type_name: str = field(init=False)
+    group_name: str = field(init=False)
+    category_name: str = field(init=False)
+    category_id: int = field(init=False)
+    group_id: int = field(init=False)
+    volume: int = field(init=False)
+    def __post_init__(self):
+        self.get_type_info()
+
+    def get_type_info(self):
+        stmt = sa.text("SELECT * FROM inv_info WHERE typeID = :type_id")
+        engine = sa.create_engine(sde_local_url)
+        with engine.connect() as conn:
+            result = conn.execute(stmt, {"type_id": self.type_id})
+            for row in result:
+                self.type_name = row.typeName
+                self.group_name = row.groupName
+                self.category_name = row.categoryName
+                self.category_id = row.categoryID
+                self.group_id = row.groupID
+                self.volume = row.volume
+        engine.dispose()
 
 # SDE connection
 def sde_conn():
@@ -455,8 +482,65 @@ def prepare_data_for_insertion(df, model_class):
                     print(f"Error converting {column_name}: {e}")
                     # Set to current datetime as fallback for the entire column
                     df[column_name] = datetime.now()
+        return df
+    
+def get_watchlist_ids():
+    stmt = text("SELECT DISTINCT type_id FROM watchlist")
+    engine = create_engine(wcmkt_local_url)
+    with engine.connect() as conn:
+        result = conn.execute(stmt)
+        watchlist_ids = [row[0] for row in result]
+    engine.dispose()
+    return watchlist_ids
 
-    return df
+def get_fit_items(fit_id: int):
+    stmt = text("SELECT type_id FROM fittings_fittingitem WHERE fit_id = :fit_id")
+    engine = create_engine(fittings_local_url)
+    with engine.connect() as conn:
+        result = conn.execute(stmt, {"fit_id": fit_id})
+        fit_items = [row[0] for row in result]
+    engine.dispose()
+    return fit_items
+def get_fit_ids(doctrine_id: int):
+    stmt = text("SELECT fitting_id FROM fittings_doctrine_fittings WHERE doctrine_id = :doctrine_id")
+    engine = create_engine(fittings_local_url)
+    with engine.connect() as conn:
+        result = conn.execute(stmt, {"doctrine_id": doctrine_id})
+        fit_ids = [row[0] for row in result]
+    engine.dispose()
+    return fit_ids
+def add_doctrine_type_info_to_watchlist(doctrine_id: int):
+    watchlist_ids = get_watchlist_ids()
+    fit_ids = get_fit_ids(doctrine_id)
+    
+    missing_fit_items = []
+
+    for fit_id in fit_ids:
+        fit_items = get_fit_items(fit_id)
+        for item in fit_items:
+            if item not in watchlist_ids:
+                missing_fit_items.append(item)
+
+    missing_type_info = []
+
+    for item in missing_fit_items:
+        stmt4 = text("SELECT * FROM inv_info WHERE typeID = :item")
+        engine = create_engine(sde_local_url)
+        with engine.connect() as conn:
+            result = conn.execute(stmt4, {"item": item})
+            for row in result:
+                type_info = TypeInfo(type_id=item)
+                missing_type_info.append(type_info)
+
+    for type_info in missing_type_info:
+        stmt5 = text("INSERT INTO watchlist (type_id, type_name, group_name, category_name, category_id, group_id) VALUES (:type_id, :type_name, :group_name, :category_name, :category_id, :group_id)")
+        engine = create_engine(wcmkt_local_url)
+        with engine.connect() as conn:
+            conn.execute(stmt5, {"type_id": type_info.type_id, "type_name": type_info.type_name, "group_name": type_info.group_name, "category_name": type_info.category_name, "category_id": type_info.category_id, "group_id": type_info.group_id})
+            conn.commit()
+        engine.dispose()
+        logger.info(f"Added {type_info.type_name} to watchlist")
+        print(f"Added {type_info.type_name} to watchlist")
+
 if __name__ == "__main__":
     pass
-
