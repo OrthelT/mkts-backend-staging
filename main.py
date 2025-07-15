@@ -8,7 +8,7 @@ from logging_config import configure_logging
 from ESI_OAUTH_FLOW import get_token
 from dbhandler import get_watchlist, get_table_length, prepare_data_for_insertion, update_remote_database, update_remote_database_with_orm_session
 from models import MarketOrders, MarketHistory, MarketStats, Doctrines, RegionOrders, Watchlist
-from utils import get_type_names, validate_columns, add_timestamp, add_autoincrement, sleep_for_seconds
+from utils import get_type_names, validate_columns, add_timestamp, add_autoincrement, convert_datetime_columns, sleep_for_seconds
 from data_processing import calculate_market_stats, calculate_doctrine_stats
 from dbhandler import get_remote_status
 import sqlalchemy as sa
@@ -228,6 +228,8 @@ def main(history: bool = False):
         type_names = get_type_names(orders_df)
         orders_df = orders_df.merge(type_names, on="type_id", how="left")
         orders_df = orders_df[valid_columns]
+        # Convert datetime string fields to Python datetime objects for SQLite
+        orders_df = convert_datetime_columns(orders_df, ['issued'])
         orders_df = add_timestamp(orders_df)
 
         orders_df = orders_df.infer_objects()
@@ -272,6 +274,8 @@ def main(history: bool = False):
     doctrine_stats["id"] = doctrine_stats.index + 1
 
     doctrine_stats_df = pd.DataFrame.from_records(doctrine_stats)
+    # Convert timestamp field to Python datetime objects for SQLite
+    doctrine_stats_df = convert_datetime_columns(doctrine_stats_df, ['timestamp'])
     doctrine_stats_df = validate_columns(doctrine_stats_df, valid_doctrine_columns)
     update_remote_database_with_orm_session(Doctrines, doctrine_stats_df)
     logger.info(f"Doctrines updated:{get_table_length('doctrines')} items")
@@ -279,6 +283,8 @@ def main(history: bool = False):
     valid_doctrine_columns = Doctrines.__table__.columns.keys()
     doctrine_stats_df = calculate_doctrine_stats()
     doctrine_stats_df = add_autoincrement(doctrine_stats_df)
+    # Convert timestamp field to Python datetime objects for SQLite
+    doctrine_stats_df = convert_datetime_columns(doctrine_stats_df, ['timestamp'])
     doctrine_stats_df = validate_columns(doctrine_stats_df, valid_doctrine_columns)
 
     update_remote_database_with_orm_session(Doctrines, doctrine_stats_df)

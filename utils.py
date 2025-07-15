@@ -41,12 +41,22 @@ def validate_order_ids(df):
 
 def add_timestamp(df):
     df["timestamp"] = pd.Timestamp.now(tz="UTC")
-    df["timestamp"] = df["timestamp"].dt.to_pydatetime()
+    # Convert to Python datetime objects that SQLite can handle
+    df["timestamp"] = df["timestamp"].dt.tz_convert(None)
     return df
 
 
 def add_autoincrement(df):
     df["id"] = df.index + 1
+    return df
+
+
+def convert_datetime_columns(df, datetime_columns):
+    """Convert string datetime columns to Python datetime objects for SQLite compatibility"""
+    for col in datetime_columns:
+        if col in df.columns:
+            # Convert string datetime to pandas datetime, then to Python datetime
+            df[col] = pd.to_datetime(df[col], utc=True).dt.tz_convert(None)
     return df
 
 
