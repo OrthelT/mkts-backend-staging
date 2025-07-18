@@ -489,7 +489,6 @@ def check_type_ids(type_ids: list[int])->list[int] | None:
                     missing_type_ids.append(id)
                 else:
                     print(f"type_id: {id} OK")
-
         except:
             print(f"Could not find type with id={id}")
             missing_type_ids.append(id)

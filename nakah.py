@@ -60,38 +60,46 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
             logger.error(f"Request Error: {page} of {max_pages} | {elapsed}s")
 
         if status_code and status_code != 200:
-            logger.error(f"page {page} of {max_pages} | status: {response.status_code} | {elapsed}s")
+            logger.error(f"page {page} of {max_pages} | status: {status_code} | {elapsed}s")
             error_count += 1
-            if error_count > 3:
-                with open("status_codes.json", "w") as f:
-                    json.dump(status_codes, f, indent=4)
-                print("error", response.status_code)
-                logger.error(f"Error: {response.status_code}")
+            if error_count > 5:
+                print("error", status_code)
+                logger.error(f"Error: {status_code}")
                 raise Exception(f"Too many errors: {error_count}")
             time.sleep(1)
             continue
+        elif status_code == 200:
+            logger.info(f"page {page} of {max_pages} | status: {status_code} | {elapsed}s")
         else:
-            logger.info(f"page {page} of {max_pages} | status: {response.status_code} | {elapsed}s")
+            # Handle case where response failed (timeout, connection error, etc.)
+            logger.error(f"page {page} of {max_pages} | request failed | {elapsed}s")
+            error_count += 1
+            if error_count > 5:
+                logger.error(f"Too many errors: {error_count}")
+                raise Exception(f"Too many errors: {error_count}")
+            time.sleep(1)
+            continue
 
         
-        error_remain = response.headers.get('X-Error-Limit-Remain')
-        if error_remain == '0':
-            with open("status_codes.json", "w") as f:
-                json.dump(status_codes, f, indent=4)
-            logger.critical(f"Too many errors: {error_count}")
-            raise Exception(f"Too many errors: {error_count}")
-    
-        if response.headers.get('X-Pages'):
-            max_pages = int(response.headers.get('X-Pages'))
-        else:
-            max_pages = 1
+        # Only process response if we have a valid status code
+        if status_code == 200:
+            error_remain = response.headers.get('X-Error-Limit-Remain')
+            if error_remain == '0':
+                logger.critical(f"Too many errors: {error_count}")
+                raise Exception(f"Too many errors: {error_count}")
         
-        order_page = response.json()
+            if response.headers.get('X-Pages'):
+                max_pages = int(response.headers.get('X-Pages'))
+            else:
+                max_pages = 1
+            
+            order_page = response.json()
+        else:
+            # Skip processing this page due to error
+            continue
 
 
         if order_page == []:
-            with open("status_codes.json", "w") as f:
-                json.dump(status_codes, f, indent=4)
             logger.info(f"No more orders found")
             logger.info("--------------------------------\n\n")
             return orders
@@ -100,8 +108,6 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
                 orders.append(order)
 
             page += 1
-    with open("status_codes.json", "w") as f:
-        json.dump(status_codes, f, indent=4)
     logger.info(f"{len(orders)} orders fetched in {millify(time.time() - begin_time, precision=2)}s | {millify(len(orders)/(time.time() - begin_time), precision=2)} orders/s")
     logger.info("--------------------------------\n\n")
     return orders
@@ -157,6 +163,10 @@ def update_region_orders(region_id: int, order_type: str = 'sell') -> pd.DataFra
     # Clear existing orders
     session.query(RegionOrders).delete()
     session.commit()
+    session.expunge_all()  # Clear all objects from identity map
+    session.close()
+    time.sleep(1)
+    session = Session(bind=engine)  # Create a fresh session
     
     # Convert API response dicts to RegionOrders model instances
     for order_data in orders:

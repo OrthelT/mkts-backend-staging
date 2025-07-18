@@ -3,9 +3,8 @@ from logging_config import configure_logging
 import time
 import json
 import sqlalchemy as sa
-from sqlalchemy.orm import Session
 from sqlalchemy import text
-from proj_config import sde_url
+from proj_config import sde_url, wcmkt_url
 
 logger = configure_logging(__name__)
 
@@ -115,14 +114,6 @@ def get_status():
     print(f"Market History: {history_count}")
     print(f"Market Stats: {stats_count}")
     print(f"Region Orders: {region_orders_count}")
-    status_dict = {
-        "doctrines": doctrine_count,
-        "market_orders": order_count,
-        "market_history": history_count,
-        "market_stats": stats_count,
-        "region_orders": region_orders_count,
-    }
-
 
 if __name__ == "__main__":
     pass
