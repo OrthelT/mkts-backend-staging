@@ -6,15 +6,15 @@ import requests
 from requests import ReadTimeout
 from logging_config import configure_logging
 from ESI_OAUTH_FLOW import get_token
-from dbhandler import get_watchlist, get_table_length, prepare_data_for_insertion, update_remote_database, update_remote_database_with_orm_session
+from dbhandler import get_watchlist, get_table_length, update_remote_database_with_orm_session
 from models import MarketOrders, MarketHistory, MarketStats, Doctrines, RegionOrders, Watchlist
-from utils import get_type_names, validate_columns, add_timestamp, add_autoincrement, convert_datetime_columns, sleep_for_seconds
+from utils import get_type_names, validate_columns, add_timestamp, add_autoincrement, convert_datetime_columns
 from data_processing import calculate_market_stats, calculate_doctrine_stats
 from dbhandler import get_remote_status
 import sqlalchemy as sa
 from sqlalchemy import text
 from nakah import get_region_orders_from_db, update_region_orders, process_system_orders, get_system_market_value, get_system_ship_count
-from proj_config import db_path, sde_path
+from proj_config import db_path
 from google_sheets_utils import update_google_sheet
 
 

@@ -16,7 +16,7 @@ reg_id = 10000001
 from millify import millify
 
 
-def get_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
+def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
     """
     Get all orders for a given region and order type
     Args:
@@ -113,7 +113,7 @@ def update_region_orders(region_id: int, order_type: str = 'sell') -> pd.DataFra
     Returns:    
         pandas DataFrame
     """
-    orders = get_region_orders(region_id, order_type)
+    orders = fetch_region_orders(region_id, order_type)
     engine = create_engine(wcmkt_url)
     session = Session(bind=engine)
     
@@ -284,4 +284,6 @@ def get_system_ship_count(system_id: int) -> int:
 
 
 if __name__ == "__main__":
-    pass
+    orders = fetch_region_orders(reg_id, "sell")
+    print(orders)
+    print(len(orders))

@@ -4,7 +4,7 @@ import pandas as pd
 from proj_config import google_private_key_file, google_sheet_url, sheet_name
 from logging_config import configure_logging
 import re
-
+import json
 logger = configure_logging(__name__)
 
 # Google Sheets API scopes
@@ -12,6 +12,8 @@ SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/drive'
 ]
+
+sheets_dict_file = "sheets_dict.json"
 
 def get_google_sheets_client():
     """
@@ -131,3 +133,25 @@ def update_sheet_with_system_orders(system_id: int):
     except Exception as e:
         logger.error(f"Failed to update sheet with system orders: {e}")
         return False
+
+def get_all_worksheets(sheet_name: str) -> list[gspread.Worksheet]:
+    """
+    Get all worksheets from a Google Sheet
+    """
+    client = get_google_sheets_client()
+    spreadsheet = client.open_by_key(extract_sheet_id_from_url(google_sheet_url))
+    return spreadsheet.worksheets()
+
+def get_spreadsheet() -> gspread.Spreadsheet:
+    """
+    Get a spreadsheet from a Google Sheet
+    """
+    client = get_google_sheets_client()
+    return client.open_by_key(extract_sheet_id_from_url(google_sheet_url))
+
+def get_sheet_dict() -> dict:
+    with open(sheets_dict_file, "r") as f:
+        return json.load(f)
+
+if __name__ == "__main__":
+    pass

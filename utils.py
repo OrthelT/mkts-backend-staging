@@ -9,6 +9,8 @@ from proj_config import sde_url
 
 logger = configure_logging(__name__)
 
+
+
 def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
     engine = sa.create_engine(sde_url)
     with engine.connect() as conn:
@@ -122,18 +124,7 @@ def get_status():
     }
 
 
-
-    # timestamp = time.time()
-    # with open(f"status_{timestamp}.json", "w") as f:
-    #     json.dump(status_dict, f)
-
-def sleep_for_seconds(seconds: int):
-    for i in range(seconds):
-        message = f"\rWaiting for {seconds - i} seconds"
-        print(message, end="", flush=True)
-        time.sleep(1)
-    print()
-
-
 if __name__ == "__main__":
-     pass
+    pass
+
+
