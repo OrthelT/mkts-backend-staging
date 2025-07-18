@@ -20,3 +20,5 @@ db_cleanup.py
 hfi.txt
 *.db-info
 model.db
+*.db-*
+esi_utilities.py

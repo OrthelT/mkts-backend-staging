@@ -30,26 +30,55 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
     page = 1
     error_count = 0
     logger.info(f"Getting orders for region {region_id} with order type {order_type}")
+    status_codes = {}
+    begin_time = time.time()
     
     while page <= max_pages:
-        logger.info(f"Getting page {page} of {max_pages}")
+        status_code = None
+        
         headers = {
-            'User-Agent': 'wcmkts_new/1.0, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_new)',
+            'User-Agent': 'wcmkts_backend/1.0, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)',
             'Accept': 'application/json',
         }
         base_url = f"https://esi.evetech.net/latest/markets/{region_id}/orders/?datasource=tranquility&order_type={order_type}&page={page}"
-        response = requests.get(base_url)
-        logger.info(f"Response: {response.status_code}")
-        if response.status_code != 200:
+        start_time = time.time()
+        try:
+            response = requests.get(base_url, headers=headers, timeout=10)
+            elapsed = millify(response.elapsed.total_seconds(), precision=2)
+            status_code = response.status_code
+        except requests.exceptions.Timeout as TimeoutError:
+            print(TimeoutError)
+            elapsed = millify(time.time() - start_time, precision=2)
+            logger.error(f"Timeout: {page} of {max_pages} | {elapsed}s")
+        except requests.exceptions.ConnectionError as ConnectionError:
+            print(ConnectionError)
+            elapsed = millify(time.time() - start_time, precision=2)
+            logger.error(f"Connection Error: {page} of {max_pages} | {elapsed}s")
+        except requests.exceptions.RequestException as RequestException:
+            print(RequestException)
+            elapsed = millify(time.time() - start_time, precision=2)
+            logger.error(f"Request Error: {page} of {max_pages} | {elapsed}s")
+
+        if status_code and status_code != 200:
+            logger.error(f"page {page} of {max_pages} | status: {response.status_code} | {elapsed}s")
             error_count += 1
             if error_count > 3:
+                with open("status_codes.json", "w") as f:
+                    json.dump(status_codes, f, indent=4)
+                print("error", response.status_code)
+                logger.error(f"Error: {response.status_code}")
                 raise Exception(f"Too many errors: {error_count}")
-            logger.error(f"Error: {response.status_code}")
             time.sleep(1)
             continue
+        else:
+            logger.info(f"page {page} of {max_pages} | status: {response.status_code} | {elapsed}s")
+
         
         error_remain = response.headers.get('X-Error-Limit-Remain')
         if error_remain == '0':
+            with open("status_codes.json", "w") as f:
+                json.dump(status_codes, f, indent=4)
+            logger.critical(f"Too many errors: {error_count}")
             raise Exception(f"Too many errors: {error_count}")
     
         if response.headers.get('X-Pages'):
@@ -61,12 +90,20 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
 
 
         if order_page == []:
-            break
+            with open("status_codes.json", "w") as f:
+                json.dump(status_codes, f, indent=4)
+            logger.info(f"No more orders found")
+            logger.info("--------------------------------\n\n")
+            return orders
         else:
             for order in order_page:
                 orders.append(order)
 
             page += 1
+    with open("status_codes.json", "w") as f:
+        json.dump(status_codes, f, indent=4)
+    logger.info(f"{len(orders)} orders fetched in {millify(time.time() - begin_time, precision=2)}s | {millify(len(orders)/(time.time() - begin_time), precision=2)} orders/s")
+    logger.info("--------------------------------\n\n")
     return orders
 
 def get_region_orders_from_db(region_id: int) -> pd.DataFrame:
@@ -284,6 +321,5 @@ def get_system_ship_count(system_id: int) -> int:
 
 
 if __name__ == "__main__":
-    orders = fetch_region_orders(reg_id, "sell")
-    print(orders)
-    print(len(orders))
+    pass
+

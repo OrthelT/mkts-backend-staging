@@ -16,4 +16,5 @@ dependencies = [
     "sqlalchemy>=2.0.41",
     "sqlalchemy-libsql>=0.2.0",
     "sqlalchemy-orm>=1.2.10",
+    "colorlog>=6.8.0",
 ]
