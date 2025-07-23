@@ -1,5 +1,8 @@
 import gspread
 from google.oauth2.service_account import Credentials
+import google.auth
+
+
 import pandas as pd
 from proj_config import google_private_key_file, google_sheet_url, sheet_name
 from logging_config import configure_logging
@@ -13,7 +16,7 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive'
 ]
 
-sheets_dict_file = "sheets_dict.json"
+sheets_dict_file = "data/sheets_dict.json"
 
 def get_google_sheets_client():
     """
@@ -154,4 +157,9 @@ def get_sheet_dict() -> dict:
         return json.load(f)
 
 if __name__ == "__main__":
-    pass
+    worksheets = get_all_worksheets(sheet_name)
+    for worksheet in worksheets:
+        print(worksheet.title)
+        print(worksheet.row_count)
+        print(worksheet.col_count)
+        print("-"*100)

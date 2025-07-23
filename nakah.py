@@ -4,17 +4,16 @@ import json
 import time
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker, Session
-from proj_config import wcmkt_url, db_path
+from proj_config import wcmkt_url, db_path, sys_id, reg_id, user_agent
 from datetime import datetime, timezone
 from logging_config import configure_logging
 from models import RegionOrders, Base
 import pandas as pd
 logger = configure_logging(__name__)
-from utils import get_type_names
-sys_id = 30000072
-reg_id = 10000001
+from utils import get_type_names, get_type_name
+from dbhandler import add_region_history, get_watchlist_ids, get_nakah_watchlist
 from millify import millify
-
+from models import RegionHistory
 
 def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
     """
@@ -146,7 +145,6 @@ def get_region_orders_from_db(region_id: int) -> pd.DataFrame:
     session.close()
     return pd.DataFrame(orders_data)
 
-
 def update_region_orders(region_id: int, order_type: str = 'sell') -> pd.DataFrame:
     """
     Fetch region orders from the database
@@ -266,13 +264,10 @@ def calculate_total_market_value(market_data: pd.DataFrame) -> float:
         logger.warning("No market data after filtering out Blueprint and Skill categories")
         print("No market data after filtering out Blueprint and Skill categories")
         return 0.0
-    
     # Calculate total value for each item (price * volume_remain)
     filtered_data['total_value'] = filtered_data['price'] * filtered_data['volume_remain']
-    
     # Sum all individual totals to get overall market value
     total_market_value = filtered_data['total_value'].sum()
-    
     logger.info(f"Total market value calculated: {millify(total_market_value, precision=2)} ISK")
     print(f"Total market value calculated: {millify(total_market_value, precision=2)} ISK")
     return total_market_value
@@ -329,7 +324,79 @@ def get_system_ship_count(system_id: int) -> int:
     market_data = process_system_orders(system_id)
     return calculate_total_ship_count(market_data)
 
+def fetch_region_item_history(region_id: int, type_id: int) -> list[dict]:
+    url = f"https://esi.evetech.net/latest/markets/{region_id}/history"
+
+    querystring = {"type_id":type_id}
+
+    headers = {
+        "Accept-Language": "en",
+        "If-None-Match": "",
+        "X-Compatibility-Date": "2020-01-01",
+        "X-Tenant": "tranquility",
+        "Accept": "application/json"
+    }
+
+    try:
+        response = requests.get(url, headers=headers, params=querystring, timeout=10)
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print(f"    HTTP {response.status_code} for type_id {type_id}")
+            return []
+            
+    except requests.exceptions.Timeout:
+        print(f"    Timeout for type_id {type_id}")
+        return []
+    except requests.exceptions.RequestException as e:
+        print(f"    Request error for type_id {type_id}: {e}")
+        return []
+    except Exception as e:
+        print(f"    Unexpected error for type_id {type_id}: {e}")
+        return []
+
+def fetch_region_history(region_id: int, type_ids: list[int]):
+    history = []
+    total_items = len(type_ids)
+    
+    print(f"Starting fetch_region_history for {total_items} items in region {region_id}")
+    print("=" * 60)
+    
+    for i, type_id in enumerate(type_ids, 1):
+        print(f"Processing item {i}/{total_items} (type_id: {type_id})", end="", flush=True)
+        
+        try:
+            start_time = time.time()
+            item_history = fetch_region_item_history(region_id, type_id)
+            elapsed_time = time.time() - start_time
+            
+            if item_history and len(item_history) > 0:
+                print(f" ✓ {len(item_history)} records in {elapsed_time:.2f}s")
+            else:
+                print(f" ⚠ No data in {elapsed_time:.2f}s")
+            
+            history.append({type_id: item_history})
+            
+        except Exception as e:
+            print(f" ❌ Error: {e}")
+            # Still add the item to history with empty data
+            history.append({type_id: []})
+    
+    print("=" * 60)
+    print(f"Completed fetch_region_history: {len(history)} items processed")
+    
+    # Summary
+    items_with_data = sum(1 for item in history if list(item.values())[0])
+    items_without_data = len(history) - items_with_data
+    total_records = sum(len(list(item.values())[0]) for item in history)
+    
+    print(f"Summary: {items_with_data} items with data, {items_without_data} items without data")
+    print(f"Total history records: {total_records}")
+    
+    return history
+
 
 if __name__ == "__main__":
     pass
-
+    

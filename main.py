@@ -6,14 +6,14 @@ import requests
 from requests import ReadTimeout
 from logging_config import configure_logging
 from ESI_OAUTH_FLOW import get_token
-from dbhandler import get_watchlist, get_table_length, update_remote_database_with_orm_session
+from dbhandler import get_watchlist, get_table_length, update_remote_database_with_orm_session, get_nakah_watchlist, add_region_history
 from models import MarketOrders, MarketHistory, MarketStats, Doctrines, RegionOrders, Watchlist
 from utils import get_type_names, validate_columns, add_timestamp, add_autoincrement, convert_datetime_columns
 from data_processing import calculate_market_stats, calculate_doctrine_stats
 from dbhandler import get_remote_status
 import sqlalchemy as sa
 from sqlalchemy import text
-from nakah import get_region_orders_from_db, update_region_orders, process_system_orders, get_system_market_value, get_system_ship_count
+from nakah import get_region_orders_from_db, update_region_orders, process_system_orders, get_system_market_value, get_system_ship_count, fetch_region_history
 from proj_config import db_path
 from google_sheets_utils import update_google_sheet
 
@@ -257,6 +257,9 @@ def main(history: bool = False):
     if history:
         logger.info("Processing history")
         process_history(watchlist)
+        nakah_watchlist = get_nakah_watchlist()
+        history = fetch_region_history(region_id, nakah_watchlist["type_id"].tolist())
+        add_region_history(history)
     else:
         logger.info("Skipping history processing")
 

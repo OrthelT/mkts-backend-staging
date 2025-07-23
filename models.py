@@ -1,11 +1,13 @@
-from sqlalchemy import String, Integer, DateTime, Float, Boolean, create_engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy import String, Integer, DateTime, Float, Boolean, create_engine, event
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
 import libsql
 from proj_config import wcmkt_url, db_path
+from utils import get_type_name
+from datetime import datetime, timezone
+import json
 
 class Base(DeclarativeBase):
     pass
-
 
 class MarketStats(Base):
     __tablename__ = "marketstats"
@@ -167,7 +169,6 @@ class DoctrineMap(Base):
         fitting_id={self.fitting_id!r}
         )"""
 
-
 class Watchlist(Base):
     __tablename__ = "watchlist"
     type_id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -187,6 +188,16 @@ class Watchlist(Base):
         category_name={self.category_name!r}
         )"""
 
+class NakahWatchlist(Base):
+    __tablename__ = "nakah_watchlist"
+    type_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    type_name: Mapped[str] = mapped_column(String)
+
+    def __repr__(self) -> str:
+        f"""nakah_watchlist(
+        type_id={self.type_id!r},
+        type_name={self.type_name!r}
+        )"""
 
 class DoctrineInfo(Base):
     __tablename__ = "doctrine_info"
@@ -209,6 +220,15 @@ class RegionOrders(Base):
     volume_remain: Mapped[int] = mapped_column(Integer)
     volume_total: Mapped[int] = mapped_column(Integer)
 
+
+
+    @property
+    def resolved_type_name(self) -> str:
+        """
+        Returns the type name for the current type_id using the get_type_name utility function.
+        """
+        return get_type_name(self.type_id)
+
     def __repr__(self) -> str:
         return f"""region_orders(
         order_id={self.order_id!r},
@@ -225,5 +245,54 @@ class RegionOrders(Base):
         volume_total={self.volume_total!r}
         )"""
 
+
+class RegionHistory(Base):
+    __tablename__ = "region_history"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    type_id: Mapped[int] = mapped_column(Integer)
+    average: Mapped[float] = mapped_column(Float)
+    date: Mapped[DateTime] = mapped_column(DateTime)
+    highest: Mapped[float] = mapped_column(Float)
+    lowest: Mapped[float] = mapped_column(Float)
+    order_count: Mapped[int] = mapped_column(Integer)
+    volume: Mapped[int] = mapped_column(Integer)
+    timestamp: Mapped[DateTime] = mapped_column(DateTime)
+    type_name: Mapped[str] = mapped_column(String)
+    @property
+    def resolved_type_name(self) -> str:
+        """
+        Returns the type name for the current type_id using the get_type_name utility function.
+        """
+        return get_type_name(self.type_id)
+
+
+    def __repr__(self) -> str:
+        return f"""region_history(
+        type_id={self.type_id!r},
+        type_name={self.type_name!r},
+        average={self.average!r},
+        date={self.date!r},
+        highest={self.highest!r},
+        lowest={self.lowest!r},
+        order_count={self.order_count!r},
+        volume={self.volume!r},
+        timestamp={self.timestamp!r}
+        )"""
+
 if __name__ == "__main__":
     pass
+
+
+
+# Event listeners to automatically populate type_name fields
+@event.listens_for(RegionHistory, 'before_insert')
+def populate_region_history_type_name(mapper, connection, target):
+    """Automatically populate type_name when inserting RegionHistory records"""
+    if target.type_id and not target.type_name:
+        try:
+            target.type_name = get_type_name(target.type_id)
+        except Exception as e:
+            # If we can't get the type name, leave it as None
+            pass
+
+

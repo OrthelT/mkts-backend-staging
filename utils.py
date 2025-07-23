@@ -20,6 +20,16 @@ def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
     engine.dispose()
     return df[["type_id", "type_name", "group_name", "category_name"]] 
 
+def get_type_name(type_id: int) -> str:
+    engine = sa.create_engine(sde_url)
+    with engine.connect() as conn:
+        stmt = text("SELECT typeName FROM inv_info WHERE typeID = :type_id")
+        res = conn.execute(stmt, {"type_id": type_id})
+        type_name = res.fetchone()[0]
+    engine.dispose()
+    return type_name
+
+
 def get_null_count(df):
     return df.isnull().sum()
 
@@ -70,7 +80,7 @@ def standby(seconds: int):
 
 
 def simulate_market_orders() -> dict:
-    with open("market_orders.json", "r") as f:
+    with open("data/market_orders.json", "r") as f:
         data = json.load(f)
     return data
 
@@ -116,6 +126,7 @@ def get_status():
     print(f"Region Orders: {region_orders_count}")
 
 if __name__ == "__main__":
-    pass
+    data = simulate_market_orders()
+    print(data[:10])
 
 

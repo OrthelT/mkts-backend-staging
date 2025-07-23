@@ -7,10 +7,10 @@ from sqlalchemy import inspect, text, create_engine, select, insert, MetaData
 from sqlalchemy.orm import Session, sessionmaker, query
 from datetime import datetime, timezone
 import time
-from utils import standby, logger, configure_logging
+from utils import standby, logger, configure_logging, get_type_name
 from dotenv import load_dotenv
 from logging_config import configure_logging
-from models import Base, Doctrines
+from models import Base, Doctrines, RegionHistory
 from proj_config import db_path, wcmkt_url, sde_path, sde_url, fittings_path, fittings_path, fittings_url
 from dataclasses import dataclass, field
 import sqlalchemy as sa
@@ -330,7 +330,6 @@ def get_table_schema(table: str) -> pd.DataFrame:
         columns=["cid", "name", "type", "notnull", "dflt_value", "pk"],
     )
 
-
 def get_watchlist() -> pd.DataFrame:
     engine = create_engine(wcmkt_local_url)
     with engine.connect() as conn:
@@ -357,7 +356,17 @@ def get_watchlist() -> pd.DataFrame:
             print(f"watchlist loaded: {len(df)} items")
             logger.info(f"watchlist loaded: {len(df)} items")
     return df
-
+def get_nakah_watchlist() -> pd.DataFrame:
+    engine = create_engine(wcmkt_local_url)
+    with engine.connect() as conn:
+        df = pd.read_sql_table("nakah_watchlist", conn)
+        if len(df) == 0:
+            logger.error("No nakah watchlist found")
+            return None
+        else:
+            print(f"nakah watchlist loaded: {len(df)} items")
+            logger.info(f"nakah watchlist loaded: {len(df)} items")
+    return df
 
 def update_watchlist_data():
     df = pd.read_csv("data/all_watchlist.csv")
@@ -367,6 +376,13 @@ def update_watchlist_data():
         conn.commit()
     conn.close()
 
+def update_nakah_watchlist(df):
+    engine = create_engine(wcmkt_local_url)
+    with engine.connect() as conn:
+        df.to_sql("nakah_watchlist", conn, if_exists="replace", index=False)
+        conn.commit()
+    engine.dispose()
+    print("nakah_watchlist updated")
 
 def get_market_orders(type_id: int) -> pd.DataFrame:
     conn = libsql.connect(wcmkt_path)
@@ -501,6 +517,7 @@ def get_fit_items(fit_id: int):
         fit_items = [row[0] for row in result]
     engine.dispose()
     return fit_items
+
 def get_fit_ids(doctrine_id: int):
     stmt = text("SELECT fitting_id FROM fittings_doctrine_fittings WHERE doctrine_id = :doctrine_id")
     engine = create_engine(fittings_local_url)
@@ -509,6 +526,7 @@ def get_fit_ids(doctrine_id: int):
         fit_ids = [row[0] for row in result]
     engine.dispose()
     return fit_ids
+
 def add_doctrine_type_info_to_watchlist(doctrine_id: int):
     watchlist_ids = get_watchlist_ids()
     fit_ids = get_fit_ids(doctrine_id)
@@ -542,5 +560,70 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
         logger.info(f"Added {type_info.type_name} to watchlist")
         print(f"Added {type_info.type_name} to watchlist")
 
+def add_region_history(history: list[dict]):
+    timestamp = datetime.now(timezone.utc)
+    timestamp = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+    engine = create_engine(wcmkt_local_url)
+    session = Session(bind=engine)
+
+    with session.begin():
+        session.query(RegionHistory).delete()
+
+
+        for item in history:
+            for type_id, history in item.items():
+                print(f"Processing type_id: {type_id}, {get_type_name(type_id)}")
+                for record in history:
+                    date = datetime.strptime(record["date"], "%Y-%m-%d")
+                    order = RegionHistory(type_id=type_id, average=record["average"], date=date, highest=record["highest"], lowest=record["lowest"], order_count=record["order_count"], volume=record["volume"], timestamp=datetime.now(timezone.utc))
+                    session.add(order)
+        session.commit()
+        session.close()
+        engine.dispose()
+
+def get_region_history()-> pd.DataFrame:
+    engine = create_engine(wcmkt_local_url)
+    with engine.connect() as conn:
+        stmt = text("SELECT * FROM region_history")
+        result = conn.execute(stmt)
+        df = pd.DataFrame(result.fetchall(), columns=result.keys())
+    engine.dispose()
+    return df
+def get_region_deployment_history(deployment_date: datetime) -> pd.DataFrame:
+    """
+    Get region history data after a specified deployment date.
+    
+    Args:
+        deployment_date: datetime object representing the deployment date
+        
+    Returns:
+        pandas DataFrame containing region history records after the deployment date
+    """
+    df = get_region_history()
+    
+    if df.empty:
+        print("No region history data found")
+        return df
+    
+    # Convert the date column to datetime if it's not already
+    if 'date' in df.columns:
+        df['date'] = pd.to_datetime(df['date'])
+        
+        # Filter records after the deployment date
+        filtered_df = df[df['date'] >= deployment_date].copy()
+        
+        # Sort by date for better readability
+        filtered_df = filtered_df.sort_values('date')
+        
+        print(f"Found {len(filtered_df)} records after {deployment_date.strftime('%Y-%m-%d')}")
+        print(f"Date range: {filtered_df['date'].min()} to {filtered_df['date'].max()}")
+        
+        return filtered_df
+    else:
+        print("No 'date' column found in region history data")
+        return df
+
+
 if __name__ == "__main__":
+    # Test the function with a sample date
     pass
