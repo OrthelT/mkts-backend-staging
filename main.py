@@ -213,11 +213,34 @@ def process_history(watchlist: pd.DataFrame):
             print("Market history updated successfully")
         else:
             print("Market history update failed")
-   
 
-def main(history: bool = False):
+def region_orders():
+    update_region_orders(deployment_region_id)
+    region_orders = get_region_orders_from_db(deployment_region_id)
+    update_remote_database_with_orm_session(RegionOrders, region_orders)
+    system_orders = process_system_orders(deployment_system_id)
+    
+    # Update Google Sheet with system orders data
+    try:
+        update_google_sheet(system_orders)
+        logger.info("Google Sheet updated successfully with system orders")
+    except Exception as e:
+        logger.error(f"Failed to update Google Sheet: {e}")
+
+    get_remote_status()
+    print("Calculating system market value and ship count")
+    print("=" * 80)
+    get_system_market_value(deployment_system_id)
+    get_system_ship_count(deployment_system_id)
+    print("=" * 80)
+
+
+def main(history: bool = False, region_only: bool = False):
     logger.info("Starting mkts-backend")
-
+    if region_only:
+        region_orders()
+        exit()
+    
     valid_columns = MarketOrders.__table__.columns.keys()
     valid_columns = [col for col in valid_columns]
 
@@ -294,32 +317,23 @@ def main(history: bool = False):
     logger.info(f"Doctrines updated:{get_table_length('doctrines')} items")
     print(f"Doctrines updated:{get_table_length('doctrines')} items")
 
-    update_region_orders(deployment_region_id)
-    region_orders = get_region_orders_from_db(deployment_region_id)
-    update_remote_database_with_orm_session(RegionOrders, region_orders)
-    system_orders = process_system_orders(deployment_system_id)
-    
-    # Update Google Sheet with system orders data
-    try:
-        update_google_sheet(system_orders)
-        logger.info("Google Sheet updated successfully with system orders")
-    except Exception as e:
-        logger.error(f"Failed to update Google Sheet: {e}")
+    if region_only:
+        return
+    else:
+        region_orders()
 
-    get_remote_status()
-    print("Calculating system market value and ship count")
-    print("=" * 80)
-    get_system_market_value(deployment_system_id)
-    get_system_ship_count(deployment_system_id)
-    print("=" * 80)
+
 
 if __name__ == "__main__":
     import sys
     
     # Check for command line arguments
     include_history = False
+    region_only = False
     if len(sys.argv) > 1:
         if "--history" in sys.argv:
             include_history = True
+        elif "--region_only" in sys.argv:
+            region_only = True
     
-    main(history=include_history)
+    main(history=include_history, region_only=region_only)

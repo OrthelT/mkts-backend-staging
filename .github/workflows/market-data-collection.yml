@@ -30,14 +30,13 @@ jobs:
       with:
         version: "latest"
         
-    - name: Handle local dependencies for CI
-      run: |
-        # Remove local path dependency for CI environment
-        sed -i '/mydbtools = { path = "..\/..\/tools\/dbtools" }/d' pyproject.toml
-        # Install mydbtools as regular package or create mock
-        echo "class TableInfo: pass" > mydbtools.py
-        echo "class ColumnInfo: pass" >> mydbtools.py  
-        echo "class DatabaseInfo: pass" >> mydbtools.py
+    # - name: Handle local dependencies for CI
+    #   run: |
+    #     # Remove local path dependency for CI environment
+    #     sed -i '/mydbtools = { path = "..\/..\/tools\/dbtools" }/d' pyproject.toml
+    #     # Install mydbtools as regular package or create mock
+    #     echo "class TableInfo: pass" > mydbtools.py
+    #     echo "class DatabaseInfo: pass" >> mydbtools.py
         
     - name: Install dependencies
       run: uv sync
@@ -57,9 +56,15 @@ jobs:
         echo "SDE_URL=${{ secrets.SDE_URL }}" >> $GITHUB_ENV
         echo "SDE_AUTH_TOKEN=${{ secrets.SDE_AUTH_TOKEN }}" >> $GITHUB_ENV
         
+
+        
     - name: Set up Google Service Account
       run: |
         echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}' > wcdoctrines-1f629d861c2f.json
+
+    - name: Set up EVE SSO refresh token
+      run: |
+        echo "REFRESH_TOKEN=${{ secrets.EVE_REFRESH_TOKEN }}" >> $GITHUB_ENV
         
     - name: Download watchlist data
       run: |
@@ -67,7 +72,8 @@ jobs:
         if [ ! -f "databackup/all_watchlist.csv" ]; then
           echo "type_id,type_name,group_id,group_name,category_id,category_name" > databackup/all_watchlist.csv
         fi
-        
+
+
     - name: Initialize local databases
       run: |
         # Create empty database files if they don't exist
