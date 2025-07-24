@@ -29,15 +29,7 @@ jobs:
       uses: astral-sh/setup-uv@v2
       with:
         version: "latest"
-        
-    # - name: Handle local dependencies for CI
-    #   run: |
-    #     # Remove local path dependency for CI environment
-    #     sed -i '/mydbtools = { path = "..\/..\/tools\/dbtools" }/d' pyproject.toml
-    #     # Install mydbtools as regular package or create mock
-    #     echo "class TableInfo: pass" > mydbtools.py
-    #     echo "class DatabaseInfo: pass" >> mydbtools.py
-        
+
     - name: Install dependencies
       run: uv sync
       
