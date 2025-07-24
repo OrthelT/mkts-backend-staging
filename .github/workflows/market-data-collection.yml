@@ -76,6 +76,8 @@ jobs:
       run: |
         if [ "${{ github.event.inputs.include_history }}" = "true" ]; then
           uv run python main.py --history
+        elif [ "${{ github.event.inputs.region_only }}" = "true" ]; then
+          uv run python main.py --region_only
         else
           uv run python main.py
         fi
