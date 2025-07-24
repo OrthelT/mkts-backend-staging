@@ -1,7 +1,7 @@
 import pandas as pd
 import sqlalchemy as sa
 from logging_config import configure_logging
-from models import MarketStats, Doctrines
+from models import MarketStats, Doctrines, Watchlist, NakahWatchlist, RegionHistory, RegionOrders
 import libsql
 import json
 from proj_config import db_path, wcmkt_url, sde_path, sde_url
@@ -101,7 +101,6 @@ def calculate_market_stats() -> pd.DataFrame:
     df["total_volume_remain"] = df["total_volume_remain"].astype(int)
     logger.info(f"Market stats calculated: {df.shape[0]} items")
     return df
-
 
 def calculate_doctrine_stats() -> pd.DataFrame:
     doctrine_query = """

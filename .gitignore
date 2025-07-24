@@ -22,3 +22,4 @@ hfi.txt
 model.db
 *.db-*
 esi_utilities.py
+scratch.py

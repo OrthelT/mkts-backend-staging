@@ -5,6 +5,7 @@ from proj_config import wcmkt_url, db_path
 from utils import get_type_name
 from datetime import datetime, timezone
 import json
+import sqlalchemy as sa
 
 class Base(DeclarativeBase):
     pass
@@ -156,7 +157,6 @@ class ShipTargets(Base):
         created_at={self.created_at!r}
         )"""
 
-
 class DoctrineMap(Base):
     __tablename__ = "doctrine_map"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -205,6 +205,29 @@ class DoctrineInfo(Base):
     doctrine_id: Mapped[int] = mapped_column(Integer)
     doctrine_name: Mapped[str] = mapped_column(String)
 
+class DoctrineFits(Base):
+    __tablename__ = "doctrine_fits"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    doctrine_name: Mapped[str] = mapped_column(String)
+    fit_name: Mapped[str] = mapped_column(String)
+    ship_type_id: Mapped[int] = mapped_column(Integer)
+    doctrine_id: Mapped[int] = mapped_column(Integer)
+    fit_id: Mapped[int] = mapped_column(Integer)
+    ship_name: Mapped[str] = mapped_column(String)
+    target: Mapped[int] = mapped_column(Integer)
+
+    def __repr__(self) -> str:
+        return f"""doctrine_fits(
+        id={self.id!r},
+        doctrine_name={self.doctrine_name!r},
+        fit_name={self.fit_name!r},
+        ship_type_id={self.ship_type_id!r},
+        doctrine_id={self.doctrine_id!r},
+        fit_id={self.fit_id!r},
+        ship_name={self.ship_name!r},
+        target={self.target!r}
+        )"""
+
 class RegionOrders(Base):
     __tablename__ = "region_orders"
     order_id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -219,8 +242,6 @@ class RegionOrders(Base):
     type_id: Mapped[int] = mapped_column(Integer)
     volume_remain: Mapped[int] = mapped_column(Integer)
     volume_total: Mapped[int] = mapped_column(Integer)
-
-
 
     @property
     def resolved_type_name(self) -> str:
@@ -244,7 +265,6 @@ class RegionOrders(Base):
         volume_remain={self.volume_remain!r},
         volume_total={self.volume_total!r}
         )"""
-
 
 class RegionHistory(Base):
     __tablename__ = "region_history"
@@ -279,10 +299,27 @@ class RegionHistory(Base):
         timestamp={self.timestamp!r}
         )"""
 
+class DeploymentWatchlist(Base):
+    __tablename__ = "deployment_watchlist"
+    type_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    group_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    type_name: Mapped[str] = mapped_column(String, nullable=True)
+    group_name: Mapped[str] = mapped_column(String, nullable=True)
+    category_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    category_name: Mapped[str] = mapped_column(String, nullable=True)
+
+    def __repr__(self) -> str:
+        f"""deployment_watchlist(
+        type_id={self.type_id!r},
+        group_id={self.group_id!r},
+        type_name={self.type_name!r},
+        group_name={self.group_name!r},
+        category_id={self.category_id!r},
+        category_name={self.category_name!r}
+        )"""
 if __name__ == "__main__":
-    pass
-
-
+    engine = sa.create_engine(wcmkt_url)
+    Base.metadata.create_all(engine)
 
 # Event listeners to automatically populate type_name fields
 @event.listens_for(RegionHistory, 'before_insert')
