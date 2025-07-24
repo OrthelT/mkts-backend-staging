@@ -317,9 +317,42 @@ class DeploymentWatchlist(Base):
         category_id={self.category_id!r},
         category_name={self.category_name!r}
         )"""
+
+class RegionStats(Base):
+    __tablename__ = "region_stats"
+    type_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    total_volume_remain: Mapped[int] = mapped_column(Integer)
+    min_price: Mapped[float] = mapped_column(Float)
+    price: Mapped[float] = mapped_column(Float)
+    avg_price: Mapped[float] = mapped_column(Float)
+    avg_volume: Mapped[float] = mapped_column(Float)
+    group_id: Mapped[int] = mapped_column(Integer)
+    type_name: Mapped[str] = mapped_column(String)
+    group_name: Mapped[str] = mapped_column(String)
+    category_id: Mapped[int] = mapped_column(Integer)
+    category_name: Mapped[str] = mapped_column(String)
+    days_remaining: Mapped[float] = mapped_column(Float)
+    last_update: Mapped[DateTime] = mapped_column(DateTime)
+
+    def __repr__(self) -> str:
+        return f"""region_stats(
+        type_id={self.type_id!r}, 
+        total_volume_remain={self.total_volume_remain!r}, 
+        min_price={self.min_price!r},
+        price={self.price!r},
+        avg_price={self.avg_price!r},
+        avg_volume={self.avg_volume!r},
+        group_id={self.group_id!r},
+        type_name={self.type_name!r},   
+        group_name={self.group_name!r},
+        category_id={self.category_id!r},
+        category_name={self.category_name!r},
+        days_remaining={self.days_remaining!r},
+        last_update={self.last_update!r}
+        )"""
+
 if __name__ == "__main__":
-    engine = sa.create_engine(wcmkt_url)
-    Base.metadata.create_all(engine)
+    pass
 
 # Event listeners to automatically populate type_name fields
 @event.listens_for(RegionHistory, 'before_insert')
