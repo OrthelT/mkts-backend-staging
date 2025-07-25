@@ -1,6 +1,6 @@
 import time
 import json
-
+from datetime import datetime
 import pandas as pd
 import requests
 from requests import ReadTimeout
@@ -234,6 +234,10 @@ def region_orders():
     get_system_ship_count(deployment_system_id)
     print("=" * 80)
 
+    logger.info("******************")
+    logger.info("MARKET JOB COMPLETE")
+    logger.info("******************")
+
 
 def main(history: bool = False, region_only: bool = False):
     logger.info("Starting mkts-backend")
@@ -318,10 +322,15 @@ def main(history: bool = False, region_only: bool = False):
     print(f"Doctrines updated:{get_table_length('doctrines')} items")
 
     if region_only:
+        logger.info("Region only mode enabled. Exiting.")
+        print("Region only mode enabled. Exiting.")
+        logger.info("******************")
+        logger.info("******************")
+        logger.info("******************")
         return
     else:
         region_orders()
-
+        
 
 if __name__ == "__main__":
     import sys
