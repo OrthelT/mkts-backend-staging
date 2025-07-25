@@ -38,7 +38,7 @@ MARKET_STRUCTURE_URL = (
 MARKET_HISTORY_URL = (
     f"https://esi.evetech.net/latest/markets/{region_id}/history/?type_id="
 )
-SCOPE = ["esi-markets.structure_markets.v1"]
+SCOPE = 'esi-markets.structure_markets.v1'
 
 # make sure you have this scope enabled in you ESI Dev Application settings.
 logger = configure_logging(__name__)
@@ -321,7 +321,6 @@ def main(history: bool = False, region_only: bool = False):
         return
     else:
         region_orders()
-
 
 
 if __name__ == "__main__":

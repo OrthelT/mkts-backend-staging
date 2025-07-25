@@ -42,12 +42,11 @@ def get_token(requested_scope):
     token = load_cached_token()
     if not token:
         logger.info("No token.json → refreshing from GitHub secret")
-        token = OAuth2Session(CLIENT_ID).refresh_token(
+        token = OAuth2Session(CLIENT_ID, scope=requested_scope).refresh_token(
             TOKEN_URL,
             refresh_token=REFRESH_TOKEN,
             client_id=CLIENT_ID,
-            client_secret=SECRET_KEY,
-            scope=requested_scope
+            client_secret=SECRET_KEY
         )
         save_token(token)
         return token
