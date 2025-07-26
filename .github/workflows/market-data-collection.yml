@@ -2,8 +2,10 @@ name: Market Data Collection
 
 on:
   schedule:
-    # Run every 4 hours
-    - cron: '0 */4 * * *'
+    # Run with --history flag daily at 12:00 UTC
+    - cron: '0 12 * * *'
+    # Run every 2 hours without flags
+    - cron: '0 */2 * * *'
   workflow_dispatch: # Allow manual triggering
     inputs:
       include_history:
@@ -78,7 +80,11 @@ jobs:
           uv run python main.py --history
         elif [ "${{ github.event.inputs.region_only }}" = "true" ]; then
           uv run python main.py --region_only
+        elif [ "$(date -u +%H)" = "12" ]; then
+          # Run with --history flag at 12:00 UTC
+          uv run python main.py --history
         else
+          # Run without flags for all other scheduled runs
           uv run python main.py
         fi
       timeout-minutes: 30
