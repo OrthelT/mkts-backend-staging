@@ -4,7 +4,7 @@ from logging_config import configure_logging
 from models import MarketStats, Doctrines, Watchlist, NakahWatchlist, RegionHistory, RegionOrders, RegionStats, DeploymentWatchlist
 import libsql
 import json
-from proj_config import db_path, wcmkt_url, sde_path, sde_url
+from proj_config import wcmkt_db_path, wcmkt_local_url, sde_local_path, sde_local_url
 
 from dbhandler import get_watchlist
 
@@ -21,7 +21,7 @@ def calculate_5_percentile_price() -> pd.DataFrame:
     WHERE is_buy_order = 0
     """
 
-    engine = sa.create_engine(wcmkt_url)
+    engine = sa.create_engine(wcmkt_local_url)
 
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
@@ -73,7 +73,7 @@ def calculate_market_stats() -> pd.DataFrame:
     ) AS h ON w.type_id = h.type_id
     """
 
-    engine = sa.create_engine(wcmkt_url)
+    engine = sa.create_engine(wcmkt_local_url)
 
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
@@ -113,7 +113,7 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     *
     FROM marketstats
     """
-    engine = sa.create_engine(wcmkt_url)
+    engine = sa.create_engine(wcmkt_local_url)
 
     with engine.connect() as conn:
         doctrine_stats = pd.read_sql_query(doctrine_query, conn)
@@ -161,7 +161,7 @@ def calculate_region_5_percentile_price() -> pd.DataFrame:
     WHERE is_buy_order = 0
     """
 
-    engine = sa.create_engine(wcmkt_url)
+    engine = sa.create_engine(wcmkt_local_url)
 
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
@@ -222,7 +222,7 @@ def calculate_region_stats() -> pd.DataFrame:
     ) AS h ON w.type_id = h.type_id
     """
 
-    engine = sa.create_engine(wcmkt_url)
+    engine = sa.create_engine(wcmkt_local_url)
 
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
@@ -263,7 +263,7 @@ def get_deployment_watchlist() -> pd.DataFrame:
     *
     FROM deployment_watchlist
     """
-    engine = sa.create_engine(wcmkt_url)
+    engine = sa.create_engine(wcmkt_local_url)
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
     engine.dispose()

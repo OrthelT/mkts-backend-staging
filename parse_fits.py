@@ -8,12 +8,12 @@ import pandas as pd
 from sqlalchemy import create_engine, text, insert, select, MetaData, Table
 import libsql
 
-from proj_config import fittings_url, sde_url, wcmkt_url
+from proj_config import wc_fittings_local_db_url, sde_local_url, wcmkt_local_url
 from logging_config import configure_logging
 
-mkt_db = wcmkt_url
-sde_db = sde_url
-fittings_db = fittings_url
+mkt_db = wcmkt_local_url
+sde_db = sde_local_url
+fittings_db = wc_fittings_local_db_url
 
 logger = configure_logging(__name__)
 
@@ -108,7 +108,7 @@ class DoctrineFit:
             return name.strip()
 
     def get_ship_name(self):
-        engine = create_engine(sde_url)
+        engine = create_engine(sde_local_url)
         with engine.connect() as conn:
             stmt = text("SELECT * FROM inv_info WHERE typeID = :type_id")
             result = conn.execute(stmt, {"type_id": self.ship_type_id})
@@ -116,7 +116,7 @@ class DoctrineFit:
             return name.strip()
         
     def add_wcmkts2_doctrine_fits(self):
-        engine = create_engine(wcmkt_url)
+        engine = create_engine(wcmkt_local_url)
         with engine.connect() as conn:
             stmt = text("INSERT INTO doctrine_fits (doctrine_name, fit_name, ship_type_id, doctrine_id, fit_id, ship_name, target) VALUES (:doctrine_name, :fit_name, :ship_type_id, :doctrine_id, :fit_id, :ship_name, :target)")
             conn.execute(stmt, {"doctrine_name": self.doctrine_name, "fit_name": self.fit_name, "ship_type_id": self.ship_type_id, "doctrine_id": self.doctrine_id, "fit_id": self.fit_id, "ship_name": self.ship_name, "target": self.target})

@@ -3,15 +3,14 @@ from logging_config import configure_logging
 import time
 import json
 import sqlalchemy as sa
-from sqlalchemy import text
-from proj_config import sde_url, wcmkt_url
+from sqlalchemy import text, create_engine
+from proj_config import sde_local_url, wcmkt_local_url, wc_fittings_local_db_url
+import requests
 
 logger = configure_logging(__name__)
 
-
-
 def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
-    engine = sa.create_engine(sde_url)
+    engine = sa.create_engine(sde_local_url)
     with engine.connect() as conn:
         stmt = text("SELECT typeID, typeName, groupName, categoryName FROM inv_info")
         res = conn.execute(stmt)
@@ -21,7 +20,7 @@ def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
     return df[["type_id", "type_name", "group_name", "category_name"]] 
 
 def get_type_name(type_id: int) -> str:
-    engine = sa.create_engine(sde_url)
+    engine = sa.create_engine(sde_local_url)
     with engine.connect() as conn:
         stmt = text("SELECT typeName FROM inv_info WHERE typeID = :type_id")
         res = conn.execute(stmt, {"type_id": type_id})
@@ -29,26 +28,49 @@ def get_type_name(type_id: int) -> str:
     engine.dispose()
     return type_name
 
+def get_type_names_from_esi(df: pd.DataFrame) -> pd.DataFrame:
+    type_ids = df["type_id"].unique().tolist()
+    logger.info(f"Total unique type IDs: {len(type_ids)}")
 
+    # Process type IDs in chunks of 1000 (ESI limit)
+    chunk_size = 1000
+    all_names = []
+
+    for i in range(0, len(type_ids), chunk_size):
+        chunk = type_ids[i : i + chunk_size]
+        logger.info(f"Processing chunk {i // chunk_size + 1}, size: {len(chunk)}")
+
+        url = "https://esi.evetech.net/latest/universe/names/?datasource=tranquility"
+        headers = {"User-Agent": "mkts-backend", "Accept": "application/json"}
+        response = requests.post(url, headers=headers, json=chunk)
+
+        if response.status_code == 200:
+            chunk_names = response.json()
+            if chunk_names:
+                all_names.extend(chunk_names)
+            else:
+                logger.warning(f"No names found for chunk {i // chunk_size + 1}")
+        else:
+            logger.error(
+                f"Error fetching names for chunk {i // chunk_size + 1}: {response.status_code}"
+            )
+            logger.error(f"Response: {response.json()}")
+
+    if all_names:
+        names_df = pd.DataFrame.from_records(all_names)
+        names_df = names_df.drop(columns=["category"])
+        names_df = names_df.rename(columns={"name": "type_name", "id": "type_id"})
+        df = df.merge(names_df, on="type_id", how="left")
+        return df
+    else:
+        logger.error("No names found for any chunks")
+        return None
+    
 def get_null_count(df):
     return df.isnull().sum()
 
-
 def validate_columns(df, valid_columns):
     return df[valid_columns]
-
-
-def validate_type_names(df):
-    return df[df["type_name"].notna()]
-
-
-def validate_type_ids(df):
-    return df[df["type_id"].notna()]
-
-
-def validate_order_ids(df):
-    return df[df["order_id"].notna()]
-
 
 def add_timestamp(df):
     df["timestamp"] = pd.Timestamp.now(tz="UTC")
@@ -56,11 +78,9 @@ def add_timestamp(df):
     df["timestamp"] = df["timestamp"].dt.tz_convert(None)
     return df
 
-
 def add_autoincrement(df):
     df["id"] = df.index + 1
     return df
-
 
 def convert_datetime_columns(df, datetime_columns):
     """Convert string datetime columns to Python datetime objects for SQLite compatibility"""
@@ -69,7 +89,6 @@ def convert_datetime_columns(df, datetime_columns):
             # Convert string datetime to pandas datetime, then to Python datetime
             df[col] = pd.to_datetime(df[col], utc=True).dt.tz_convert(None)
     return df
-
 
 def standby(seconds: int):
     for i in range(seconds):
@@ -106,7 +125,7 @@ def simulate_market_history() -> dict:
 
 
 def get_status():
-    engine = sa.create_engine(wcmkt_url)
+    engine = sa.create_engine(wcmkt_local_url)
     with engine.connect() as conn:
         dcount = conn.execute(text("SELECT COUNT(id) FROM doctrines"))
         doctrine_count = dcount.fetchone()[0]
@@ -125,8 +144,28 @@ def get_status():
     print(f"Market Stats: {stats_count}")
     print(f"Region Orders: {region_orders_count}")
 
-if __name__ == "__main__":
-    data = simulate_market_orders()
-    print(data[:10])
+def get_fit_items(fit_id: int) -> pd.DataFrame:
+    table_list_stmt = "SELECT type_id, quantity FROM fittings_fittingitem WHERE fit_id = (:fit_id)"
+    engine = create_engine(wc_fittings_local_db_url)
+    raptor_fit = []
+    with engine.connect() as conn:
+        result = conn.execute(text(table_list_stmt), {"fit_id": fit_id})
+        table_info = result.fetchall()
+        for row in table_info:
+            type_id = row.type_id
+            fit_qty = row.quantity
+            raptor_fit.append({"type_id": type_id, "fit_qty": fit_qty})
+        conn.close
+    engine.dispose
+    
+    for row in raptor_fit:
+        type_id = row["type_id"]
+        type_name = get_type_name(type_id)
+        row["type_name"] = type_name
+    
+    df = pd.DataFrame(raptor_fit)
+    return df
 
+if __name__ == "__main__":
+    pass
 

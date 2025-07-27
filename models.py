@@ -1,7 +1,7 @@
 from sqlalchemy import String, Integer, DateTime, Float, Boolean, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
 import libsql
-from proj_config import wcmkt_url, db_path
+from proj_config import wcmkt_local_url, wcmkt_db_path
 from utils import get_type_name
 from datetime import datetime, timezone
 import json
@@ -191,12 +191,20 @@ class Watchlist(Base):
 class NakahWatchlist(Base):
     __tablename__ = "nakah_watchlist"
     type_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    group_id: Mapped[int] = mapped_column(Integer)
     type_name: Mapped[str] = mapped_column(String)
+    group_name: Mapped[str] = mapped_column(String)
+    category_id: Mapped[int] = mapped_column(Integer)
+    category_name: Mapped[str] = mapped_column(String)
 
     def __repr__(self) -> str:
-        f"""nakah_watchlist(
+        f"""watchlist(
         type_id={self.type_id!r},
-        type_name={self.type_name!r}
+        group_id={self.group_id!r},
+        type_name={self.type_name!r},
+        group_name={self.group_name!r},
+        category_id={self.category_id!r},
+        category_name={self.category_name!r}
         )"""
 
 class DoctrineInfo(Base):

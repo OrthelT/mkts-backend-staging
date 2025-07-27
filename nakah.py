@@ -2,9 +2,9 @@ import requests
 import os
 import json
 import time
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker, Session
-from proj_config import wcmkt_url, db_path, sys_id, reg_id, user_agent
+from proj_config import wcmkt_local_url, wcmkt_db_path, deployment_sys_id, deployment_reg_id, user_agent, wc_fittings_local_db_url,sde_local_url
 from datetime import datetime, timezone
 from logging_config import configure_logging
 from models import RegionOrders, Base
@@ -14,6 +14,7 @@ from utils import get_type_names, get_type_name
 from dbhandler import add_region_history, get_watchlist_ids, get_nakah_watchlist
 from millify import millify
 from models import RegionHistory
+import libsql
 
 def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
     """
@@ -122,7 +123,7 @@ def get_region_orders_from_db(region_id: int) -> pd.DataFrame:
     """
     stmt = select(RegionOrders)
 
-    engine = create_engine(wcmkt_url)
+    engine = create_engine(wcmkt_local_url)
     session = Session(bind=engine)
     result = session.scalars(stmt)
     orders_data = []
@@ -155,7 +156,7 @@ def update_region_orders(region_id: int, order_type: str = 'sell') -> pd.DataFra
         pandas DataFrame
     """
     orders = fetch_region_orders(region_id, order_type)
-    engine = create_engine(wcmkt_url)
+    engine = create_engine(wcmkt_local_url)
     session = Session(bind=engine)
     
     # Clear existing orders
@@ -199,7 +200,7 @@ def get_system_orders_from_db(system_id: int) -> pd.DataFrame:
         pandas DataFrame    
     """
     stmt = select(RegionOrders).where(RegionOrders.system_id == system_id)
-    engine = create_engine(wcmkt_url)
+    engine = create_engine(wcmkt_local_url)
     session = Session(bind=engine)
     result = session.scalars(stmt)
     
@@ -356,12 +357,12 @@ def fetch_region_item_history(region_id: int, type_id: int) -> list[dict]:
         print(f"    Unexpected error for type_id {type_id}: {e}")
         return []
 
-def fetch_region_history(region_id: int, type_ids: list[int]):
+def fetch_region_history(region_id: int, type_ids: list[int])->list[dict]:
     history = []
     total_items = len(type_ids)
     
-    print(f"Starting fetch_region_history for {total_items} items in region {region_id}")
-    print("=" * 60)
+    logger.info(f"Starting fetch_region_history for {total_items} items in region {region_id}")
+    logger.info("=" * 60)
     
     for i, type_id in enumerate(type_ids, 1):
         print(f"Processing item {i}/{total_items} (type_id: {type_id})", end="", flush=True)
@@ -383,20 +384,44 @@ def fetch_region_history(region_id: int, type_ids: list[int]):
             # Still add the item to history with empty data
             history.append({type_id: []})
     
-    print("=" * 60)
-    print(f"Completed fetch_region_history: {len(history)} items processed")
+    logger.info("=" * 60)
+    logger.info(f"Completed fetch_region_history: {len(history)} items processed")
     
     # Summary
     items_with_data = sum(1 for item in history if list(item.values())[0])
     items_without_data = len(history) - items_with_data
     total_records = sum(len(list(item.values())[0]) for item in history)
     
-    print(f"Summary: {items_with_data} items with data, {items_without_data} items without data")
-    print(f"Total history records: {total_records}")
+    logger.info(f"Summary: {items_with_data} items with data, {items_without_data} items without data")
+    logger.info(f"Total history records: {total_records}")
     
+    return history
+
+def get_region_history(type_ids: list[int])->list[dict]:
+    engine = create_engine(wcmkt_local_url)
+    print("engine created")
+    session = Session(bind=engine)
+    print("session created")
+    stmt = select(RegionHistory).where(RegionHistory.type_id.in_(type_ids))
+    print("stmt created")
+    result = session.scalars(stmt)
+    print("result created")
+    history = []
+    for item in result:
+        print(item)
+        # Convert the RegionHistory object to a dictionary format
+        history_data = {
+            'date': item.date.strftime("%Y-%m-%d"),
+            'average': item.average,
+            'highest': item.highest,
+            'lowest': item.lowest,
+            'order_count': item.order_count,
+            'volume': item.volume
+        }
+        history.append({item.type_id: [history_data]})
+    session.close()
     return history
 
 
 if __name__ == "__main__":
     pass
-    

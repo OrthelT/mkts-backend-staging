@@ -3,33 +3,36 @@ import libsql
 import json
 import requests
 import pandas as pd
-from sqlalchemy import inspect, text, create_engine, select, insert, MetaData
-from sqlalchemy.orm import Session, sessionmaker, query
+from sqlalchemy import inspect, text, create_engine, select, insert, MetaData, query
+from sqlalchemy.orm import Session, sessionmaker
 from datetime import datetime, timezone
 import time
 from utils import standby, logger, configure_logging, get_type_name
 from dotenv import load_dotenv
 from logging_config import configure_logging
-from models import Base, Doctrines, RegionHistory
-from proj_config import db_path, wcmkt_url, sde_path, sde_url, fittings_path, fittings_path, fittings_url
+from models import Base, Doctrines, RegionHistory, NakahWatchlist
+from proj_config import wcmkt_db_path, wcmkt_local_url, sde_local_path, sde_local_url, wcfittings_db_path, wcfittings_db_path, wc_fittings_local_db_url
 from dataclasses import dataclass, field
 import sqlalchemy as sa
 
 load_dotenv()
 logger = configure_logging(__name__)
 
-wcmkt_path = db_path
-wcmkt_local_url = wcmkt_url
-sde_path = sde_path
-sde_local_url = sde_url
-fittings_path = fittings_path
-fittings_local_url = fittings_url
+wcmkt_path = wcmkt_db_path
+wcmkt_local_url = wcmkt_local_url
+sde_local_path = sde_local_path
+sde_local_url = sde_local_url
+wcfittings_db_path = wcfittings_db_path
+fittings_local_url = wc_fittings_local_db_url
 
 turso_url = os.getenv("TURSO_URL")
 turso_auth_token = os.getenv("TURSO_AUTH_TOKEN")
 
-sde_url = os.getenv("SDE_URL")
+sde_local_url = os.getenv("SDE_URL")
 sde_token = os.getenv("SDE_AUTH_TOKEN")
+
+turso_fittings_url = os.getenv("TURSO_FITTINGS_URL")
+turso_fittings_auth_token = os.getenv("TURSO_FITTINGS_AUTH_TOKEN")
 
 @dataclass
 class TypeInfo:
@@ -59,7 +62,7 @@ class TypeInfo:
 
 # SDE connection
 def sde_conn():
-    conn = libsql.connect(sde_path, sync_url=sde_url, auth_token=sde_token)
+    conn = libsql.connect(sde_local_path, sync_url=sde_local_url, auth_token=sde_token)
     return conn
 
 # WCMKT connection
@@ -68,7 +71,7 @@ def wcmkt_conn():
     return conn
 
 def sde_remote_engine():
-    engine = create_engine(sde_url, connect_args={"auth_token": sde_token}, echo=True)
+    engine = create_engine(sde_local_url, connect_args={"auth_token": sde_token}, echo=True)
     return engine
 
 def sde_local_engine():
@@ -88,7 +91,7 @@ def get_wcmkt_local_engine():
     return engine
 
 def insert_type_data(data: list[dict]):
-    conn = libsql.connect(sde_path)
+    conn = libsql.connect(sde_local_path)
     cursor = conn.cursor()
     unprocessed_data = []
     for row in data:
@@ -122,128 +125,16 @@ def insert_type_data(data: list[dict]):
     return data
 
 
-def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
-    type_ids = df["type_id"].unique().tolist()
-    logger.info(f"Total unique type IDs: {len(type_ids)}")
-
-    # Process type IDs in chunks of 1000 (ESI limit)
-    chunk_size = 1000
-    all_names = []
-
-    for i in range(0, len(type_ids), chunk_size):
-        chunk = type_ids[i : i + chunk_size]
-        logger.info(f"Processing chunk {i // chunk_size + 1}, size: {len(chunk)}")
-
-        url = "https://esi.evetech.net/latest/universe/names/?datasource=tranquility"
-        headers = {"User-Agent": "mkts-backend", "Accept": "application/json"}
-        response = requests.post(url, headers=headers, json=chunk)
-
-        if response.status_code == 200:
-            chunk_names = response.json()
-            if chunk_names:
-                all_names.extend(chunk_names)
-            else:
-                logger.warning(f"No names found for chunk {i // chunk_size + 1}")
-        else:
-            logger.error(
-                f"Error fetching names for chunk {i // chunk_size + 1}: {response.status_code}"
-            )
-            logger.error(f"Response: {response.json()}")
-
-    if all_names:
-        names_df = pd.DataFrame.from_records(all_names)
-        names_df = names_df.drop(columns=["category"])
-        names_df = names_df.rename(columns={"name": "type_name", "id": "type_id"})
-        df = df.merge(names_df, on="type_id", how="left")
-        return df
-    else:
-        logger.error("No names found for any chunks")
-        return None
 
 
-def load_data(table: str, df: pd.DataFrame):
-    conn = libsql.connect(wcmkt_path)
-    cursor = conn.cursor()
-
-    logger.info(f"Loading data into {table}")
-    clear_table = f"DELETE FROM {table};"
-    cursor.execute(clear_table)
-
-    data = df.to_dict(orient="records")
-    total_rows = len(data)
-
-    for i, row in enumerate(data, 1):
-        print(f"\rInserting row {i}/{total_rows}", end="", flush=True)
-        columns = ", ".join(row.keys())
-        # Properly escape values for SQL
-        values = ", ".join(
-            [
-                f"'{str(value).replace("'", "''")}'" if value is not None else "NULL"
-                for value in row.values()
-            ]
-        )
-        query = f"INSERT INTO {table} ({columns}) VALUES ({values});"
-        try:
-            cursor.execute(query)
-            conn.commit()
-        except Exception as e:
-            logger.error(f"Error inserting row: {row}")
-            logger.error(f"Error: {e}")
-            continue
-
-   # New line after progress display
-    logger.info(f"Successfully inserted {total_rows} rows into {table}")
-    conn.close()
-
-
-def update_remote_database(table: str, df: pd.DataFrame):
-    remote_engine = get_wcmkt_remote_engine()
-    with remote_engine.connect() as conn:
-        conn.execute(text(f"DELETE FROM {table};"))
-        conn.commit()
-        logger.info(f"Deleted {table} table")
-
-        # Process large datasets in chunks to prevent memory issues
-        chunk_size = 1000  # Process 1000 records at a time
-        total_rows = len(df)
-
-        if total_rows > chunk_size:
-            logger.info(f"Processing {total_rows} records in chunks of {chunk_size}")
-
-            # Process first chunk with replace to create table structure
-            first_chunk = df.iloc[:chunk_size]
-            first_chunk.to_sql(table, conn, if_exists="replace", index=False)
-            logger.info(f"Processed chunk 1/{(total_rows // chunk_size) + 1}")
-
-            # Process remaining chunks with append
-            for i in range(chunk_size, total_rows, chunk_size):
-                chunk = df.iloc[i : i + chunk_size]
-                chunk.to_sql(table, conn, if_exists="append", index=False)
-                chunk_num = (i // chunk_size) + 1
-                total_chunks = (total_rows // chunk_size) + 1
-                logger.info(f"Processed chunk {chunk_num}/{total_chunks}")
-                print(
-                    f"\rProcessing chunk {chunk_num}/{total_chunks}", end="", flush=True
-                )
-        else:
-            # For smaller datasets, process normally
-            df.to_sql(table, conn, if_exists="replace", index=False)
-
-        conn.commit()
-        logger.info(f"Successfully inserted {total_rows} records into {table}")
-        if total_rows > chunk_size:
-            print()  # New line after progress display
-    conn.close()
-    remote_engine.dispose()
-
-def update_remote_database_with_orm_session(table: Base, df: pd.DataFrame):
+def update_remote_database(table: Base, df: pd.DataFrame):
     df = prepare_data_for_insertion(df, table)
     
     remote_engine = get_wcmkt_remote_engine()
     session = Session(bind=remote_engine)
     print(f"Updating {table} with {len(df)} rows")
     data = df.to_dict(orient="records")
-    chunk_size = 1000
+    chunk_size = 2000
     session.query(table).delete()
     session.commit()
     with session.begin():
@@ -254,7 +145,6 @@ def update_remote_database_with_orm_session(table: Base, df: pd.DataFrame):
             print(f"Processing chunk {i // chunk_size + 1}, size: {len(chunk)}")
 
     session.commit()
-
 
     print(f"Updated {table} with {len(df)} rows")
 
@@ -272,63 +162,6 @@ def update_remote_database_with_orm_session(table: Base, df: pd.DataFrame):
     else:
         print(f"Table {table_name} update failed")
         return False
-
-def read_data(table: str, condition: dict = None) -> pd.DataFrame:
-    conn = libsql.connect(wcmkt_path)
-    cursor = conn.cursor()
-    if condition is None:
-        where_clause = ""
-    else:
-        where_clause = "WHERE " + " AND ".join(
-            [f"{k} = {v}" for k, v in condition.items()]
-        )
-    query = f"SELECT * FROM {table} {where_clause}"
-    cursor.execute(query)
-
-    # Extract column names from cursor.description
-    headers = [col[0] for col in cursor.description]
-    data = cursor.fetchall()
-    data_df = pd.DataFrame(data, columns=headers)
-    cursor.close()
-    conn.close()
-
-    data_df = data_df.infer_objects()
-    data_df = data_df.dropna(how="all")  # Only drop rows where all values are NaN
-    data_df = data_df.reset_index(drop=True)
-    return data_df
-
-
-def get_valid_columns(table: str) -> list[str]:
-    conn = libsql.connect(wcmkt_path)
-    cursor = conn.cursor()
-    stmt = f"SELECT * FROM {table}"
-    cursor.execute(stmt)
-    headers = [col[0] for col in cursor.description]
-    return headers
-
-
-def get_valid_columns_df(table: str) -> pd.DataFrame:
-    headers = get_valid_columns(table)
-    return pd.DataFrame(headers, columns=["column_name"])
-
-
-def get_table_names() -> list[str]:
-    conn = libsql.connect(wcmkt_path)
-    cursor = conn.cursor()
-    stmt = "SELECT name FROM sqlite_master WHERE type='table'"
-    cursor.execute(stmt)
-    return [row[0] for row in cursor.fetchall()]
-
-
-def get_table_schema(table: str) -> pd.DataFrame:
-    conn = libsql.connect(wcmkt_path)
-    cursor = conn.cursor()
-    stmt = f"PRAGMA table_info({table})"
-    cursor.execute(stmt)
-    return pd.DataFrame(
-        cursor.fetchall(),
-        columns=["cid", "name", "type", "notnull", "dflt_value", "pk"],
-    )
 
 def get_watchlist() -> pd.DataFrame:
     engine = create_engine(wcmkt_local_url)
@@ -625,5 +458,4 @@ def get_region_deployment_history(deployment_date: datetime) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    # Test the function with a sample date
     pass

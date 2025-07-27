@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from models import RegionHistory, Base
-from proj_config import wcmkt_url
+from proj_config import wcmkt_local_url
 from utils import get_type_name
 
 def test_region_history_functionality():
@@ -21,7 +21,7 @@ def test_region_history_functionality():
     print("=" * 60)
     
     # Create engine and session
-    engine = create_engine(wcmkt_url)
+    engine = create_engine(wcmkt_local_url)
     session = Session(engine)
     
     try:

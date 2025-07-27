@@ -6,7 +6,7 @@ import requests
 from requests import ReadTimeout
 from logging_config import configure_logging
 from ESI_OAUTH_FLOW import get_token
-from dbhandler import get_watchlist, get_table_length, update_remote_database_with_orm_session, get_nakah_watchlist, add_region_history
+from dbhandler import get_watchlist, get_table_length, update_remote_database, get_nakah_watchlist, add_region_history
 from models import MarketOrders, MarketHistory, MarketStats, Doctrines, RegionOrders, Watchlist
 from utils import get_type_names, validate_columns, add_timestamp, add_autoincrement, convert_datetime_columns
 from data_processing import calculate_market_stats, calculate_doctrine_stats
@@ -14,7 +14,7 @@ from dbhandler import get_remote_status
 import sqlalchemy as sa
 from sqlalchemy import text
 from nakah import get_region_orders_from_db, update_region_orders, process_system_orders, get_system_market_value, get_system_ship_count, fetch_region_history
-from proj_config import db_path
+from proj_config import wcmkt_db_path
 from google_sheets_utils import update_google_sheet
 
 
@@ -162,7 +162,7 @@ def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
 
 def check_tables():
     tables = ["doctrines", "marketstats", "marketorders", "market_history"]
-    engine = sa.create_engine(f"sqlite:///{db_path}")
+    engine = sa.create_engine(f"sqlite:///{wcmkt_db_path}")
     for table in tables:
         print(f"Table: {table}")
         print("=" * 80)
@@ -182,7 +182,7 @@ def process_history(watchlist: pd.DataFrame):
     history_df = validate_columns(history_df, valid_history_columns)
 
     try:
-        update_remote_database_with_orm_session(MarketHistory, history_df)
+        update_remote_database(MarketHistory, history_df)
         logger.info(f"History updated:{get_table_length('market_history')} items")
         print(f"History updated:{get_table_length('market_history')} items")
     except Exception as e:
@@ -197,7 +197,7 @@ def process_history(watchlist: pd.DataFrame):
         history_df = validate_columns(history_df, valid_history_columns)
 
         try:
-            update_remote_database_with_orm_session(MarketHistory, history_df)
+            update_remote_database(MarketHistory, history_df)
             logger.info(
                 f"History updated on retry:{get_table_length('market_history')} items"
             )
@@ -217,7 +217,7 @@ def process_history(watchlist: pd.DataFrame):
 def region_orders():
     update_region_orders(deployment_region_id)
     region_orders = get_region_orders_from_db(deployment_region_id)
-    update_remote_database_with_orm_session(RegionOrders, region_orders)
+    update_remote_database(RegionOrders, region_orders)
     system_orders = process_system_orders(deployment_system_id)
     
     # Update Google Sheet with system orders data
@@ -268,7 +268,7 @@ def main(history: bool = False, region_only: bool = False):
         print(f"Orders fetched:{len(orders_df)} items")
         logger.info(f"Orders fetched:{len(orders_df)} items")
 
-        update_remote_database_with_orm_session(MarketOrders, orders_df)
+        update_remote_database(MarketOrders, orders_df)
         logger.info(f"Orders updated:{get_table_length('marketorders')} items")
     else:
         logger.error("No orders found")
@@ -276,7 +276,7 @@ def main(history: bool = False, region_only: bool = False):
     watchlist = get_watchlist()
 
     try:
-        update_remote_database_with_orm_session(Watchlist, watchlist)
+        update_remote_database(Watchlist, watchlist)
         logger.info(f"Watchlist updated:{get_table_length('watchlist')} items")
     except Exception as e:
         logger.error(f"Failed to update watchlist: {e}")
@@ -296,7 +296,7 @@ def main(history: bool = False, region_only: bool = False):
 
     market_stats_df = validate_columns(market_stats_df, valid_market_stats_columns)
 
-    update_remote_database_with_orm_session(MarketStats, market_stats_df)
+    update_remote_database(MarketStats, market_stats_df)
     logger.info(f"Market stats updated:{get_table_length('marketstats')} items")
 
     valid_doctrine_columns = Doctrines.__table__.columns.keys()
@@ -307,7 +307,7 @@ def main(history: bool = False, region_only: bool = False):
     # Convert timestamp field to Python datetime objects for SQLite
     doctrine_stats_df = convert_datetime_columns(doctrine_stats_df, ['timestamp'])
     doctrine_stats_df = validate_columns(doctrine_stats_df, valid_doctrine_columns)
-    update_remote_database_with_orm_session(Doctrines, doctrine_stats_df)
+    update_remote_database(Doctrines, doctrine_stats_df)
     logger.info(f"Doctrines updated:{get_table_length('doctrines')} items")
 
     valid_doctrine_columns = Doctrines.__table__.columns.keys()
@@ -317,7 +317,7 @@ def main(history: bool = False, region_only: bool = False):
     doctrine_stats_df = convert_datetime_columns(doctrine_stats_df, ['timestamp'])
     doctrine_stats_df = validate_columns(doctrine_stats_df, valid_doctrine_columns)
 
-    update_remote_database_with_orm_session(Doctrines, doctrine_stats_df)
+    update_remote_database(Doctrines, doctrine_stats_df)
     logger.info(f"Doctrines updated:{get_table_length('doctrines')} items")
     print(f"Doctrines updated:{get_table_length('doctrines')} items")
 

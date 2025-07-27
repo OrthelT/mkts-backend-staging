@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timezone
 from dbhandler import get_nakah_watchlist
 from nakah import fetch_region_history, fetch_region_item_history
-from proj_config import reg_id
+from proj_config import deployment_reg_id
 
 def test_fetch_region_history_with_watchlist():
     """Test fetch_region_history with the full nakah watchlist"""
@@ -48,7 +48,7 @@ def test_fetch_region_history_with_watchlist():
     
     start_time = time.time()
     try:
-        subset_history = fetch_region_history(reg_id, subset_type_ids)
+        subset_history = fetch_region_history(deployment_reg_id, subset_type_ids)
         subset_time = time.time() - start_time
         
         print(f"   ✓ Subset test completed in {subset_time:.2f} seconds")
@@ -74,7 +74,7 @@ def test_fetch_region_history_with_watchlist():
     
     start_time = time.time()
     try:
-        full_history = fetch_region_history(reg_id, type_ids)
+        full_history = fetch_region_history(deployment_reg_id, type_ids)
         full_time = time.time() - start_time
         
         print(f"   ✓ Full test completed in {full_time:.2f} seconds")
@@ -143,7 +143,7 @@ def test_individual_fetch_region_item_history():
         print(f"\nTesting type_id {type_id}...")
         try:
             start_time = time.time()
-            history_data = fetch_region_item_history(reg_id, type_id)
+            history_data = fetch_region_item_history(deployment_reg_id, type_id)
             elapsed_time = time.time() - start_time
             
             if history_data and len(history_data) > 0:
@@ -178,7 +178,7 @@ def test_performance_analysis():
     for i, type_id in enumerate(test_type_ids):
         item_start = time.time()
         try:
-            history_data = fetch_region_item_history(reg_id, type_id)
+            history_data = fetch_region_item_history(deployment_reg_id, type_id)
             item_time = time.time() - item_start
             individual_times.append(item_time)
             
