@@ -3,14 +3,15 @@ import libsql
 import json
 import requests
 import pandas as pd
-from sqlalchemy import inspect, text, create_engine, select, insert, MetaData, query
+from sqlalchemy import inspect, text, create_engine, select, insert, MetaData,func
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, timezone
 import time
 from utils import standby, logger, configure_logging, get_type_name
 from dotenv import load_dotenv
 from logging_config import configure_logging
-from models import Base, Doctrines, RegionHistory, NakahWatchlist
+from models import Base, Doctrines, RegionHistory, NakahWatchlist, MarketHistory,MarketOrders
 from proj_config import wcmkt_db_path, wcmkt_local_url, sde_local_path, sde_local_url, wcfittings_db_path, wcfittings_db_path, wc_fittings_local_db_url
 from dataclasses import dataclass, field
 import sqlalchemy as sa
@@ -27,6 +28,9 @@ fittings_local_url = wc_fittings_local_db_url
 
 turso_url = os.getenv("TURSO_URL")
 turso_auth_token = os.getenv("TURSO_AUTH_TOKEN")
+
+test_url = os.getenv("TURSO_TESTING_URL")
+test_auth_token = os.getenv("TURSO_TESTING_AUTH_TOKEN")
 
 sde_local_url = os.getenv("SDE_URL")
 sde_token = os.getenv("SDE_AUTH_TOKEN")
@@ -83,12 +87,12 @@ def get_wcmkt_remote_engine():
     f"sqlite+{turso_url}?secure=true",
     connect_args={
         "auth_token": turso_auth_token,
-    },echo_pool=True, echo=False)
+    },echo=False)
     return engine
 
 def get_wcmkt_local_engine():
-    engine = create_engine(wcmkt_local_url, echo_pool=True, echo=False)
-    return engine
+        engine = create_engine(wcmkt_local_url, echo=False)
+        return engine
 
 def insert_type_data(data: list[dict]):
     conn = libsql.connect(sde_local_path)
@@ -124,44 +128,56 @@ def insert_type_data(data: list[dict]):
             json.dump(unprocessed_data, f)
     return data
 
-
-
-
 def update_remote_database(table: Base, df: pd.DataFrame):
-    df = prepare_data_for_insertion(df, table)
+    data = df.to_dict(orient="records")
+    
+    # Calculate optimal chunk size based on SQLite memory limits
+    # SQLite has ~256KB limit for prepared statements
+    # Each parameter takes 8 bytes
+    MAX_PARAMETER_BYTES = 256 * 1024  # 256 KB
+    BYTES_PER_PARAMETER = 8
+    MAX_PARAMETERS = MAX_PARAMETER_BYTES // BYTES_PER_PARAMETER  # 32,768
+    
+    column_count = len(df.columns)
+    chunk_size = min(2000, MAX_PARAMETERS // column_count)
+    
+    print(f"Table {table.__tablename__} has {column_count} columns, using chunk size {chunk_size}")
     
     remote_engine = get_wcmkt_remote_engine()
     session = Session(bind=remote_engine)
-    print(f"Updating {table} with {len(df)} rows")
-    data = df.to_dict(orient="records")
-    chunk_size = 2000
-    session.query(table).delete()
-    session.commit()
-    with session.begin():
-        for i in range(0, len(data), chunk_size):
-            chunk = data[i : i + chunk_size]
-            stmt = insert(table).values(chunk)
-            session.execute(stmt)
-            print(f"Processing chunk {i // chunk_size + 1}, size: {len(chunk)}")
 
-    session.commit()
+    try:
+        print(f"Updating {table.__tablename__} with {len(data)} rows")
+        with session.begin():
+            # 1. Wipe out old rows
+            session.query(table).delete()
 
-    print(f"Updated {table} with {len(df)} rows")
+            # 2. Insert in chunks
+            for idx in range(0, len(data), chunk_size):
+                chunk = data[idx: idx + chunk_size]
+                stmt  = insert(table).values(chunk)
+                session.execute(stmt)
+                print(f"  • chunk {idx // chunk_size + 1}, {len(chunk)} rows")
 
-    session.close()
-    remote_engine.dispose()
+            # 3. Verify the row count
+            count_stmt = select(func.count()).select_from(table)
+            count = session.execute(count_stmt).scalar_one()
+            if count != len(data):
+                raise RuntimeError(
+                    f"Row count mismatch: expected {len(data)}, got {count}"
+                )
 
-    status = get_remote_status()
-    print(status)
-    
-    table_name = table.__tablename__
-    print(f"Table {table_name} updated with {len(df)} rows")
-    if status[table_name] == len(df):
-        print(f"Table {table_name} updated successfully")
-        return True
-    else:
-        print(f"Table {table_name} update failed")
+        # if we get here, commit happened automatically
+        logger.info(f"Database updated successfully: {count} rows in {table.__tablename__}")
+
+    except SQLAlchemyError as e:
+        # any SQL error rolls back in the context manager
+        logger.error("Failed updating remote DB", exc_info=e)
         return False
+
+    finally:
+        session.close()
+        remote_engine.dispose()
 
 def get_watchlist() -> pd.DataFrame:
     engine = create_engine(wcmkt_local_url)
@@ -176,7 +192,6 @@ def get_watchlist() -> pd.DataFrame:
             else:
                 logger.error("No watchlist found")
                 return None
-
 
             if len(df) == 0:
                 print("watchlist loading")
@@ -223,6 +238,7 @@ def get_market_orders(type_id: int) -> pd.DataFrame:
     stmt = "SELECT * FROM marketorders WHERE type_id = ?"
     cursor.execute(stmt, (type_id,))
     headers = [col[0] for col in cursor.description]
+    conn.close
     return pd.DataFrame(cursor.fetchall(), columns=headers)
 
 
@@ -312,26 +328,6 @@ def get_remote_status():
     print("-" * 20)
     print(status_dict)
     return status_dict
-
-def prepare_data_for_insertion(df, model_class):
-    """Convert datetime strings to datetime objects for a model DataFrame"""
-    inspector = inspect(model_class)
-
-    for column in inspector.columns:
-        column_name = column.key
-        if column_name in df.columns:
-            # Check if it's a DateTime column
-            if hasattr(column.type, '__class__') and 'DateTime' in str(column.type.__class__):
-                try:
-                    # Convert the entire Series to datetime
-                    df[column_name] = pd.to_datetime(df[column_name])
-                    # Convert to Python datetime objects for SQLAlchemy
-                    df[column_name] = df[column_name].dt.to_pydatetime()
-                except Exception as e:
-                    print(f"Error converting {column_name}: {e}")
-                    # Set to current datetime as fallback for the entire column
-                    df[column_name] = datetime.now()
-        return df
     
 def get_watchlist_ids():
     stmt = text("SELECT DISTINCT type_id FROM watchlist")

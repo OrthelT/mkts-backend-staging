@@ -1,3 +1,4 @@
+import sys
 import time
 import json
 from datetime import datetime
@@ -7,14 +8,14 @@ from requests import ReadTimeout
 from logging_config import configure_logging
 from ESI_OAUTH_FLOW import get_token
 from dbhandler import get_watchlist, get_table_length, update_remote_database, get_nakah_watchlist, add_region_history
-from models import MarketOrders, MarketHistory, MarketStats, Doctrines, RegionOrders, Watchlist
+from models import MarketOrders, MarketHistory, MarketStats, Doctrines, RegionOrders, Watchlist, RegionHistory
 from utils import get_type_names, validate_columns, add_timestamp, add_autoincrement, convert_datetime_columns
 from data_processing import calculate_market_stats, calculate_doctrine_stats
 from dbhandler import get_remote_status
 import sqlalchemy as sa
 from sqlalchemy import text
 from nakah import get_region_orders_from_db, update_region_orders, process_system_orders, get_system_market_value, get_system_ship_count, fetch_region_history
-from proj_config import wcmkt_db_path
+from proj_config import wcmkt_db_path, deployment_reg_id
 from google_sheets_utils import update_google_sheet
 
 
@@ -160,6 +161,73 @@ def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
         return None
 
 
+
+def fetch_region_history(watchlist: pd.DataFrame) -> list[dict]:
+
+    logger.info("Fetching history")
+    if watchlist is None or watchlist.empty:
+        logger.error("No watchlist provided or watchlist is empty")
+        return None
+    else:
+        logger.info("Watchlist found")
+        print(f"Watchlist found: {len(watchlist)} items")
+
+    type_ids = watchlist["type_id"].tolist()
+    logger.info(f"Fetching history for {len(type_ids)} types")
+
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "WC Markets DEVv0.44 (admin contact: Orthel.Toralen@gmail.com; +https://github.com/OrthelT/ESIMarket_Tool",
+        "X-Compatibility-Date": "2025-07-01"
+
+    }
+
+    history = []
+
+    watchlist_length = len(watchlist)
+    for i, type_id in enumerate(type_ids):
+        item_name = watchlist[watchlist["type_id"] == type_id]["type_name"].values[0]
+        try:
+            url = f"https://esi.evetech.net/markets/{deployment_reg_id}/history"
+
+            querystring = {"type_id": str(type_id)}
+
+            print(
+                f"\rFetching history for ({i + 1}/{watchlist_length})",
+                end="",
+                flush=True,
+            )
+            response = requests.get(url, headers=headers, params=querystring)
+            response.raise_for_status()
+
+            if response.status_code == 200:
+                data = response.json()
+                for record in data:
+                    record["type_name"] = item_name
+                    record["type_id"] = type_id
+
+                if isinstance(data, list):
+                    history.extend(data)
+                else:
+                    logger.warning(f"Unexpected data format for {item_name}")
+            else:
+                logger.error(
+                    f"Error fetching history for {item_name}: {response.status_code}"
+                )
+        except Exception as e:
+            logger.error(f"Error processing {item_name}: {e}")
+            continue
+
+    if history:
+        logger.info(f"Successfully fetched {len(history)} total history records")
+        with open("region_history.json", "w") as f:
+            json.dump(history, f)
+        return history
+    else:
+        logger.error("No history records found")
+        return None
+
+
 def check_tables():
     tables = ["doctrines", "marketstats", "marketorders", "market_history"]
     engine = sa.create_engine(f"sqlite:///{wcmkt_db_path}")
@@ -181,38 +249,49 @@ def process_history(watchlist: pd.DataFrame):
     history_df = add_autoincrement(history_df)
     history_df = validate_columns(history_df, valid_history_columns)
 
+    history_df = convert_datetime_columns(history_df,['date'])
+
+    history_df.infer_objects()
+    history_df.fillna(0)
+
+
     try:
         update_remote_database(MarketHistory, history_df)
+    except Exception as e:
+        logger.error(f"history data update failed: {e}")
+
+    status = get_remote_status()['market_history']
+    if status > 0:
         logger.info(f"History updated:{get_table_length('market_history')} items")
         print(f"History updated:{get_table_length('market_history')} items")
+    else:
+        logger.error(f"Failed to update market history")
+
+def process_region_history(watchlist: pd.DataFrame):
+    region_history = fetch_region_history(watchlist)
+    valid_history_columns = RegionHistory.__table__.columns.keys()
+    history_df = pd.DataFrame.from_records(region_history)
+    history_df = add_timestamp(history_df)
+    history_df = add_autoincrement(history_df)
+    history_df = validate_columns(history_df, valid_history_columns)
+
+    history_df = convert_datetime_columns(history_df,['date'])
+
+    history_df.infer_objects()
+    history_df.fillna(0)
+
+
+    try:
+        update_remote_database(RegionHistory, history_df)
     except Exception as e:
-        logger.error(f"Failed to update market history: {e}")
-        logger.info("Attempting to clear memory and retry...")
-        del history_df
+        logger.error(f"history data update failed: {e}")
 
-        # Recreate the DataFrame and try again with smaller chunks
-        history_df = pd.DataFrame.from_records(history)
-        history_df = add_timestamp(history_df)
-        history_df = add_autoincrement(history_df)
-        history_df = validate_columns(history_df, valid_history_columns)
-
-        try:
-            update_remote_database(MarketHistory, history_df)
-            logger.info(
-                f"History updated on retry:{get_table_length('market_history')} items"
-            )
-            print(
-                f"History updated on retry:{get_table_length('market_history')} items"
-            )
-        except Exception as retry_error:
-            logger.error(f"Failed to update market history on retry: {retry_error}")
-            print("Critical error: Unable to update market history")
-
-        status = get_remote_status()
-        if status["market_history"] == get_table_length("market_history"):
-            print("Market history updated successfully")
-        else:
-            print("Market history update failed")
+    status = get_remote_status()['market_history']
+    if status > 0:
+        logger.info(f"History updated:{get_table_length('market_history')} items")
+        print(f"History updated:{get_table_length('market_history')} items")
+    else:
+        logger.error(f"Failed to update market history")
 
 def region_orders():
     update_region_orders(deployment_region_id)
@@ -240,9 +319,19 @@ def region_orders():
 
 
 def main(history: bool = False, region_only: bool = False):
+    if history:
+        logger.info("History mode enabled")
+    else:
+        logger.info("History mode disabled")
+
     logger.info("Starting mkts-backend")
     if region_only:
         region_orders()
+        logger.info("Region only mode enabled. Exiting.")
+        print("Region only mode enabled. Exiting.")
+        logger.info("******************")
+        logger.info("******************")
+        logger.info("******************")
         exit()
     
     valid_columns = MarketOrders.__table__.columns.keys()
@@ -275,18 +364,18 @@ def main(history: bool = False, region_only: bool = False):
 
     watchlist = get_watchlist()
 
-    try:
-        update_remote_database(Watchlist, watchlist)
-        logger.info(f"Watchlist updated:{get_table_length('watchlist')} items")
-    except Exception as e:
-        logger.error(f"Failed to update watchlist: {e}")
+    # try:
+    #     update_remote_database(Watchlist, watchlist)
+    #     logger.info(f"Watchlist updated:{get_table_length('watchlist')} items")
+    # except Exception as e:
+    #     logger.error(f"Failed to update watchlist: {e}")
     
     if history:
         logger.info("Processing history")
         process_history(watchlist)
+
         nakah_watchlist = get_nakah_watchlist()
-        history = fetch_region_history(region_id, nakah_watchlist["type_id"].tolist())
-        add_region_history(history)
+        process_region_history(nakah_watchlist)
     else:
         logger.info("Skipping history processing")
 
@@ -321,20 +410,11 @@ def main(history: bool = False, region_only: bool = False):
     logger.info(f"Doctrines updated:{get_table_length('doctrines')} items")
     print(f"Doctrines updated:{get_table_length('doctrines')} items")
 
-    if region_only:
-        logger.info("Region only mode enabled. Exiting.")
-        print("Region only mode enabled. Exiting.")
-        logger.info("******************")
-        logger.info("******************")
-        logger.info("******************")
-        return
-    else:
-        region_orders()
+    region_orders()
         
 
 if __name__ == "__main__":
-    import sys
-    
+
     # Check for command line arguments
     include_history = False
     region_only = False

@@ -370,6 +370,8 @@ def fetch_region_history(region_id: int, type_ids: list[int])->list[dict]:
         try:
             start_time = time.time()
             item_history = fetch_region_item_history(region_id, type_id)
+            print(item_history)
+            quit()
             elapsed_time = time.time() - start_time
             
             if item_history and len(item_history) > 0:
@@ -377,23 +379,15 @@ def fetch_region_history(region_id: int, type_ids: list[int])->list[dict]:
             else:
                 print(f" ⚠ No data in {elapsed_time:.2f}s")
             
-            history.append({type_id: item_history})
+            history.append(item_history)
             
         except Exception as e:
             print(f" ❌ Error: {e}")
             # Still add the item to history with empty data
-            history.append({type_id: []})
+            history.append([])
     
     logger.info("=" * 60)
     logger.info(f"Completed fetch_region_history: {len(history)} items processed")
-    
-    # Summary
-    items_with_data = sum(1 for item in history if list(item.values())[0])
-    items_without_data = len(history) - items_with_data
-    total_records = sum(len(list(item.values())[0]) for item in history)
-    
-    logger.info(f"Summary: {items_with_data} items with data, {items_without_data} items without data")
-    logger.info(f"Total history records: {total_records}")
     
     return history
 

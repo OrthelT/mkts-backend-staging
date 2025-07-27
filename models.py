@@ -69,7 +69,7 @@ class MarketOrders(Base):
 
 class MarketHistory(Base):
     __tablename__ = "market_history"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     date: Mapped[DateTime] = mapped_column(DateTime)
     type_name: Mapped[str] = mapped_column(String(100))
     type_id: Mapped[str] = mapped_column(String(10))

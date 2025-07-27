@@ -91,13 +91,16 @@ def calculate_market_stats() -> pd.DataFrame:
     df.days_remaining = df.days_remaining.apply(lambda x: round(x, 1))
     df = df.rename(columns={"5_perc_price": "price"})
     df["last_update"] = pd.Timestamp.now(tz="UTC")
-    pd.set_option("display.max_columns", None)
+ 
     db_cols = MarketStats.__table__.columns.keys()
     df = df[db_cols]
-    df["avg_price"] = df["avg_price"].apply(lambda x: round(x, 2))
-    df["avg_volume"] = df["avg_volume"].apply(lambda x: round(x, 1))
+    
     df = df.infer_objects()
     df = df.fillna(0)
+    
+    df["avg_price"] = df["avg_price"].apply(lambda x: round(x, 2) if x > 0 else 0)
+    df["avg_volume"] = df["avg_volume"].apply(lambda x: round(x, 1)if x > 0 else 0)
+
     df["total_volume_remain"] = df["total_volume_remain"].astype(int)
     logger.info(f"Market stats calculated: {df.shape[0]} items")
     return df
@@ -146,8 +149,11 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     doctrine_stats = doctrine_stats.fillna(0)
     doctrine_stats["fits_on_mkt"] = doctrine_stats["fits_on_mkt"].astype(int)
     doctrine_stats["avg_vol"] = doctrine_stats["avg_vol"].astype(int)
+    doctrine_stats = doctrine_stats.reset_index(drop=True)
+    
     val_cols = Doctrines.__table__.columns.keys()
     col_compare = set(doctrine_stats.columns) - set(val_cols)
+
     return doctrine_stats
 
 
@@ -271,5 +277,4 @@ def get_deployment_watchlist() -> pd.DataFrame:
     return df
 
 if __name__ == "__main__":
-
     pass
