@@ -232,7 +232,7 @@ def process_system_orders(system_id: int) -> pd.DataFrame:
     nakah = 60014068
     nakah_df = df[df.location_id == nakah].reset_index(drop=True)
     nakah_df = nakah_df[["price","type_id","volume_remain"]]
-    nakah_df = nakah_df.groupby("type_id").agg({"price": "mean", "volume_remain": "sum"}).reset_index()
+    nakah_df = nakah_df.groupby("type_id").agg({"price": lambda x: x.quantile(0.05), "volume_remain": "sum"}).reset_index()
     nakah_ids = nakah_df["type_id"].unique().tolist()
     type_names = get_type_names(nakah_ids)
     nakah_df = nakah_df.merge(type_names, on="type_id", how="left")
