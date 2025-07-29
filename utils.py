@@ -6,7 +6,6 @@ import sqlalchemy as sa
 from sqlalchemy import text, create_engine
 from proj_config import sde_local_url, wcmkt_local_url, wc_fittings_local_db_url
 import requests
-
 logger = configure_logging(__name__)
 
 def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
@@ -122,7 +121,6 @@ def simulate_market_history() -> dict:
         ]
     ]
     return df.to_dict(orient="records")
-
 
 def get_status():
     engine = sa.create_engine(wcmkt_local_url)

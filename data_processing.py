@@ -1,5 +1,7 @@
 import pandas as pd
 import sqlalchemy as sa
+from sqlalchemy import create_engine, text, insert, select
+from sqlalchemy.orm import Session, query
 from logging_config import configure_logging
 from models import MarketStats, Doctrines, Watchlist, NakahWatchlist, RegionHistory, RegionOrders, RegionStats, DeploymentWatchlist
 import libsql
@@ -242,6 +244,7 @@ def calculate_region_stats() -> pd.DataFrame:
 
     logger.info(f"Calculating region 5 percentile price")
     df2 = calculate_region_5_percentile_price()
+
     logger.info(f"Merging 5 percentile price with region stats")
     df = df.merge(df2, on="type_id", how="left")
 
@@ -263,6 +266,7 @@ def calculate_region_stats() -> pd.DataFrame:
     
     logger.info(f"Region stats calculated: {df.shape[0]} items")
     return df
+
 def get_deployment_watchlist() -> pd.DataFrame:
     query = """
     SELECT
@@ -273,8 +277,108 @@ def get_deployment_watchlist() -> pd.DataFrame:
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
     engine.dispose()
-    print(df.head())
     return df
+
+def generate_deployment_watchlist(csv_file_path: str = "data/nakah_watchlist_updated.csv"):
+    df = pd.read_csv(csv_file_path)
+ 
+
+    engine = create_engine(wcmkt_local_url)
+
+
+    with engine.connect() as conn:
+        df.to_sql("deployment_watchlist", if_exists="replace", con=conn, index=False)
+        stmt = text("SELECT COUNT(*) FROM deployment_watchlist")
+        res = conn.execute(stmt)
+        data = res.fetchone()[0]
+        if data > 0:
+            logger.info(f"deployment watchlist updated with {data} items")
+        else:
+            logger.error("deployment_watchlist updated failed, no data present")
+
+def add_missing_items_to_watchlist():
+    missing = [21889, 21888, 21890, 47926, 2629, 16274, 17889, 17888, 17887, 41490, 32014, 16273]
+
+    engine = create_engine(sde_local_url)
+    with engine.connect() as conn:
+        # Use proper parameter binding for IN clause with SQLite
+        from sqlalchemy import bindparam
+        stmt = text("SELECT * FROM inv_info WHERE typeID IN :missing").bindparams(bindparam('missing', expanding=True))
+        res = conn.execute(stmt, {"missing": missing})
+        df = pd.DataFrame(res.fetchall())
+        df.columns = res.keys()
+        print(df.columns)
+
+    watchlist = get_watchlist()
+    inv_cols = ['typeID', 'typeName', 'groupID', 'groupName', 'categoryID',
+       'categoryName']
+    df = df[inv_cols]
+    watchlist_cols = ['type_id', 'type_name', 'group_id', 'group_name', 'category_id', 'category_name']
+    df = df.rename(columns=dict(zip(inv_cols, watchlist_cols)))
+    df.to_csv("data/watchlist_missing.csv", index=False)
+    watchlist = pd.concat([watchlist, df], ignore_index=True)
+    watchlist.to_csv("data/watchlist_updated.csv", index=False)
+    deploy_watchlist = get_deployment_watchlist()
+    deploy_watchlist = pd.concat([deploy_watchlist, df], ignore_index=True)
+    deploy_watchlist.to_csv("data/deployment_watchlist_updated.csv", index=False)
+
+def update_watchlist_tables():
+    """Update both watchlist and deployment_watchlist tables with missing items"""
+    missing = [21889, 21888, 21890, 47926, 2629, 16274, 17889, 17888, 17887, 41490, 32014, 16273]
+
+    # Get missing items from SDE
+    engine = create_engine(sde_local_url)
+    with engine.connect() as conn:
+        from sqlalchemy import bindparam
+        stmt = text("SELECT * FROM inv_info WHERE typeID IN :missing").bindparams(bindparam('missing', expanding=True))
+        res = conn.execute(stmt, {"missing": missing})
+        df = pd.DataFrame(res.fetchall())
+        df.columns = res.keys()
+    
+    # Prepare data for database insertion
+    inv_cols = ['typeID', 'typeName', 'groupID', 'groupName', 'categoryID', 'categoryName']
+    watchlist_cols = ['type_id', 'type_name', 'group_id', 'group_name', 'category_id', 'category_name']
+    df = df[inv_cols]
+    df = df.rename(columns=dict(zip(inv_cols, watchlist_cols)))
+    
+    # Update watchlist table
+    engine = create_engine(wcmkt_local_url)
+    with engine.connect() as conn:
+        # Insert into watchlist table
+        for _, row in df.iterrows():
+            stmt = insert(Watchlist).values(
+                type_id=row['type_id'],
+                type_name=row['type_name'],
+                group_id=row['group_id'],
+                group_name=row['group_name'],
+                category_id=row['category_id'],
+                category_name=row['category_name']
+            )
+            try:
+                conn.execute(stmt)
+                conn.commit()
+                logger.info(f"Added {row['type_name']} (ID: {row['type_id']}) to watchlist")
+            except Exception as e:
+                logger.warning(f"Item {row['type_id']} may already exist in watchlist: {e}")
+        
+        # Insert into deployment_watchlist table
+        for _, row in df.iterrows():
+            stmt = insert(DeploymentWatchlist).values(
+                type_id=row['type_id'],
+                type_name=row['type_name'],
+                group_id=row['group_id'],
+                group_name=row['group_name'],
+                category_id=row['category_id'],
+                category_name=row['category_name']
+            )
+            try:
+                conn.execute(stmt)
+                conn.commit()
+                logger.info(f"Added {row['type_name']} (ID: {row['type_id']}) to deployment_watchlist")
+            except Exception as e:
+                logger.warning(f"Item {row['type_id']} may already exist in deployment_watchlist: {e}")
+    
+    logger.info(f"Updated both watchlist and deployment_watchlist tables with {len(df)} missing items")
 
 if __name__ == "__main__":
     pass
