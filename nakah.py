@@ -229,8 +229,8 @@ def process_system_orders(system_id: int) -> pd.DataFrame:
     df = get_system_orders_from_db(system_id)
     df = df[df['is_buy_order'] == False]
     df2 = df.copy()
-    nakah = 60014068
-    nakah_df = df[df.location_id == nakah].reset_index(drop=True)
+    nakah_mkt = 60014068
+    nakah_df = df[df.location_id == nakah_mkt].reset_index(drop=True)
     nakah_df = nakah_df[["price","type_id","volume_remain"]]
     nakah_df = nakah_df.groupby("type_id").agg({"price": lambda x: x.quantile(0.05), "volume_remain": "sum"}).reset_index()
     nakah_ids = nakah_df["type_id"].unique().tolist()
