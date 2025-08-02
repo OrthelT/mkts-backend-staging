@@ -73,6 +73,12 @@ def update_google_sheet(data: pd.DataFrame, append_data: bool = False):
         
         # Convert DataFrame to list of lists for Google Sheets API
         # Only include data rows (no headers)
+        data = data.infer_objects()
+        data = data.fillna(0)
+        data = data.reset_index(drop=True)
+        logger.info(f"Data: {data.head()}")
+        logger.info(f"Nulls: {data.isna().sum()}")
+
         values = data.values.tolist()
         
         if append_data:
