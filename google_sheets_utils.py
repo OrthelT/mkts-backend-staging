@@ -71,14 +71,14 @@ def update_google_sheet(data: pd.DataFrame, append_data: bool = False):
             worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=20)
             logger.info(f"Created new worksheet: {sheet_name}")
         
-        # Convert DataFrame to list of lists for Google Sheets API
-        # Only include data rows (no headers)
+        # included this to fix the issue with Google Sheets being picky about null handling. 
         data = data.infer_objects()
         data = data.fillna(0)
         data = data.reset_index(drop=True)
         logger.info(f"Data: {data.head()}")
         logger.info(f"Nulls: {data.isna().sum()}")
-
+      
+       # Convert DataFrame to list of lists for Google Sheets API
         values = data.values.tolist()
         
         if append_data:
