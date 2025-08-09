@@ -1,0 +1,30 @@
+
+🚀 **WINTER COALITION MARKET REPORT** 🚀
+*Deployment Staging Market Analysis*
+
+📊 **MARKET OVERVIEW**
+• **Total Market Value**: 575.81 Billion ISK
+• **Unique Items Traded**: 194
+• **Ship Types Available**: 14
+
+⭐ **TOP PERFORMERS**
+• **Most Valuable Item**: Hurricane Fleet Issue
+• **Ships Market Value**: 322.24 Billion ISK
+• **Modules Market Value**: 196.30 Billion ISK
+
+🛸 **TOP 5 SHIPS BY VALUE**
+• **Hurricane Fleet Issue**: 106.2B ISK (609 units)
+• **Nightmare**: 48.7B ISK (39 units)
+• **Cyclone Fleet Issue**: 46.3B ISK (290 units)
+• **Scimitar**: 32.6B ISK (159 units)
+• **Claymore**: 21.6B ISK (54 units)
+
+📈 **MARKET INSIGHTS**
+• Hurricane Fleet Issues dominate ship trading
+• Strong logistics ship market (Scimitars, Guardians)
+• Healthy doctrine ship availability
+• Active module and rig markets supporting fleet ops
+
+*Data covers period from July 5, 2025 onwards*
+*Generated: 2025-08-08 02:13 UTC*
+    
