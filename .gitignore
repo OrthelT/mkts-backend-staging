@@ -24,3 +24,5 @@ model.db
 esi_utilities.py
 scratch.py
 .cursor/
+backup
+backup/
