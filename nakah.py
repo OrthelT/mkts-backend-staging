@@ -3,8 +3,7 @@ import os
 import json
 import time
 from sqlalchemy import create_engine, select, text
-from sqlalchemy.orm import sessionmaker, Session
-from proj_config import wcmkt_local_url, wcmkt_db_path, deployment_sys_id, deployment_reg_id, user_agent, wc_fittings_local_db_url,sde_local_url
+from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from logging_config import configure_logging
 from models import RegionOrders, Base
@@ -15,6 +14,9 @@ from dbhandler import add_region_history, get_watchlist_ids, get_nakah_watchlist
 from millify import millify
 from models import RegionHistory
 import libsql
+from proj_config import deployment_sys_id
+from config import DatabaseConfig
+from jita import get_jita_prices_df
 
 def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
     """
@@ -32,10 +34,10 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
     logger.info(f"Getting orders for region {region_id} with order type {order_type}")
     status_codes = {}
     begin_time = time.time()
-    
+
     while page <= max_pages:
         status_code = None
-        
+
         headers = {
             'User-Agent': 'wcmkts_backend/1.0, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)',
             'Accept': 'application/json',
@@ -80,19 +82,19 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
             time.sleep(1)
             continue
 
-        
+
         # Only process response if we have a valid status code
         if status_code == 200:
             error_remain = response.headers.get('X-Error-Limit-Remain')
             if error_remain == '0':
                 logger.critical(f"Too many errors: {error_count}")
                 raise Exception(f"Too many errors: {error_count}")
-        
+
             if response.headers.get('X-Pages'):
                 max_pages = int(response.headers.get('X-Pages'))
             else:
                 max_pages = 1
-            
+
             order_page = response.json()
         else:
             # Skip processing this page due to error
@@ -112,7 +114,7 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
     logger.info("--------------------------------\n\n")
     return orders
 
-def get_region_orders_from_db(region_id: int) -> pd.DataFrame:
+def get_region_orders_from_db(region_id: int, system_id: int, db: DatabaseConfig) -> pd.DataFrame:
     """
     Get all orders for a given region and order type
     Args:
@@ -121,9 +123,9 @@ def get_region_orders_from_db(region_id: int) -> pd.DataFrame:
     Returns:
         pandas DataFrame
     """
-    stmt = select(RegionOrders)
+    stmt = select(RegionOrders).where(RegionOrders.system_id == system_id)
 
-    engine = create_engine(wcmkt_local_url)
+    engine = db.engine
     session = Session(bind=engine)
     result = session.scalars(stmt)
     orders_data = []
@@ -142,7 +144,7 @@ def get_region_orders_from_db(region_id: int) -> pd.DataFrame:
             'volume_remain': order.volume_remain,
             'volume_total': order.volume_total
         })
-    
+
     session.close()
     return pd.DataFrame(orders_data)
 
@@ -152,13 +154,13 @@ def update_region_orders(region_id: int, order_type: str = 'sell') -> pd.DataFra
     Args:
         region_id: int
         order_type: str (sell, buy, all)
-    Returns:    
+    Returns:
         pandas DataFrame
     """
     orders = fetch_region_orders(region_id, order_type)
-    engine = create_engine(wcmkt_local_url)
+    engine = DatabaseConfig("wcmkt2").engine
     session = Session(bind=engine)
-    
+
     # Clear existing orders
     session.query(RegionOrders).delete()
     session.commit()
@@ -166,7 +168,7 @@ def update_region_orders(region_id: int, order_type: str = 'sell') -> pd.DataFra
     session.close()
     time.sleep(1)
     session = Session(bind=engine)  # Create a fresh session
-    
+
     # Convert API response dicts to RegionOrders model instances
     for order_data in orders:
         # Convert the API response to match our model fields
@@ -185,10 +187,10 @@ def update_region_orders(region_id: int, order_type: str = 'sell') -> pd.DataFra
             volume_total=order_data['volume_total']
         )
         session.add(region_order)
-    
+
     session.commit()
     session.close()
-    
+
     return pd.DataFrame(orders)
 
 def get_system_orders_from_db(system_id: int) -> pd.DataFrame:
@@ -197,13 +199,13 @@ def get_system_orders_from_db(system_id: int) -> pd.DataFrame:
     Args:
         system_id: int
     Returns:
-        pandas DataFrame    
+        pandas DataFrame
     """
     stmt = select(RegionOrders).where(RegionOrders.system_id == system_id)
-    engine = create_engine(wcmkt_local_url)
+    engine = DatabaseConfig("wcmkt2").engine
     session = Session(bind=engine)
     result = session.scalars(stmt)
-    
+
     # Convert SQLAlchemy objects to dictionaries for DataFrame
     orders_data = []
     for order in result:
@@ -221,7 +223,7 @@ def get_system_orders_from_db(system_id: int) -> pd.DataFrame:
             'volume_remain': order.volume_remain,
             'volume_total': order.volume_total
         })
-    
+
     session.close()
     return pd.DataFrame(orders_data)
 
@@ -245,22 +247,22 @@ def process_system_orders(system_id: int) -> pd.DataFrame:
 def calculate_total_market_value(market_data: pd.DataFrame) -> float:
     """
     Calculate the total market value from process_system_orders output
-    
+
     Args:
         market_data: DataFrame from process_system_orders containing price and volume_remain columns
-        
+
     Returns:
         Total market value as float
     """
     if market_data is None or market_data.empty:
         logger.warning("No market data provided for value calculation")
         return 0.0
-    
+
     # Filter out Blueprint and Skill categories
     filtered_data = market_data[
         (~market_data['category_name'].isin(['Blueprint', 'Skill']))
     ].copy()
-    
+
     if filtered_data.empty:
         logger.warning("No market data after filtering out Blueprint and Skill categories")
         print("No market data after filtering out Blueprint and Skill categories")
@@ -277,10 +279,10 @@ def calculate_total_market_value(market_data: pd.DataFrame) -> float:
 def get_system_market_value(system_id: int) -> float:
     """
     Convenience function to get total market value for a system
-    
+
     Args:
         system_id: System ID to calculate market value for
-        
+
     Returns:
         Total market value as float
     """
@@ -291,10 +293,10 @@ def get_system_market_value(system_id: int) -> float:
 def calculate_total_ship_count(market_data: pd.DataFrame) -> int:
     """
     Calculate the total number of ships on the market
-    
+
     Args:
         market_data: DataFrame from process_system_orders containing category_name and volume_remain columns
-        
+
     Returns:
         Total ship count as int
     """
@@ -302,11 +304,11 @@ def calculate_total_ship_count(market_data: pd.DataFrame) -> int:
         logger.warning("No market data provided for ship count calculation")
         print("No market data provided for ship count calculation")
         return 0
-    
+
     # Filter for ships only and sum volume_remain
     ships_data = market_data[market_data['category_name'] == 'Ship']
     total_ship_count = ships_data['volume_remain'].sum()
-    
+
     logger.info(f"Total ships on market: {total_ship_count:,}")
     print(f"Total ships on market: {total_ship_count:,}")
     return int(total_ship_count)
@@ -315,10 +317,10 @@ def calculate_total_ship_count(market_data: pd.DataFrame) -> int:
 def get_system_ship_count(system_id: int) -> int:
     """
     Convenience function to get total ship count for a system
-    
+
     Args:
         system_id: System ID to calculate ship count for
-        
+
     Returns:
         Total ship count as int
     """
@@ -340,13 +342,13 @@ def fetch_region_item_history(region_id: int, type_id: int) -> list[dict]:
 
     try:
         response = requests.get(url, headers=headers, params=querystring, timeout=10)
-        
+
         if response.status_code == 200:
             return response.json()
         else:
             print(f"    HTTP {response.status_code} for type_id {type_id}")
             return []
-            
+
     except requests.exceptions.Timeout:
         print(f"    Timeout for type_id {type_id}")
         return []
@@ -360,39 +362,39 @@ def fetch_region_item_history(region_id: int, type_id: int) -> list[dict]:
 def fetch_region_history(region_id: int, type_ids: list[int])->list[dict]:
     history = []
     total_items = len(type_ids)
-    
+
     logger.info(f"Starting fetch_region_history for {total_items} items in region {region_id}")
     logger.info("=" * 60)
-    
+
     for i, type_id in enumerate(type_ids, 1):
         print(f"Processing item {i}/{total_items} (type_id: {type_id})", end="", flush=True)
-        
+
         try:
             start_time = time.time()
             item_history = fetch_region_item_history(region_id, type_id)
             print(item_history)
             quit()
             elapsed_time = time.time() - start_time
-            
+
             if item_history and len(item_history) > 0:
                 print(f" ✓ {len(item_history)} records in {elapsed_time:.2f}s")
             else:
                 print(f" ⚠ No data in {elapsed_time:.2f}s")
-            
+
             history.append(item_history)
-            
+
         except Exception as e:
             print(f" ❌ Error: {e}")
             # Still add the item to history with empty data
             history.append([])
-    
+
     logger.info("=" * 60)
     logger.info(f"Completed fetch_region_history: {len(history)} items processed")
-    
+
     return history
 
 def get_region_history(type_ids: list[int])->list[dict]:
-    engine = create_engine(wcmkt_local_url)
+    engine = DatabaseConfig("wcmkt2").engine
     print("engine created")
     session = Session(bind=engine)
     print("session created")
@@ -416,6 +418,36 @@ def get_region_history(type_ids: list[int])->list[dict]:
     session.close()
     return history
 
+def get_system_orders(system_id: int, db: DatabaseConfig) -> pd.DataFrame:
+    engine = db.engine
+    session = Session(bind=engine)
+    stmt = select(RegionOrders).where(RegionOrders.system_id == system_id)
+    result = session.execute(stmt)
+    return result.all()
+
+def get_orders_stats(system_id: int) -> pd.DataFrame:
+    od = []
+    orders = get_system_orders(system_id, DatabaseConfig("wcmkt2"))
+    for o in orders:
+        row = o._asdict()
+        item = row["RegionOrders"]
+        data = {'order_id': item.order_id, 'volume_remain': item.volume_remain, 'price': item.price, 'type_id': item.type_id, 'system_id': item.system_id, 'buy_order': item.is_buy_order, 'duration': item.duration, 'issued': item.issued, 'location_id': item.location_id}
+        od.append(data)
+    df = pd.DataFrame(od)
+
+    df2 = df[df['buy_order'] == False]
+    df2 = df2.groupby('type_id').agg({'volume_remain': 'sum', 'price': 'mean'}).reset_index()
+    types_df = get_type_names(df2['type_id'].tolist())
+    df3 = df2.merge(types_df, on='type_id', how='left')
+    jita_prices_df = get_jita_prices_df(df3['type_id'].tolist())
+    df3 = df3.merge(jita_prices_df, on='type_id', how='left')
+
+
+    return df3
+
 
 if __name__ == "__main__":
-    pass
+    df = get_orders_stats(deployment_sys_id)
+    print(df)
+
+    df.to_csv("orders_stats.csv", index=False)

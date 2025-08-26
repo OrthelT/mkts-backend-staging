@@ -130,19 +130,19 @@ def insert_type_data(data: list[dict]):
 
 def update_remote_database(table: Base, df: pd.DataFrame):
     data = df.to_dict(orient="records")
-    
+
     # Calculate optimal chunk size based on SQLite memory limits
     # SQLite has ~256KB limit for prepared statements
     # Each parameter takes 8 bytes
     MAX_PARAMETER_BYTES = 256 * 1024  # 256 KB
     BYTES_PER_PARAMETER = 8
     MAX_PARAMETERS = MAX_PARAMETER_BYTES // BYTES_PER_PARAMETER  # 32,768
-    
+
     column_count = len(df.columns)
     chunk_size = min(2000, MAX_PARAMETERS // column_count)
-    
+
     print(f"Table {table.__tablename__} has {column_count} columns, using chunk size {chunk_size}")
-    
+
     remote_engine = get_wcmkt_remote_engine()
     session = Session(bind=remote_engine)
 
@@ -328,7 +328,7 @@ def get_remote_status():
     print("-" * 20)
     print(status_dict)
     return status_dict
-    
+
 def get_watchlist_ids():
     stmt = text("SELECT DISTINCT type_id FROM watchlist")
     engine = create_engine(wcmkt_local_url)
@@ -359,7 +359,7 @@ def get_fit_ids(doctrine_id: int):
 def add_doctrine_type_info_to_watchlist(doctrine_id: int):
     watchlist_ids = get_watchlist_ids()
     fit_ids = get_fit_ids(doctrine_id)
-    
+
     missing_fit_items = []
 
     for fit_id in fit_ids:
@@ -421,32 +421,32 @@ def get_region_history()-> pd.DataFrame:
 def get_region_deployment_history(deployment_date: datetime) -> pd.DataFrame:
     """
     Get region history data after a specified deployment date.
-    
+
     Args:
         deployment_date: datetime object representing the deployment date
-        
+
     Returns:
         pandas DataFrame containing region history records after the deployment date
     """
     df = get_region_history()
-    
+
     if df.empty:
         print("No region history data found")
         return df
-    
+
     # Convert the date column to datetime if it's not already
     if 'date' in df.columns:
         df['date'] = pd.to_datetime(df['date'])
-        
+
         # Filter records after the deployment date
         filtered_df = df[df['date'] >= deployment_date].copy()
-        
+
         # Sort by date for better readability
         filtered_df = filtered_df.sort_values('date')
-        
+
         print(f"Found {len(filtered_df)} records after {deployment_date.strftime('%Y-%m-%d')}")
         print(f"Date range: {filtered_df['date'].min()} to {filtered_df['date'].max()}")
-        
+
         return filtered_df
     else:
         print("No 'date' column found in region history data")
@@ -454,4 +454,6 @@ def get_region_deployment_history(deployment_date: datetime) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    pass
+    df = get_region_deployment_history(datetime(2025, 7,5))
+    print(df.head(10))
+    print(df.columns)

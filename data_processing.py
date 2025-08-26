@@ -56,7 +56,7 @@ def calculate_market_stats() -> pd.DataFrame:
 
     LEFT JOIN (
     SELECT
-        type_id, 
+        type_id,
         MIN(price) as min_price,
         SUM(volume_remain) as total_volume_remain
     FROM marketorders
@@ -93,13 +93,13 @@ def calculate_market_stats() -> pd.DataFrame:
     df.days_remaining = df.days_remaining.apply(lambda x: round(x, 1))
     df = df.rename(columns={"5_perc_price": "price"})
     df["last_update"] = pd.Timestamp.now(tz="UTC")
- 
+
     db_cols = MarketStats.__table__.columns.keys()
     df = df[db_cols]
-    
+
     df = df.infer_objects()
     df = df.fillna(0)
-    
+
     df["avg_price"] = df["avg_price"].apply(lambda x: round(x, 2) if x > 0 else 0)
     df["avg_volume"] = df["avg_volume"].apply(lambda x: round(x, 1)if x > 0 else 0)
 
@@ -152,7 +152,7 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     doctrine_stats["fits_on_mkt"] = doctrine_stats["fits_on_mkt"].astype(int)
     doctrine_stats["avg_vol"] = doctrine_stats["avg_vol"].astype(int)
     doctrine_stats = doctrine_stats.reset_index(drop=True)
-    
+
     val_cols = Doctrines.__table__.columns.keys()
     col_compare = set(doctrine_stats.columns) - set(val_cols)
 
@@ -174,11 +174,11 @@ def calculate_region_5_percentile_price() -> pd.DataFrame:
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
     engine.dispose()
-    
+
     if df.empty:
         logger.warning("No region orders found for 5th percentile calculation")
         return pd.DataFrame(columns=["type_id", "5_perc_price"])
-    
+
     df = df.groupby("type_id")["price"].quantile(0.05).reset_index()
     df.price = df.price.apply(lambda x: round(x, 2))
     df.columns = ["type_id", "5_perc_price"]
@@ -211,7 +211,7 @@ def calculate_region_stats() -> pd.DataFrame:
 
     LEFT JOIN (
     SELECT
-        type_id, 
+        type_id,
         MIN(price) as min_price,
         SUM(volume_remain) as total_volume_remain
     FROM region_orders
@@ -252,18 +252,18 @@ def calculate_region_stats() -> pd.DataFrame:
     df.days_remaining = df.days_remaining.apply(lambda x: round(x, 1))
     df = df.rename(columns={"5_perc_price": "price"})
     df["last_update"] = pd.Timestamp.now(tz="UTC")
-    
+
     # Get columns from RegionStats model
     from models import RegionStats
     db_cols = RegionStats.__table__.columns.keys()
     df = df[db_cols]
-    
+
     df["avg_price"] = df["avg_price"].apply(lambda x: round(x, 2))
     df["avg_volume"] = df["avg_volume"].apply(lambda x: round(x, 1))
     df = df.infer_objects()
     df = df.fillna(0)
     df["total_volume_remain"] = df["total_volume_remain"].astype(int)
-    
+
     logger.info(f"Region stats calculated: {df.shape[0]} items")
     return df
 
@@ -281,7 +281,7 @@ def get_deployment_watchlist() -> pd.DataFrame:
 
 def generate_deployment_watchlist(csv_file_path: str = "data/nakah_watchlist_updated.csv"):
     df = pd.read_csv(csv_file_path)
- 
+
 
     engine = create_engine(wcmkt_local_url)
 
@@ -334,13 +334,13 @@ def update_watchlist_tables():
         res = conn.execute(stmt, {"missing": missing})
         df = pd.DataFrame(res.fetchall())
         df.columns = res.keys()
-    
+
     # Prepare data for database insertion
     inv_cols = ['typeID', 'typeName', 'groupID', 'groupName', 'categoryID', 'categoryName']
     watchlist_cols = ['type_id', 'type_name', 'group_id', 'group_name', 'category_id', 'category_name']
     df = df[inv_cols]
     df = df.rename(columns=dict(zip(inv_cols, watchlist_cols)))
-    
+
     # Update watchlist table
     engine = create_engine(wcmkt_local_url)
     with engine.connect() as conn:
@@ -360,7 +360,7 @@ def update_watchlist_tables():
                 logger.info(f"Added {row['type_name']} (ID: {row['type_id']}) to watchlist")
             except Exception as e:
                 logger.warning(f"Item {row['type_id']} may already exist in watchlist: {e}")
-        
+
         # Insert into deployment_watchlist table
         for _, row in df.iterrows():
             stmt = insert(DeploymentWatchlist).values(
@@ -377,7 +377,7 @@ def update_watchlist_tables():
                 logger.info(f"Added {row['type_name']} (ID: {row['type_id']}) to deployment_watchlist")
             except Exception as e:
                 logger.warning(f"Item {row['type_id']} may already exist in deployment_watchlist: {e}")
-    
+
     logger.info(f"Updated both watchlist and deployment_watchlist tables with {len(df)} missing items")
 
 if __name__ == "__main__":

@@ -7,16 +7,17 @@ from sqlalchemy import text, create_engine
 from proj_config import sde_local_url, wcmkt_local_url, wc_fittings_local_db_url
 import requests
 logger = configure_logging(__name__)
+from jita import get_jita_prices
 
 def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
     engine = sa.create_engine(sde_local_url)
     with engine.connect() as conn:
-        stmt = text("SELECT typeID, typeName, groupName, categoryName FROM inv_info")
+        stmt = text("SELECT typeID, typeName, groupName, categoryName, categoryID FROM inv_info")
         res = conn.execute(stmt)
-        df = pd.DataFrame(res.fetchall(), columns=["typeID", "typeName", "groupName", "categoryName"])
-        df = df.rename(columns={"typeID": "type_id", "typeName": "type_name", "groupName": "group_name", "categoryName": "category_name"})
+        df = pd.DataFrame(res.fetchall(), columns=["typeID", "typeName", "groupName", "categoryName", "categoryID"])
+        df = df.rename(columns={"typeID": "type_id", "typeName": "type_name", "groupName": "group_name", "categoryName": "category_name", "categoryID": "category_id"})
     engine.dispose()
-    return df[["type_id", "type_name", "group_name", "category_name"]] 
+    return df[["type_id", "type_name", "group_name", "category_name", "category_id"]]
 
 def get_type_name(type_id: int) -> str:
     engine = sa.create_engine(sde_local_url)
@@ -64,7 +65,7 @@ def get_type_names_from_esi(df: pd.DataFrame) -> pd.DataFrame:
     else:
         logger.error("No names found for any chunks")
         return None
-    
+
 def get_null_count(df):
     return df.isnull().sum()
 
@@ -155,15 +156,15 @@ def get_fit_items(fit_id: int) -> pd.DataFrame:
             raptor_fit.append({"type_id": type_id, "fit_qty": fit_qty})
         conn.close
     engine.dispose
-    
+
     for row in raptor_fit:
         type_id = row["type_id"]
         type_name = get_type_name(type_id)
         row["type_name"] = type_name
-    
+
     df = pd.DataFrame(raptor_fit)
     return df
 
+
 if __name__ == "__main__":
     pass
-

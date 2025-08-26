@@ -1,113 +1,113 @@
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                    WINTER COALITION MARKET INTELLIGENCE REPORT              ║
-║                              2025-08-08 02:07 UTC                              ║
+║                              2025-08-23 20:06 UTC                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 🎯 DOCTRINE READINESS ASSESSMENT
 ================================================================================
 
 🟢 HURRICANE FLEET DOCTRINE
-   Fleet Capacity: 4 full fleets
+   Fleet Capacity: 3 full fleets
    Status: READY
-   ✅ Hurricane Fleet Issue: 162/40 (need 40)
-   ✅ Scimitar: 45/8 (need 8)
-   ✅ Claymore: 17/2 (need 2)
+   ✅ Hurricane Fleet Issue: 131/40 (need 40)
+   ✅ Scimitar: 43/8 (need 8)
+   ✅ Claymore: 15/2 (need 2)
 
 🔴 NIGHTMARE DOCTRINE
    Fleet Capacity: 0 full fleets
    Status: NOT_READY
    ❌ Nightmare: 0/35 (need 35)
-   ⚠️ Guardian: 11/8 (need 8)
+   ⚠️ Guardian: 8/8 (need 8)
    ❌ Damnation: 0/2 (need 2)
 
 🔴 ASSAULT FRIGATE DOCTRINE
    Fleet Capacity: 0 full fleets
    Status: NOT_READY
    ❌ Retribution: 9/30 (need 30)
-   ✅ Scimitar: 45/6 (need 6)
+   ✅ Scimitar: 43/6 (need 6)
 
 
 📈 MARKET EFFICIENCY ANALYSIS
 ================================================================================
 
-Average Market Volatility: 38.6%
+Average Market Volatility: 48.3%
 
 🔥 HIGH VOLATILITY OPPORTUNITIES (>20% price swings):
-   • Nanofiber Internal Structure II: 313.5% volatility
-     Price Range: 460,000 - 3,998,000 ISK
-   • X5 Enduring Stasis Webifier: 270.8% volatility
-     Price Range: 3,335 - 52,387 ISK
-   • Standard S: 214.2% volatility
-     Price Range: 1 - 7,900 ISK
-   • Targeting Range Script: 195.7% volatility
-     Price Range: 25,000 - 119,114 ISK
-   • Mjolnir Fury Heavy Missile: 166.0% volatility
-     Price Range: 15 - 798 ISK
-   • Scan Resolution Script: 162.6% volatility
-     Price Range: 23,214 - 95,688 ISK
-   • Caldari Navy Scourge Light Missile: 154.1% volatility
-     Price Range: 6 - 1,369 ISK
-   • Compact EM Shield Amplifier: 146.2% volatility
-     Price Range: 17,500 - 112,500 ISK
-   • Large Inductive Compact Remote Capacitor Transmitter: 140.5% volatility
-     Price Range: 8,516 - 197,167 ISK
-   • Multispectrum Coating II: 138.2% volatility
-     Price Range: 420 - 499,800 ISK
+   • Standard S: 456.4% volatility
+     Price Range: 1 - 44,694 ISK
+   • Multispectrum Energized Membrane II: 215.4% volatility
+     Price Range: 50,630 - 1,115,000 ISK
+   • Targeting Range Script: 199.7% volatility
+     Price Range: 27,000 - 134,700 ISK
+   • Stasis Webifier II: 170.2% volatility
+     Price Range: 302,300 - 3,169,000 ISK
+   • Small Gremlin Compact Energy Neutralizer: 165.6% volatility
+     Price Range: 113 - 28,850 ISK
+   • Kinetic Shield Hardener II: 156.2% volatility
+     Price Range: 500,200 - 2,390,000 ISK
+   • Drone Link Augmentor I: 153.2% volatility
+     Price Range: 18,630 - 654,321 ISK
+   • Navy Cap Booster 800: 152.9% volatility
+     Price Range: 42,890 - 280,000 ISK
+   • Tracking Speed Script: 152.0% volatility
+     Price Range: 27,000 - 130,700 ISK
+   • Caldari Navy Mjolnir Rocket: 149.1% volatility
+     Price Range: 4 - 875 ISK
 
 
 🛡️ STABLE MARKETS (<5% volatility):
-   • Gatling Pulse Laser I: 3.6% volatility
-   • Spike M: 3.5% volatility
-   • Medium Infectious Scoped Energy Neutralizer: 2.8% volatility
-   • Sabre: 2.5% volatility
-   • Cyclone Fleet Issue: 2.2% volatility
+   • Synth Drop Booster: 4.2% volatility
+   • Small Core Defense Field Extender II: 4.1% volatility
+   • Missile Range Disruption Script: 3.2% volatility
+   • Target Painter II: 2.9% volatility
+   • Large Ancillary Remote Shield Booster: 1.7% volatility
 
 
 ⚠️ SUPPLY CHAIN RISK ANALYSIS
 ================================================================================
 
-Average Supply Change: -35.7%
+Average Supply Change: 123.6%
 
 🚨 CRITICAL SUPPLY SHORTAGES (>30% decline):
-   • Occult S: -94.3% supply decline
-     Category: Charge | Group: Advanced Exotic Plasma Charge
-   • Heat Sink II: -87.9% supply decline
-     Category: Module | Group: Heat Sink
-   • Heavy Missile Launcher II: -86.6% supply decline
-     Category: Module | Group: Missile Launcher Heavy
-   • Federation Navy 100MN Afterburner: -84.8% supply decline
-     Category: Module | Group: Propulsion Module
-   • Navy Cap Booster 400: -84.4% supply decline
+   • Electronic Superiority Charge: -99.5% supply decline
+     Category: Charge | Group: Information Command Burst Charges
+   • Sensor Optimization Charge: -99.4% supply decline
+     Category: Charge | Group: Information Command Burst Charges
+   • Targeting Range Script: -95.8% supply decline
+     Category: Charge | Group: Sensor Booster Script
+   • Scan Resolution Script: -94.6% supply decline
+     Category: Charge | Group: Sensor Booster Script
+   • Navy Cap Booster 800: -93.2% supply decline
      Category: Charge | Group: Capacitor Booster Charge
-   • Tracking Speed Disruption Script: -83.0% supply decline
-     Category: Charge | Group: Tracking Disruption Script
-   • Republic Fleet EMP S: -80.9% supply decline
-     Category: Charge | Group: Projectile Ammo
-   • Kinetic Shield Hardener II: -80.4% supply decline
-     Category: Module | Group: Shield Hardener
-   • Mystic S: -78.5% supply decline
-     Category: Charge | Group: Advanced Exotic Plasma Charge
-   • Small EM Shield Reinforcer II: -76.1% supply decline
-     Category: Module | Group: Rig Shield
-   • Inferno Fury Heavy Missile: -75.8% supply decline
-     Category: Charge | Group: Advanced Heavy Missile
-   • Large Compact Pb-Acid Cap Battery: -74.2% supply decline
-     Category: Module | Group: Capacitor Battery
-   • Dark Blood Stasis Webifier: -73.3% supply decline
-     Category: Module | Group: Stasis Web
-   • Caldari Navy Mjolnir Rocket: -73.3% supply decline
-     Category: Charge | Group: Rocket
-   • Light Entropic Disintegrator II: -72.1% supply decline
-     Category: Module | Group: Precursor Weapon
+   • Active Shielding Charge: -92.5% supply decline
+     Category: Charge | Group: Shield Command Burst Charges
+   • Republic Fleet Large Shield Extender: -91.2% supply decline
+     Category: Module | Group: Shield Extender
+   • Barrage S: -84.1% supply decline
+     Category: Charge | Group: Advanced Autocannon Ammo
+   • Hail S: -79.8% supply decline
+     Category: Charge | Group: Advanced Autocannon Ammo
+   • Stasis Webification Probe: -75.0% supply decline
+     Category: Charge | Group: Interdiction Burst Probes
+   • Javelin M: -72.7% supply decline
+     Category: Charge | Group: Advanced Railgun Charge
+   • Tracking Computer II: -66.7% supply decline
+     Category: Module | Group: Tracking Computer
+   • Heat Sink II: -66.7% supply decline
+     Category: Module | Group: Heat Sink
+   • Skirmish Command Burst II: -66.7% supply decline
+     Category: Module | Group: Command Burst
+   • 125mm Gatling AutoCannon II: -63.9% supply decline
+     Category: Module | Group: Projectile Weapon
 
 
 📊 SUPPLY INCREASES (>50% growth):
-   • Micro Auxiliary Power Core II: 66.2% supply increase
-   • Gatling Pulse Laser I: 72.2% supply increase
-   • Small Trimark Armor Pump II: 100.0% supply increase
-   • Barrage S: 159.6% supply increase
-   • Targeting Range Script: 190.0% supply increase
+   • Prototype Cloaking Device I: 51.7% supply increase
+   • Nanite Repair Paste: 60.7% supply increase
+   • Gyrostabilizer II: 65.8% supply increase
+   • Small Core Defense Field Extender II: 66.7% supply increase
+   • Damage Control II: 76.3% supply increase
 
 
 🎯 STRATEGIC RECOMMENDATIONS
@@ -128,5 +128,5 @@ LONG TERM:
 • Develop alternative doctrines using more readily available ships
 • Implement automated market monitoring for early warning signals
 
-Report generated: 2025-08-08 02:07 UTC
+Report generated: 2025-08-23 20:06 UTC
 Data source: Regional market history from July 5, 2025 onwards

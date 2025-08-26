@@ -7,8 +7,7 @@ import pandas as pd
 
 import libsql
 from dotenv import load_dotenv
-from mkt_models import *
-from sde_models import *
+
 import sqlite3 as sql
 from ESI_OAUTH_FLOW import get_token
 import requests
@@ -22,7 +21,7 @@ logger = configure_logging(__name__)
 class DatabaseConfig:
     _db_paths = {
         "wcmkt3": "wcmkt3.db", #testing database
-        "sde": "sdeinfo.db",
+        "sde": "sde_info.db",
         "fittings": "wcfitting.db",
         "wcmkt2": "wcmkt2.db",
     }
@@ -62,7 +61,7 @@ class DatabaseConfig:
         if self._engine is None:
             self._engine = create_engine(self.url)
         return self._engine
-    
+
     @property
     def remote_engine(self):
         if self._remote_engine is None:
@@ -76,26 +75,26 @@ class DatabaseConfig:
         if self._libsql_connect is None:
             self._libsql_connect = libsql.connect(self.path)
         return self._libsql_connect
-    
+
     @property
     def libsql_sync_connect(self):
         if self._libsql_sync_connect is None:
             self._libsql_sync_connect = libsql.connect(f"{self.path}", sync_url = self.turso_url, auth_token=self.token)
         return self._libsql_sync_connect
-    
+
     @property
     def sqlite_local_connect(self):
         if self._sqlite_local_connect is None:
             self._sqlite_local_connect = sql.connect(self.path)
         return self._sqlite_local_connect
-    
+
     def sync(self):
-        connection = self.libsql_sync_connect
+
         logger.info("connection established")
-        with connection as conn:
-            logger.info("Syncing database...")
-            result = conn.sync()
-            logger.info(f"sync result: {result}")
+        conn = self.libsql_sync_connect
+        logger.info("Syncing database...")
+        result = conn.sync()
+        logger.info(f"sync result: {result}")
         conn.close()
         if self.validate_sync():
             logger.info("Sync complete")
@@ -104,8 +103,8 @@ class DatabaseConfig:
             logger.error("Validation test failed.")
             sync_state = "failed"
         return sync_state
-            
-    
+
+
     def validate_sync(self)-> bool:
         alias = self.alias
         with self.remote_engine.connect() as conn:
@@ -119,7 +118,7 @@ class DatabaseConfig:
         validation_test = remote_last_update == local_last_update
         logger.info(f"validation_test: {validation_test}")
         return validation_test
-        
+
 
     def get_table_list(self, local_only: bool = True)-> list[tuple]:
         if local_only:
@@ -142,11 +141,11 @@ class DatabaseConfig:
     def get_table_columns(self, table_name: str, local_only: bool = True, full_info: bool = False) -> list[dict]:
         """
         Get column information for a specific table.
-        
+
         Args:
             table_name: Name of the table to inspect
             local_only: If True, use local database; if False, use remote database
-            
+
         Returns:
             List of dictionaries containing column information
         """
@@ -154,7 +153,7 @@ class DatabaseConfig:
             engine = self.engine
         else:
             engine = self.remote_engine
-            
+
         with engine.connect() as conn:
             # Use string formatting for PRAGMA since it doesn't support parameterized queries well
             stmt = text(f"PRAGMA table_info({table_name})")
@@ -173,8 +172,8 @@ class DatabaseConfig:
                 })
             else:
                 column_info = [col.name for col in columns]
-            
-            
+
+
             return column_info
 
 class GoogleSheetConfig:
@@ -189,11 +188,11 @@ class ESIConfig:
     Secondary market: Nakah I - Moon 1 - Thukker Mix Factory (NPC structure)
 
     Note:
-    The primary market must be a player-owned citadel market. The secondary market must be an NPC structure. 
+    The primary market must be a player-owned citadel market. The secondary market must be an NPC structure.
     Citadels and NPC structure markets use different endpoints in the ESI, and have different headers and authentication requirements.
     A valid esi token is required for the primary market. The secondary market does not require a token.
 
-    A typical configuration might be to set the primary market as your nullsec staging citadel and the secondary market as Jita 4-4. 
+    A typical configuration might be to set the primary market as your nullsec staging citadel and the secondary market as Jita 4-4.
 
     Configure the variables below as needed. You can optionally define a shortcut alias for the primary or secondary market. if it helps you remember the alias. Set names to match your aliases, this is primarily used for logging.
     """
@@ -213,7 +212,7 @@ class ESIConfig:
         elif alias in self._shortcut_aliases:
             self.alias = self._shortcut_aliases[alias]
         else:
-            self.alias = alias 
+            self.alias = alias
         self.name = self._names[self.alias]
         self.region_id = self._region_ids[f"{self.alias}_region_id"]
         self.system_id = self._system_ids[f"{self.alias}_system_id"]
@@ -262,7 +261,7 @@ class ESIConfig:
     def market_orders(self, page: int = 1, order_type: str = "all", etag: str = None)-> requests.Response:
         """
         order_type: str = "all" | "buy" | "sell" (default is "all", only used for secondary market)
-        page: int = 1 is the default page number. This can be used to fetch a single page of orders, or as an argument dynamically updated in a loop. 
+        page: int = 1 is the default page number. This can be used to fetch a single page of orders, or as an argument dynamically updated in a loop.
         etag: str = None is the etag of the last response for the requested page. This is used to optionally check for changes in the market orders. The esi will return a 304 if the etag is the same as the last response.
 
         Returns:
@@ -270,14 +269,14 @@ class ESIConfig:
         Raises:
             ValueError: If the alias is invalid
         """
-        
+
         if self.alias == "primary":
-            querystring = {"page": page}     
+            querystring = {"page": page}
         elif self.alias == "secondary":
             querystring = {"page": page, "order_type": order_type}
         else:
             raise ValueError(f"Invalid alias: {self.alias}. Valid aliases are: {self._valid_aliases}")
-        
+
         headers = self.headers(etag = etag)
         url = self.market_orders_url
         response = requests.get(url, headers=headers, params=querystring)

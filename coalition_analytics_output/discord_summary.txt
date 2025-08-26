@@ -3,28 +3,31 @@
 *Deployment Staging Market Analysis*
 
 📊 **MARKET OVERVIEW**
-• **Total Market Value**: 575.81 Billion ISK
+• **Total Market Value**: 700.99 Billion ISK
 • **Unique Items Traded**: 194
 • **Ship Types Available**: 14
 
-⭐ **TOP PERFORMERS**
-• **Most Valuable Item**: Hurricane Fleet Issue
-• **Ships Market Value**: 322.24 Billion ISK
-• **Modules Market Value**: 196.30 Billion ISK
+⭐ **TOP ITEMS (by total value traded)**
+• **TOP ITEM**: Hurricane Fleet Issue
+• **Ships Market Value**: 398.26 Billion ISK
+• **Modules Market Value**: 232.73 Billion ISK
 
 🛸 **TOP 5 SHIPS BY VALUE**
-• **Hurricane Fleet Issue**: 106.2B ISK (609 units)
+• **Hurricane Fleet Issue**: 147.4B ISK (844 units)
+• **Cyclone Fleet Issue**: 72.4B ISK (445 units)
 • **Nightmare**: 48.7B ISK (39 units)
-• **Cyclone Fleet Issue**: 46.3B ISK (290 units)
-• **Scimitar**: 32.6B ISK (159 units)
-• **Claymore**: 21.6B ISK (54 units)
+• **Scimitar**: 34.1B ISK (168 units)
+• **Basilisk**: 23.6B ISK (108 units)
 
-📈 **MARKET INSIGHTS**
-• Hurricane Fleet Issues dominate ship trading
-• Strong logistics ship market (Scimitars, Guardians)
-• Healthy doctrine ship availability
-• Active module and rig markets supporting fleet ops
+
+🛸 **TOP 5 MODULES BY VALUE**
+• **Medium Core Defense Field Extender II**: 39.1B ISK (1,340 units)
+• **Pithum C-Type Medium Remote Shield Booster**: 17.9B ISK (590 units)
+• **Republic Fleet Large Shield Extender**: 15.8B ISK (439 units)
+• **720mm Howitzer Artillery II**: 15.4B ISK (4,890 units)
+• **Dark Blood Stasis Webifier**: 14.8B ISK (79 units)
+
 
 *Data covers period from July 5, 2025 onwards*
-*Generated: 2025-08-08 02:13 UTC*
+*Generated: 2025-08-25 01:26 UTC*
     
