@@ -9,7 +9,7 @@ import pandas as pd
 
 logger = configure_logging(__name__)
 
-def fetch_market_orders(esi: ESIConfig, order_type: str = "all", etag: str = None) -> list[dict]:
+def fetch_market_orders(esi: ESIConfig, order_type: str = "all", etag: str = None, test_mode: bool = False) -> list[dict]:
     logger.info("Fetching market orders")
     """
     order_type: str = "all" | "buy" | "sell" (default is "all", only used for secondary market)
@@ -27,10 +27,8 @@ def fetch_market_orders(esi: ESIConfig, order_type: str = "all", etag: str = Non
     error_count = 0
     request_count = 0
 
-
     url = esi.market_orders_url
     headers = esi.headers
-
 
     while page <= max_pages:
         request_count += 1
@@ -39,27 +37,26 @@ def fetch_market_orders(esi: ESIConfig, order_type: str = "all", etag: str = Non
 
         if esi.alias == "primary":
             querystring = {"page": str(page)}
-            logger.info(f"querystring: {querystring}")
+
         elif esi.alias == "secondary":
             querystring = {"page": str(page), "order_type": order_type}
         else:
             raise ValueError(f"Invalid alias: {esi.alias}. Valid aliases are: {esi._valid_aliases}")
+        logger.info(f"querystring: {querystring}")
 
-        response = requests.get(url, headers=headers, params=querystring)
+        response = requests.get(url, headers=headers, params=querystring, timeout=10)
         response.raise_for_status()
-
-        logger.info(f"response: {response.status_code}")
 
         if response.status_code == 200:
             logger.info(f"response successful: {response.status_code}")
             data = response.json()
-            orders.extend(data)
-            page += 1
-            max_pages = int(response.headers.get("X-Pages"))
-            logger.info(f"response headers: {response.headers}")
 
-            logger.info(f"page: {page}, max_pages: {max_pages} ...sleeping for 0.5 seconds")
-            time.sleep(0.5)
+            if test_mode:
+                max_pages = 5
+                logger.info(f"test_mode: max_pages set to {max_pages}. current page: {page}/{max_pages}")
+            else:
+                max_pages = int(response.headers.get("X-Pages"))
+                logger.info(f"page: {page}, max_pages: {max_pages}")
 
         else:
             logger.error(f"Error fetching market orders: {response.status_code}")
@@ -70,10 +67,16 @@ def fetch_market_orders(esi: ESIConfig, order_type: str = "all", etag: str = Non
             else:
                 logger.error(f"Retrying... {error_count} attempts")
                 time.sleep(5)
+        if data:
+            orders.extend(data)
+            page += 1
+        else:
+            logger.info(f"Data retrieved for {page}/{max_pages}. total orders: {len(orders)}")
+            return orders
+        logger.info("-"*60)
 
-    logger.info(f"market_orders complete: {len(orders)} orders")
-
-
+    logger.info(f"market_orders complete:{page}/{max_pages} pages. total orders: {len(orders)} orders")
+    logger.info("+="*40)
     return orders
 
 

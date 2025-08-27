@@ -21,7 +21,6 @@ def load_cached_token() -> dict | None:
     return None
 
 def save_token(token: dict):
-    token["expires_at"] = time.time() + token["expires_in"]
     with open(TOKEN_FILE, "w") as f:
         json.dump(token, f)
 
@@ -50,14 +49,18 @@ def get_token(requested_scope):
         )
         save_token(token)
         return token
+    else:
+        # 2) Cache exists → auto‑refresh if expired
+        oauth = get_oauth_session(token, requested_scope)
 
-    # 2) Cache exists → auto‑refresh if expired
-    oauth = get_oauth_session(token, requested_scope)
-
-    if token["expires_at"] < time.time():
-        logger.info("Token expired → refreshing")
-        oauth.refresh_token(TOKEN_URL, refresh_token=token["refresh_token"])
-    return oauth.token
+        if token["expires_at"] < time.time():
+            logger.info("Token expired → refreshing")
+            oauth.refresh_token(TOKEN_URL, refresh_token=token["refresh_token"])
+            new_token = oauth.token
+            save_token(new_token)
+            return new_token
+        else:
+            return token
 
 if __name__ == "__main__":
     pass

@@ -254,13 +254,13 @@ class ESIConfig:
     def headers(self, etag: str = None)-> dict:
 
         if self.alias == "primary":
-            token = self.token(scope = 'esi-markets.structure_markets.v1')
+            token = self.token()
 
             return {
-        "Accept-Language": "",
-        "If-None-Match": "",
-        "X-Compatibility-Date": "2025-08-26",
-        "X-Tenant": "",
+        "Accept-Language": "en",
+        "If-None-Match": f"{etag}",
+        "X-Compatibility-Date": self.compatibility_date,
+        "X-Tenant": "tranquility",
         "Accept": "application/json",
         "Authorization": f"Bearer {token['access_token']}"
     }
