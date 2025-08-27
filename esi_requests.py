@@ -27,9 +27,10 @@ def fetch_market_orders(esi: ESIConfig, order_type: str = "all", etag: str = Non
     error_count = 0
     request_count = 0
 
+
     url = esi.market_orders_url
-    headers = esi.headers(etag = etag)
-    logger.info(f"url: {url}")
+    headers = esi.headers
+
 
     while page <= max_pages:
         request_count += 1
@@ -38,6 +39,7 @@ def fetch_market_orders(esi: ESIConfig, order_type: str = "all", etag: str = Non
 
         if esi.alias == "primary":
             querystring = {"page": str(page)}
+            logger.info(f"querystring: {querystring}")
         elif esi.alias == "secondary":
             querystring = {"page": str(page), "order_type": order_type}
         else:

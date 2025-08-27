@@ -6,7 +6,6 @@ from sqlalchemy_orm import database
 import pandas as pd
 import time
 
-os.environ.setdefault("RUST_LOG", "libsql=trace")
 import libsql
 from dotenv import load_dotenv
 
@@ -251,26 +250,25 @@ class ESIConfig:
     def market_history_url(self):
         return f"https://esi.evetech.net/markets/{self.region_id}/history"
 
+    @property
     def headers(self, etag: str = None)-> dict:
 
         if self.alias == "primary":
             token = self.token(scope = 'esi-markets.structure_markets.v1')
-            auth_token = f"Bearer {token['access_token']}"
+
             return {
-        "Accept-Language": "en",
-        "If-None-Match": etag,
-        "X-Compatibility-Date": self.compatibility_date,
+        "Accept-Language": "",
+        "If-None-Match": "",
+        "X-Compatibility-Date": "2025-08-26",
         "X-Tenant": "",
         "Accept": "application/json",
-        "User-Agent": self.user_agent,
-        "Authorization": auth_token,
+        "Authorization": f"Bearer {token['access_token']}"
     }
         elif self.alias == "secondary":
             return {
         "Accept-Language": "en",
         "If-None-Match": etag,
         "X-Compatibility-Date": self.compatibility_date,
-        "X-Tenant": "",
         "Accept": "application/json",
         "User-Agent": self.user_agent
     }

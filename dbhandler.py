@@ -396,12 +396,4 @@ def process_market_orders(orders: list[dict])->bool:
         return status
 
 if __name__ == "__main__":
-
-    with open("data/market_history_new.json", "r") as f:
-        data = json.load(f)
-    status = process_history(data)
-
-    if status:
-        logger.info(f"History processed:{get_table_length('market_history')} items")
-    else:
-        logger.error("Failed to process market history")
+    pass
