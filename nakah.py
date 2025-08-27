@@ -17,6 +17,8 @@ import libsql
 from proj_config import deployment_sys_id
 from config import DatabaseConfig
 from jita import get_jita_prices_df
+from utils import add_timestamp, add_autoincrement, validate_columns, convert_datetime_columns
+from dbhandler import update_remote_database, get_remote_status, get_table_length
 
 def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
     """
@@ -446,8 +448,160 @@ def get_orders_stats(system_id: int) -> pd.DataFrame:
     return df3
 
 
-if __name__ == "__main__":
-    df = get_orders_stats(deployment_sys_id)
-    print(df)
+def process_region_history(watchlist: pd.DataFrame):
+    region_history = fetch_region_history(watchlist)
+    valid_history_columns = RegionHistory.__table__.columns.keys()
+    history_df = pd.DataFrame.from_records(region_history)
+    history_df = add_timestamp(history_df)
+    history_df = add_autoincrement(history_df)
+    history_df = validate_columns(history_df, valid_history_columns)
 
-    df.to_csv("orders_stats.csv", index=False)
+    history_df = convert_datetime_columns(history_df,['date'])
+
+    history_df.infer_objects()
+    history_df.fillna(0)
+
+    try:
+        update_remote_database(RegionHistory, history_df)
+    except Exception as e:
+        logger.error(f"history data update failed: {e}")
+
+    status = get_remote_status()['market_history']
+    if status > 0:
+        logger.info(f"History updated:{get_table_length('market_history')} items")
+        print(f"History updated:{get_table_length('market_history')} items")
+    else:
+        logger.error(f"Failed to update market history")
+
+def add_region_history(history: list[dict]):
+    timestamp = datetime.now(timezone.utc)
+    timestamp = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+    db = DatabaseConfig("wcmkt3")
+    engine = db.engine
+    session = Session(bind=engine)
+
+    with session.begin():
+        session.query(RegionHistory).delete()
+
+        for item in history:
+            for type_id, history in item.items():
+                print(f"Processing type_id: {type_id}, {get_type_name(type_id)}")
+                for record in history:
+                    date = datetime.strptime(record["date"], "%Y-%m-%d")
+                    order = RegionHistory(type_id=type_id, average=record["average"], date=date, highest=record["highest"], lowest=record["lowest"], order_count=record["order_count"], volume=record["volume"], timestamp=datetime.now(timezone.utc))
+                    session.add(order)
+        session.commit()
+        session.close()
+        engine.dispose()
+
+def get_region_history()-> pd.DataFrame:
+    db = DatabaseConfig("wcmkt3")
+    engine = db.engine
+    with engine.connect() as conn:
+        stmt = text("SELECT * FROM region_history")
+        result = conn.execute(stmt)
+        df = pd.DataFrame(result.fetchall(), columns=result.keys())
+    conn.close()
+    return df
+
+def get_region_deployment_history(deployment_date: datetime) -> pd.DataFrame:
+    """
+    Get region history data after a specified deployment date.
+
+    Args:
+        deployment_date: datetime object representing the deployment date
+
+    Returns:
+        pandas DataFrame containing region history records after the deployment date
+    """
+    df = get_region_history()
+
+    if df.empty:
+        print("No region history data found")
+        return df
+
+    # Convert the date column to datetime if it's not already
+    if 'date' in df.columns:
+        df['date'] = pd.to_datetime(df['date'])
+
+        # Filter records after the deployment date
+        filtered_df = df[df['date'] >= deployment_date].copy()
+
+        # Sort by date for better readability
+        filtered_df = filtered_df.sort_values('date')
+
+        print(f"Found {len(filtered_df)} records after {deployment_date.strftime('%Y-%m-%d')}")
+        print(f"Date range: {filtered_df['date'].min()} to {filtered_df['date'].max()}")
+
+        return filtered_df
+    else:
+        print("No 'date' column found in region history data")
+        return df
+
+
+def fetch_region_history(watchlist: pd.DataFrame) -> list[dict]:
+    esi = ESIConfig("secondary")
+    MARKET_HISTORY_URL = esi.market_history_url
+    deployment_reg_id = esi.region_id
+
+    logger.info("Fetching history")
+    if watchlist is None or watchlist.empty:
+        logger.error("No watchlist provided or watchlist is empty")
+        return None
+    else:
+        logger.info("Watchlist found")
+        print(f"Watchlist found: {len(watchlist)} items")
+
+    type_ids = watchlist["type_id"].tolist()
+    logger.info(f"Fetching history for {len(type_ids)} types")
+
+    headers = esi.headers()
+
+    history = []
+
+    watchlist_length = len(watchlist)
+    for i, type_id in enumerate(type_ids):
+        item_name = watchlist[watchlist["type_id"] == type_id]["type_name"].values[0]
+        try:
+            url = f"{MARKET_HISTORY_URL}"
+
+            querystring = {"type_id": str(type_id)}
+
+            print(
+                f"\rFetching history for ({i + 1}/{watchlist_length})",
+                end="",
+                flush=True,
+            )
+            response = requests.get(url, headers=headers, params=querystring)
+            response.raise_for_status()
+
+            if response.status_code == 200:
+                data = response.json()
+                for record in data:
+                    record["type_name"] = item_name
+                    record["type_id"] = type_id
+
+                if isinstance(data, list):
+                    history.extend(data)
+                else:
+                    logger.warning(f"Unexpected data format for {item_name}")
+            else:
+                logger.error(
+                    f"Error fetching history for {item_name}: {response.status_code}"
+                )
+        except Exception as e:
+            logger.error(f"Error processing {item_name}: {e}")
+            continue
+
+    if history:
+        logger.info(f"Successfully fetched {len(history)} total history records")
+        with open("region_history.json", "w") as f:
+            json.dump(history, f)
+        return history
+
+    else:
+        logger.error("No history records found")
+        return None
+
+if __name__ == "__main__":
+    pass

@@ -8,7 +8,7 @@ logger = configure_logging(__name__)
 
 CLIENT_ID      = os.getenv("CLIENT_ID")
 SECRET_KEY     = os.getenv("SECRET_KEY")
-REFRESH_TOKEN  = os.environ["REFRESH_TOKEN"]
+REFRESH_TOKEN  = os.getenv("REFRESH_TOKEN")
 AUTH_URL       = "https://login.eveonline.com/v2/oauth/authorize"
 TOKEN_URL      = "https://login.eveonline.com/v2/oauth/token"
 CALLBACK_URI   = "http://localhost:8000/callback"
@@ -34,7 +34,7 @@ def get_oauth_session(token: dict | None, scope):
         scope=scope,
         auto_refresh_url=TOKEN_URL,
         auto_refresh_kwargs=extra,
-        token_updater=save_token,
+        token_updater=save_token(token),
     )
 
 def get_token(requested_scope):
@@ -53,7 +53,11 @@ def get_token(requested_scope):
 
     # 2) Cache exists → auto‑refresh if expired
     oauth = get_oauth_session(token, requested_scope)
+
     if token["expires_at"] < time.time():
         logger.info("Token expired → refreshing")
         oauth.refresh_token(TOKEN_URL, refresh_token=token["refresh_token"])
     return oauth.token
+
+if __name__ == "__main__":
+    pass

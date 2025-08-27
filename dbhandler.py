@@ -1,42 +1,41 @@
-import os
-import libsql
+
 import json
-import requests
 import pandas as pd
-from sqlalchemy import inspect, text, create_engine, select, insert, MetaData,func
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import text, select, insert, func
+from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from datetime import datetime, timezone
-import time
-from utils import standby, logger, configure_logging, get_type_name
+
+from utils import get_type_name
 from dotenv import load_dotenv
 from logging_config import configure_logging
-from models import Base, Doctrines, RegionHistory, NakahWatchlist, MarketHistory,MarketOrders
-from proj_config import wcmkt_db_path, wcmkt_local_url, sde_local_path, sde_local_url, wcfittings_db_path, wcfittings_db_path, wc_fittings_local_db_url
+from models import Base, MarketHistory,MarketOrders
+
 from dataclasses import dataclass, field
-import sqlalchemy as sa
+from config import DatabaseConfig
+
+from utils import add_timestamp, add_autoincrement, validate_columns, convert_datetime_columns, get_type_names
 
 load_dotenv()
 logger = configure_logging(__name__)
 
-wcmkt_path = wcmkt_db_path
-wcmkt_local_url = wcmkt_local_url
-sde_local_path = sde_local_path
-sde_local_url = sde_local_url
-wcfittings_db_path = wcfittings_db_path
-fittings_local_url = wc_fittings_local_db_url
+# wcmkt_path = wcmkt_db_path
+# wcmkt_local_url = wcmkt_local_url
+# sde_local_path = sde_local_path
+# sde_local_url = sde_local_url
+# wcfittings_db_path = wcfittings_db_path
+# fittings_local_url = wc_fittings_local_db_url
 
-turso_url = os.getenv("TURSO_URL")
-turso_auth_token = os.getenv("TURSO_AUTH_TOKEN")
+db = DatabaseConfig("wcmkt3")
+wcmkt_path = db.path
+wcmkt_local_url = db.url
+wcmkt_turso_url = db.turso_url
+wcmkt_turso_token = db.token
 
-test_url = os.getenv("TURSO_TESTING_URL")
-test_auth_token = os.getenv("TURSO_TESTING_AUTH_TOKEN")
-
-sde_local_url = os.getenv("SDE_URL")
-sde_token = os.getenv("SDE_AUTH_TOKEN")
-
-turso_fittings_url = os.getenv("TURSO_FITTINGS_URL")
-turso_fittings_auth_token = os.getenv("TURSO_FITTINGS_AUTH_TOKEN")
+sde_db = DatabaseConfig("sde")
+sde_path = sde_db.path
+sde_local_url = sde_db.url
+sde_turso_url = sde_db.turso_url
+sde_turso_token = sde_db.token
 
 @dataclass
 class TypeInfo:
@@ -51,8 +50,9 @@ class TypeInfo:
         self.get_type_info()
 
     def get_type_info(self):
+        db = DatabaseConfig("sde")
         stmt = sa.text("SELECT * FROM inv_info WHERE typeID = :type_id")
-        engine = sa.create_engine(sde_local_url)
+        engine = db.engine
         with engine.connect() as conn:
             result = conn.execute(stmt, {"type_id": self.type_id})
             for row in result:
@@ -64,64 +64,37 @@ class TypeInfo:
                 self.volume = row.volume
         engine.dispose()
 
-# SDE connection
-def sde_conn():
-    conn = libsql.connect(sde_local_path, sync_url=sde_local_url, auth_token=sde_token)
-    return conn
-
-# WCMKT connection
-def wcmkt_conn():
-    conn = libsql.connect(wcmkt_path, sync_url=turso_url, auth_token=turso_auth_token)
-    return conn
-
-def sde_remote_engine():
-    engine = create_engine(sde_local_url, connect_args={"auth_token": sde_token}, echo=True)
-    return engine
-
-def sde_local_engine():
-    engine = create_engine(sde_local_url)
-    return engine
-
-def get_wcmkt_remote_engine():
-    engine = create_engine(
-    f"sqlite+{turso_url}?secure=true",
-    connect_args={
-        "auth_token": turso_auth_token,
-    },echo=False)
-    return engine
-
-def get_wcmkt_local_engine():
-        engine = create_engine(wcmkt_local_url, echo=False)
-        return engine
 
 def insert_type_data(data: list[dict]):
-    conn = libsql.connect(sde_local_path)
-    cursor = conn.cursor()
+    db = DatabaseConfig("sde")
+    engine = db.engine
     unprocessed_data = []
-    for row in data:
-        try:
-            type_id = row["type_id"]
-            if type_id is None:
-                logger.warning("Type ID is None, skipping...")
-                continue
-            logger.info(f"Inserting type data for {row['type_id']}")
 
-            params = (type_id,)
-
-            query = "SELECT typeName FROM Joined_InvTypes WHERE typeID = ?"
-            cursor.execute(query, params)
+    with engine.connect() as conn:
+        for row in data:
             try:
-                type_name = cursor.fetchone()[0]
-            except Exception as e:
-                logger.error(f"Error fetching type name: {e}")
-                unprocessed_data.append(row)
-                continue
+                type_id = row["type_id"]
+                if type_id is None:
+                    logger.warning("Type ID is None, skipping...")
+                    continue
+                logger.info(f"Inserting type data for {row['type_id']}")
 
-            row["type_name"] = str(type_name)
-        except Exception as e:
-            logger.error(f"Error inserting type data: {e}")
-            data.remove(row)
-            logger.info(f"Removed row: {row}")
+                params = (type_id,)
+
+                query = "SELECT typeName FROM Joined_InvTypes WHERE typeID = ?"
+                result = conn.execute(query, params)
+                try:
+                    type_name = result.fetchone()[0]
+                except Exception as e:
+                    logger.error(f"Error fetching type name: {e}")
+                    unprocessed_data.append(row)
+                    continue
+
+                row["type_name"] = str(type_name)
+            except Exception as e:
+                logger.error(f"Error inserting type data: {e}")
+                data.remove(row)
+                logger.info(f"Removed row: {row}")
     if unprocessed_data:
         logger.info(f"Unprocessed data: {unprocessed_data}")
         with open("unprocessed_data.json", "w") as f:
@@ -131,9 +104,6 @@ def insert_type_data(data: list[dict]):
 def update_remote_database(table: Base, df: pd.DataFrame):
     data = df.to_dict(orient="records")
 
-    # Calculate optimal chunk size based on SQLite memory limits
-    # SQLite has ~256KB limit for prepared statements
-    # Each parameter takes 8 bytes
     MAX_PARAMETER_BYTES = 256 * 1024  # 256 KB
     BYTES_PER_PARAMETER = 8
     MAX_PARAMETERS = MAX_PARAMETER_BYTES // BYTES_PER_PARAMETER  # 32,768
@@ -143,7 +113,8 @@ def update_remote_database(table: Base, df: pd.DataFrame):
 
     print(f"Table {table.__tablename__} has {column_count} columns, using chunk size {chunk_size}")
 
-    remote_engine = get_wcmkt_remote_engine()
+    db = DatabaseConfig("wcmkt3")
+    remote_engine = db.remote_engine
     session = Session(bind=remote_engine)
 
     try:
@@ -167,7 +138,6 @@ def update_remote_database(table: Base, df: pd.DataFrame):
                     f"Row count mismatch: expected {len(data)}, got {count}"
                 )
 
-        # if we get here, commit happened automatically
         logger.info(f"Database updated successfully: {count} rows in {table.__tablename__}")
 
     except SQLAlchemyError as e:
@@ -178,34 +148,16 @@ def update_remote_database(table: Base, df: pd.DataFrame):
     finally:
         session.close()
         remote_engine.dispose()
+    return True
 
 def get_watchlist() -> pd.DataFrame:
-    engine = create_engine(wcmkt_local_url)
-    with engine.connect() as conn:
-        df = pd.read_sql_table("watchlist", conn)
-        if len(df) == 0:
-            logger.error("No watchlist found")
-            update_choice = input("No watchlist found, press Y to update from csv (data/all_watchlist.csv)")
-            if update_choice == "Y":
-                update_watchlist_data()
-                df = pd.read_sql_table("watchlist", conn)
-            else:
-                logger.error("No watchlist found")
-                return None
-
-            if len(df) == 0:
-                print("watchlist loading")
-                standby(10)
-                df = pd.read_sql_table("watchlist", conn)
-            if len(df) == 0:
-                logger.error("No watchlist found")
-                return None
-        else:
-            print(f"watchlist loaded: {len(df)} items")
-            logger.info(f"watchlist loaded: {len(df)} items")
+    db = DatabaseConfig("wcmkt3")
+    df = db.get_watchlist()
     return df
+
 def get_nakah_watchlist() -> pd.DataFrame:
-    engine = create_engine(wcmkt_local_url)
+    db = DatabaseConfig("wcmkt3_turso")
+    engine = db.engine
     with engine.connect() as conn:
         df = pd.read_sql_table("nakah_watchlist", conn)
         if len(df) == 0:
@@ -218,14 +170,16 @@ def get_nakah_watchlist() -> pd.DataFrame:
 
 def update_watchlist_data():
     df = pd.read_csv("data/all_watchlist.csv")
-    engine = create_engine(wcmkt_local_url)
+    db = DatabaseConfig("wcmkt3")
+    engine = db.engine
     with engine.connect() as conn:
         df.to_sql("watchlist", conn, if_exists="replace", index=False)
         conn.commit()
     conn.close()
 
 def update_nakah_watchlist(df):
-    engine = create_engine(wcmkt_local_url)
+    db = DatabaseConfig("wcmkt3")
+    engine = db.engine
     with engine.connect() as conn:
         df.to_sql("nakah_watchlist", conn, if_exists="replace", index=False)
         conn.commit()
@@ -233,126 +187,121 @@ def update_nakah_watchlist(df):
     print("nakah_watchlist updated")
 
 def get_market_orders(type_id: int) -> pd.DataFrame:
-    conn = libsql.connect(wcmkt_path)
-    cursor = conn.cursor()
-    stmt = "SELECT * FROM marketorders WHERE type_id = ?"
-    cursor.execute(stmt, (type_id,))
-    headers = [col[0] for col in cursor.description]
-    conn.close
-    return pd.DataFrame(cursor.fetchall(), columns=headers)
+    db = DatabaseConfig("wcmkt3")
+    engine = db.engine
+    with engine.connect() as conn:
+        stmt = "SELECT * FROM marketorders WHERE type_id = ?"
+        result = conn.execute(stmt, (type_id,))
+        headers = [col[0] for col in result.description]
+    conn.close()
+    return pd.DataFrame(result.fetchall(), columns=headers)
 
 
 def get_market_history(type_id: int) -> pd.DataFrame:
-    conn = libsql.connect(wcmkt_path)
-    cursor = conn.cursor()
-    stmt = "SELECT * FROM market_history WHERE type_id = ?"
-    cursor.execute(stmt, (type_id,))
-    headers = [col[0] for col in cursor.description]
-    return pd.DataFrame(cursor.fetchall(), columns=headers)
-
+    db = DatabaseConfig("wcmkt3")
+    engine = db.engine
+    with engine.connect() as conn:
+        stmt = "SELECT * FROM market_history WHERE type_id = ?"
+        result = conn.execute(stmt, (type_id,))
+        headers = [col[0] for col in result.description]
+    conn.close()
+    return pd.DataFrame(result.fetchall(), columns=headers)
 
 def get_table_length(table: str) -> int:
-    conn = libsql.connect(wcmkt_path)
-    cursor = conn.cursor()
-    stmt = f"SELECT COUNT(*) FROM {table}"
-    cursor.execute(stmt)
-    return cursor.fetchone()[0]
-
+    db = DatabaseConfig("wcmkt3")
+    engine = db.engine
+    with engine.connect() as conn:
+        stmt = text(f"SELECT COUNT(*) FROM {table}")
+        result = conn.execute(stmt)
+        return result.fetchone()[0]
 
 def load_additional_tables():
     df = pd.read_csv("data/doctrine_map.csv")
     targets = pd.read_csv("data/ship_targets.csv")
-    engine = create_engine(wcmkt_local_url)
+    db = DatabaseConfig("wcmkt3")
+    engine = db.engine
     with engine.connect() as conn:
         df.to_sql("doctrine_map", conn, if_exists="replace", index=False)
         targets.to_sql("ship_targets", conn, if_exists="replace", index=False)
         conn.commit()
+    conn.close()
 
-def sync_db(db_url="wcmkt2.db", sync_url=turso_url, auth_token=turso_auth_token):
-    logger.info("database sync started")
-    # Skip sync in development mode or when sync_url/auth_token are not provided
-    if not sync_url or not auth_token:
-        logger.info(
-            "Skipping database sync in development mode or missing sync credentials"
-        )
-        return
+# def sync_db(db_url="wcmkt2.db", sync_url=turso_url, auth_token=turso_auth_token):
+#     logger.info("database sync started")
+#     # Skip sync in development mode or when sync_url/auth_token are not provided
+#     if not sync_url or not auth_token:
+#         logger.info(
+#             "Skipping database sync in development mode or missing sync credentials"
+#         )
+#         return
 
-    try:
-        sync_start = time.time()
-        conn = libsql.connect(db_url, sync_url=sync_url, auth_token=auth_token)
-        logger.info("\n")
-        logger.info("=" * 80)
-        logger.info(f"Database sync started at {sync_start}")
-        try:
-            conn.sync()
-            logger.info(
-                f"Database synced in {1000 * (time.time() - sync_start)} milliseconds"
-            )
-            print(
-                f"Database synced in {1000 * (time.time() - sync_start)} milliseconds"
-            )
-        except Exception as e:
-            logger.error(f"Sync failed: {str(e)}")
+#     try:
+#         sync_start = time.time()
+#         conn = libsql.connect(db_url, sync_url=sync_url, auth_token=auth_token)
+#         logger.info("\n")
+#         logger.info("=" * 80)
+#         logger.info(f"Database sync started at {sync_start}")
+#         try:
+#             conn.sync()
+#             logger.info(
+#                 f"Database synced in {1000 * (time.time() - sync_start)} milliseconds"
+#             )
+#             print(
+#                 f"Database synced in {1000 * (time.time() - sync_start)} milliseconds"
+#             )
+#         except Exception as e:
+#             logger.error(f"Sync failed: {str(e)}")
 
-        last_sync = datetime.now(timezone.utc)
-        print(last_sync)
-    except Exception as e:
-        if "Sync is not supported" in str(e):
-            logger.info(
-                "Skipping sync: This appears to be a local file database that doesn't support sync"
-            )
-        else:
-            logger.error(f"Sync failed: {str(e)}")
+#         last_sync = datetime.now(timezone.utc)
+#         print(last_sync)
+#     except Exception as e:
+#         if "Sync is not supported" in str(e):
+#             logger.info(
+#                 "Skipping sync: This appears to be a local file database that doesn't support sync"
+#             )
+#         else:
+#             logger.error(f"Sync failed: {str(e)}")
 
 def get_remote_table_list():
-    remote_engine = get_wcmkt_remote_engine()
-    with remote_engine.connect() as conn:
-        tables = conn.execute(text("PRAGMA table_list"))
-        return tables.fetchall()
-    remote_engine.dispose()
+    db = DatabaseConfig("wcmkt3")
+    remote_tables = db.get_table_list()
+    return remote_tables
 
 def get_remote_status():
-    status_dict = {}
-    remote_engine = get_wcmkt_remote_engine()
-    with remote_engine.connect() as conn:
-        tables = get_remote_table_list()
-        for table in tables:
-            table_name = table[1]
-            count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
-            count = count.fetchone()[0]
-            status_dict[table_name] = count
-
-    remote_engine.dispose()
-
-    print("Remote Status:")
-    print("-" * 20)
-    print(status_dict)
+    db = DatabaseConfig("wcmkt3")
+    status_dict = db.get_status()
     return status_dict
 
 def get_watchlist_ids():
     stmt = text("SELECT DISTINCT type_id FROM watchlist")
-    engine = create_engine(wcmkt_local_url)
+    db = DatabaseConfig("wcmkt3")
+    engine = db.engine
     with engine.connect() as conn:
         result = conn.execute(stmt)
         watchlist_ids = [row[0] for row in result]
+    conn.close()
     engine.dispose()
     return watchlist_ids
 
 def get_fit_items(fit_id: int):
     stmt = text("SELECT type_id FROM fittings_fittingitem WHERE fit_id = :fit_id")
-    engine = create_engine(fittings_local_url)
+    db = DatabaseConfig("fittings")
+    engine = db.engine
     with engine.connect() as conn:
         result = conn.execute(stmt, {"fit_id": fit_id})
         fit_items = [row[0] for row in result]
+    conn.close()
     engine.dispose()
     return fit_items
 
 def get_fit_ids(doctrine_id: int):
     stmt = text("SELECT fitting_id FROM fittings_doctrine_fittings WHERE doctrine_id = :doctrine_id")
-    engine = create_engine(fittings_local_url)
+    db = DatabaseConfig("fittings")
+    engine = db.engine
     with engine.connect() as conn:
         result = conn.execute(stmt, {"doctrine_id": doctrine_id})
         fit_ids = [row[0] for row in result]
+    conn.close()
     engine.dispose()
     return fit_ids
 
@@ -372,7 +321,8 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
 
     for item in missing_fit_items:
         stmt4 = text("SELECT * FROM inv_info WHERE typeID = :item")
-        engine = create_engine(sde_local_url)
+        db = DatabaseConfig("sde")
+        engine = db.engine
         with engine.connect() as conn:
             result = conn.execute(stmt4, {"item": item})
             for row in result:
@@ -381,79 +331,77 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
 
     for type_info in missing_type_info:
         stmt5 = text("INSERT INTO watchlist (type_id, type_name, group_name, category_name, category_id, group_id) VALUES (:type_id, :type_name, :group_name, :category_name, :category_id, :group_id)")
-        engine = create_engine(wcmkt_local_url)
+        db = DatabaseConfig("wcmkt3")
+        engine = db.engine
         with engine.connect() as conn:
             conn.execute(stmt5, {"type_id": type_info.type_id, "type_name": type_info.type_name, "group_name": type_info.group_name, "category_name": type_info.category_name, "category_id": type_info.category_id, "group_id": type_info.group_id})
             conn.commit()
+        conn.close()
         engine.dispose()
         logger.info(f"Added {type_info.type_name} to watchlist")
         print(f"Added {type_info.type_name} to watchlist")
 
-def add_region_history(history: list[dict]):
-    timestamp = datetime.now(timezone.utc)
-    timestamp = timestamp.strftime("%Y-%m-%d %H:%M:%S")
-    engine = create_engine(wcmkt_local_url)
-    session = Session(bind=engine)
 
-    with session.begin():
-        session.query(RegionHistory).delete()
+def process_history(history: list[dict]):
+    valid_history_columns = MarketHistory.__table__.columns.keys()
+    history_df = pd.DataFrame.from_records(history)
+    history_df = add_timestamp(history_df)
+    history_df = add_autoincrement(history_df)
+    history_df = validate_columns(history_df, valid_history_columns)
 
+    history_df = convert_datetime_columns(history_df,['date'])
 
-        for item in history:
-            for type_id, history in item.items():
-                print(f"Processing type_id: {type_id}, {get_type_name(type_id)}")
-                for record in history:
-                    date = datetime.strptime(record["date"], "%Y-%m-%d")
-                    order = RegionHistory(type_id=type_id, average=record["average"], date=date, highest=record["highest"], lowest=record["lowest"], order_count=record["order_count"], volume=record["volume"], timestamp=datetime.now(timezone.utc))
-                    session.add(order)
-        session.commit()
-        session.close()
-        engine.dispose()
+    history_df.infer_objects()
+    history_df.fillna(0)
 
-def get_region_history()-> pd.DataFrame:
-    engine = create_engine(wcmkt_local_url)
-    with engine.connect() as conn:
-        stmt = text("SELECT * FROM region_history")
-        result = conn.execute(stmt)
-        df = pd.DataFrame(result.fetchall(), columns=result.keys())
-    engine.dispose()
-    return df
-def get_region_deployment_history(deployment_date: datetime) -> pd.DataFrame:
-    """
-    Get region history data after a specified deployment date.
+    try:
+        update_remote_database(MarketHistory, history_df)
+    except Exception as e:
+        logger.error(f"history data update failed: {e}")
 
-    Args:
-        deployment_date: datetime object representing the deployment date
-
-    Returns:
-        pandas DataFrame containing region history records after the deployment date
-    """
-    df = get_region_history()
-
-    if df.empty:
-        print("No region history data found")
-        return df
-
-    # Convert the date column to datetime if it's not already
-    if 'date' in df.columns:
-        df['date'] = pd.to_datetime(df['date'])
-
-        # Filter records after the deployment date
-        filtered_df = df[df['date'] >= deployment_date].copy()
-
-        # Sort by date for better readability
-        filtered_df = filtered_df.sort_values('date')
-
-        print(f"Found {len(filtered_df)} records after {deployment_date.strftime('%Y-%m-%d')}")
-        print(f"Date range: {filtered_df['date'].min()} to {filtered_df['date'].max()}")
-
-        return filtered_df
+    status = get_remote_status()['market_history']
+    if status > 0:
+        logger.info(f"History updated:{get_table_length('market_history')} items")
+        print(f"History updated:{get_table_length('market_history')} items")
     else:
-        print("No 'date' column found in region history data")
-        return df
+        logger.error(f"Failed to update market history")
+        return False
+    return True
 
+def process_market_orders(orders: list[dict])->bool:
+        valid_columns = MarketOrders.__table__.columns.keys()
+        valid_columns = [col for col in valid_columns]
+        orders_df = pd.DataFrame.from_records(orders)
+        type_names = get_type_names(orders_df)
+        orders_df = orders_df.merge(type_names, on="type_id", how="left")
+        orders_df = orders_df[valid_columns]
+        # Convert datetime string fields to Python datetime objects for SQLite
+        orders_df = convert_datetime_columns(orders_df, ['issued'])
+        orders_df = add_timestamp(orders_df)
+
+        orders_df = orders_df.infer_objects()
+        orders_df = orders_df.fillna(0)
+
+        orders_df = add_autoincrement(orders_df)
+        orders_df = validate_columns(orders_df, valid_columns)
+
+        print(f"Orders fetched:{len(orders_df)} items")
+        logger.info(f"Orders fetched:{len(orders_df)} items")
+
+        status = update_remote_database(MarketOrders, orders_df)
+        if status:
+            logger.info(f"Orders updated:{get_table_length('marketorders')} items")
+        else:
+            logger.error("Failed to update market orders")
+        return status
 
 if __name__ == "__main__":
-    df = get_region_deployment_history(datetime(2025, 7,5))
-    print(df.head(10))
-    print(df.columns)
+
+    with open("data/market_history_new.json", "r") as f:
+        data = json.load(f)
+    status = process_history(data)
+
+    if status:
+        logger.info(f"History processed:{get_table_length('market_history')} items")
+    else:
+        logger.error("Failed to process market history")

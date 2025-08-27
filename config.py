@@ -4,7 +4,9 @@ from sqlalchemy import create_engine, MetaData, inspect, text, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy_orm import database
 import pandas as pd
+import time
 
+os.environ.setdefault("RUST_LOG", "libsql=trace")
 import libsql
 from dotenv import load_dotenv
 
@@ -92,17 +94,10 @@ class DatabaseConfig:
 
         logger.info("connection established")
         conn = self.libsql_sync_connect
-        logger.info("Syncing database...")
-        result = conn.sync()
-        logger.info(f"sync result: {result}")
+        with conn:
+            logger.info("Syncing database...")
+            result = conn.sync()
         conn.close()
-        if self.validate_sync():
-            logger.info("Sync complete")
-            sync_state = "successful"
-        else:
-            logger.error("Validation test failed.")
-            sync_state = "failed"
-        return sync_state
 
 
     def validate_sync(self)-> bool:
@@ -118,7 +113,6 @@ class DatabaseConfig:
         validation_test = remote_last_update == local_last_update
         logger.info(f"validation_test: {validation_test}")
         return validation_test
-
 
     def get_table_list(self, local_only: bool = True)-> list[tuple]:
         if local_only:
@@ -176,6 +170,28 @@ class DatabaseConfig:
 
             return column_info
 
+    def get_table_length(self, table: str):
+        with self.remote_engine.connect() as conn:
+            result = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).fetchone()
+            return result[0]
+
+    def get_status(self):
+        status_dict = {}
+        tables = self.get_table_list()
+        for table in tables:
+            with self.remote_engine.connect() as conn:
+                result = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).fetchone()
+                status_dict[table] = result[0]
+            conn.close()
+        return status_dict
+
+    def get_watchlist(self):
+        engine = self.engine
+        with engine.connect() as conn:
+            df = pd.read_sql_table("watchlist", conn)
+        conn.close()
+        return df
+
 class GoogleSheetConfig:
     def __init__(self):
         self.google_private_key_file = "wcdoctrines-1f629d861c2f.json" #name of your google service account key file
@@ -219,7 +235,7 @@ class ESIConfig:
         self.structure_id = self._structure_ids[f"{self.alias}_structure_id"]
 
         self.user_agent = 'wcmkts_backend/2.1dev, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)'
-        self.compatibility_date = "2025-08-20"
+        self.compatibility_date = "2025-08-26"
 
     def token(self, scope: str = "esi-markets.structure_markets.v1"):
         return get_token(scope)
@@ -227,9 +243,13 @@ class ESIConfig:
     @property
     def market_orders_url(self):
         if self.alias == "primary":
-            return f"https://esi.evetech.net/latest/markets/structures/{self.structure_id}"
+            return f"https://esi.evetech.net/markets/structures/{self.structure_id}"
         elif self.alias == "secondary":
-            return f"https://esi.evetech.net/latest/markets/{self.region_id}/orders"
+            return f"https://esi.evetech.net/markets/{self.region_id}/orders"
+
+    @property
+    def market_history_url(self):
+        return f"https://esi.evetech.net/markets/{self.region_id}/history"
 
     def headers(self, etag: str = None)-> dict:
 
@@ -256,32 +276,6 @@ class ESIConfig:
     }
         else:
             raise ValueError(f"Invalid alias: {self.alias}. Valid aliases are: {self._valid_aliases}")
-
-
-    def market_orders(self, page: int = 1, order_type: str = "all", etag: str = None)-> requests.Response:
-        """
-        order_type: str = "all" | "buy" | "sell" (default is "all", only used for secondary market)
-        page: int = 1 is the default page number. This can be used to fetch a single page of orders, or as an argument dynamically updated in a loop.
-        etag: str = None is the etag of the last response for the requested page. This is used to optionally check for changes in the market orders. The esi will return a 304 if the etag is the same as the last response.
-
-        Returns:
-            requests.Response: Response object containing the market orders
-        Raises:
-            ValueError: If the alias is invalid
-        """
-
-        if self.alias == "primary":
-            querystring = {"page": page}
-        elif self.alias == "secondary":
-            querystring = {"page": page, "order_type": order_type}
-        else:
-            raise ValueError(f"Invalid alias: {self.alias}. Valid aliases are: {self._valid_aliases}")
-
-        headers = self.headers(etag = etag)
-        url = self.market_orders_url
-        response = requests.get(url, headers=headers, params=querystring)
-        return response
-
 
 
 def verbose_sync(db: DatabaseConfig):

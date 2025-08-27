@@ -1,16 +1,14 @@
 import pandas as pd
 import sqlalchemy as sa
 from sqlalchemy import create_engine, text, insert, select
-from sqlalchemy.orm import Session, query
 from logging_config import configure_logging
-from models import MarketStats, Doctrines, Watchlist, NakahWatchlist, RegionHistory, RegionOrders, RegionStats, DeploymentWatchlist
-import libsql
-import json
-from proj_config import wcmkt_db_path, wcmkt_local_url, sde_local_path, sde_local_url
+from models import MarketStats, Doctrines, Watchlist, DeploymentWatchlist
+from proj_config import sde_local_url
+from config import DatabaseConfig, ESIConfig
 
-from dbhandler import get_watchlist
-
-watchlist = get_watchlist()
+esi = ESIConfig("primary")
+wcmkt_db = DatabaseConfig("wcmkt3")
+sde_db = DatabaseConfig("sde")
 
 logger = configure_logging(__name__)
 
@@ -23,16 +21,17 @@ def calculate_5_percentile_price() -> pd.DataFrame:
     WHERE is_buy_order = 0
     """
 
-    engine = sa.create_engine(wcmkt_local_url)
+    engine = wcmkt_db.engine
 
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
+    conn.close()
+    logger.info(f"5 percentile price queried: {df.shape[0]} items")
     engine.dispose()
     df = df.groupby("type_id")["price"].quantile(0.05).reset_index()
     df.price = df.price.apply(lambda x: round(x, 2))
     df.columns = ["type_id", "5_perc_price"]
     return df
-
 
 def calculate_market_stats() -> pd.DataFrame:
     query = """
@@ -75,7 +74,7 @@ def calculate_market_stats() -> pd.DataFrame:
     ) AS h ON w.type_id = h.type_id
     """
 
-    engine = sa.create_engine(wcmkt_local_url)
+    engine = wcmkt_db.engine
 
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
@@ -118,7 +117,7 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     *
     FROM marketstats
     """
-    engine = sa.create_engine(wcmkt_local_url)
+    engine = wcmkt_db.engine
 
     with engine.connect() as conn:
         doctrine_stats = pd.read_sql_query(doctrine_query, conn)
@@ -158,7 +157,6 @@ def calculate_doctrine_stats() -> pd.DataFrame:
 
     return doctrine_stats
 
-
 def calculate_region_5_percentile_price() -> pd.DataFrame:
     """Calculate 5th percentile price for region orders"""
     query = """
@@ -169,7 +167,7 @@ def calculate_region_5_percentile_price() -> pd.DataFrame:
     WHERE is_buy_order = 0
     """
 
-    engine = sa.create_engine(wcmkt_local_url)
+    engine = wcmkt_db.engine
 
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
@@ -183,7 +181,6 @@ def calculate_region_5_percentile_price() -> pd.DataFrame:
     df.price = df.price.apply(lambda x: round(x, 2))
     df.columns = ["type_id", "5_perc_price"]
     return df
-
 
 def calculate_region_stats() -> pd.DataFrame:
     """
@@ -273,7 +270,7 @@ def get_deployment_watchlist() -> pd.DataFrame:
     *
     FROM deployment_watchlist
     """
-    engine = sa.create_engine(wcmkt_local_url)
+    engine = wcmkt_db.engine
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
     engine.dispose()
@@ -283,7 +280,7 @@ def generate_deployment_watchlist(csv_file_path: str = "data/nakah_watchlist_upd
     df = pd.read_csv(csv_file_path)
 
 
-    engine = create_engine(wcmkt_local_url)
+    engine = wcmkt_db.engine
 
 
     with engine.connect() as conn:
@@ -299,7 +296,7 @@ def generate_deployment_watchlist(csv_file_path: str = "data/nakah_watchlist_upd
 def add_missing_items_to_watchlist():
     missing = [21889, 21888, 21890, 47926, 2629, 16274, 17889, 17888, 17887, 41490, 32014, 16273]
 
-    engine = create_engine(sde_local_url)
+    engine = sde_db.engine
     with engine.connect() as conn:
         # Use proper parameter binding for IN clause with SQLite
         from sqlalchemy import bindparam
@@ -327,7 +324,7 @@ def update_watchlist_tables():
     missing = [21889, 21888, 21890, 47926, 2629, 16274, 17889, 17888, 17887, 41490, 32014, 16273]
 
     # Get missing items from SDE
-    engine = create_engine(sde_local_url)
+    engine = sde_db.engine
     with engine.connect() as conn:
         from sqlalchemy import bindparam
         stmt = text("SELECT * FROM inv_info WHERE typeID IN :missing").bindparams(bindparam('missing', expanding=True))
@@ -342,7 +339,7 @@ def update_watchlist_tables():
     df = df.rename(columns=dict(zip(inv_cols, watchlist_cols)))
 
     # Update watchlist table
-    engine = create_engine(wcmkt_local_url)
+    engine = wcmkt_db.engine
     with engine.connect() as conn:
         # Insert into watchlist table
         for _, row in df.iterrows():
