@@ -27,20 +27,21 @@ class MarketStats(Base):
     last_update: Mapped[DateTime] = mapped_column(DateTime)
 
     def __repr__(self) -> str:
-        f"""marketstats(type_id={self.type_id!r}, 
-        total_volume_remain={self.total_volume_remain!r}, 
+        f"""marketstats(type_id={self.type_id!r},
+        total_volume_remain={self.total_volume_remain!r},
         min_price={self.min_price!r},
         price={self.price!r},
         avg_price={self.avg_price!r},
         avg_volume={self.avg_volume!r},
         group_id={self.group_id!r},
-        type_name={self.type_name!r},   
+        type_name={self.type_name!r},
         group_name={self.group_name!r},
         category_id={self.category_id!r},
         category_name={self.category_name!r},
         days_remaining={self.days_remaining!r},
         last_update={self.last_update!r}
         """
+
 
 
 class MarketOrders(Base):
@@ -179,7 +180,7 @@ class Watchlist(Base):
     category_name: Mapped[str] = mapped_column(String)
 
     def __repr__(self) -> str:
-        f"""watchlist(
+        return f"""watchlist(
         type_id={self.type_id!r},
         group_id={self.group_id!r},
         type_name={self.type_name!r},
@@ -344,14 +345,14 @@ class RegionStats(Base):
 
     def __repr__(self) -> str:
         return f"""region_stats(
-        type_id={self.type_id!r}, 
-        total_volume_remain={self.total_volume_remain!r}, 
+        type_id={self.type_id!r},
+        total_volume_remain={self.total_volume_remain!r},
         min_price={self.min_price!r},
         price={self.price!r},
         avg_price={self.avg_price!r},
         avg_volume={self.avg_volume!r},
         group_id={self.group_id!r},
-        type_name={self.type_name!r},   
+        type_name={self.type_name!r},
         group_name={self.group_name!r},
         category_id={self.category_id!r},
         category_name={self.category_name!r},
@@ -361,6 +362,8 @@ class RegionStats(Base):
 
 if __name__ == "__main__":
     pass
+
+    print(Watchlist.__repr__)
 
 # Event listeners to automatically populate type_name fields
 @event.listens_for(RegionHistory, 'before_insert')
@@ -372,5 +375,3 @@ def populate_region_history_type_name(mapper, connection, target):
         except Exception as e:
             # If we can't get the type name, leave it as None
             pass
-
-

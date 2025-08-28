@@ -56,15 +56,18 @@ async def call_one(client: httpx.AsyncClient, type_id: int, length: int) -> dict
 async def async_history():
     watchlist = DatabaseConfig("wcmkt3").get_watchlist()
     type_ids = watchlist["type_id"].unique().tolist() # example list of 835 IDs
+
     length = len(type_ids)
+    logger.info(f"Fetching history for {length} items")
     t0 = time.perf_counter()
     async with httpx.AsyncClient(http2=True) as client:
         results = await asyncio.gather(*(call_one(client, tid, length) for tid in type_ids))
-    print(f"Got {len(results)} results in {time.perf_counter()-t0:.1f}s")
-    print(f"Request count: {request_count}")
+    logger.info(f"Got {len(results)} results in {time.perf_counter()-t0:.1f}s")
+    logger.info(f"Request count: {request_count}")
+    return results
 
 def run_async_history():
-    asyncio.run(async_history())
+    return asyncio.run(async_history())
 
 if __name__ == "__main__":
     pass

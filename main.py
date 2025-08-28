@@ -10,6 +10,7 @@ from config import DatabaseConfig, ESIConfig
 from esi_requests import fetch_market_orders
 import json
 from async_history import run_async_history
+import time
 # ---------------------------------------------
 # ESI Structure Market Tools for Eve Online
 # ---------------------------------------------
@@ -86,7 +87,7 @@ def process_market_stats():
     logger.info("Calculating market stats")
     try:
         market_stats_df = calculate_market_stats()
-        if market_stats_df:
+        if len(market_stats_df) > 0:
             logger.info(f"Market stats calculated: {len(market_stats_df)} items")
         else:
             logger.error("Failed to calculate market stats")
@@ -98,7 +99,7 @@ def process_market_stats():
         logger.info("Validating market stats columns")
         valid_market_stats_columns = MarketStats.__table__.columns.keys()
         market_stats_df = validate_columns(market_stats_df, valid_market_stats_columns)
-        if market_stats_df:
+        if len(market_stats_df) > 0:
             logger.info(f"Market stats validated: {len(market_stats_df)} items")
         else:
             logger.error("Failed to validate market stats")
@@ -133,11 +134,13 @@ def process_doctrine_stats():
         return False
 
 def main(history: bool = False):
-
+    """Main function to process market orders, history, market stats, and doctrines"""
+    #initialize the logger
     logger.info("Starting main function")
     esi = ESIConfig("primary")
     db = DatabaseConfig("wcmkt3")
 
+    #process market orders
     print("=" * 80)
     print("Fetching market orders")
     print("=" * 80)
@@ -150,14 +153,13 @@ def main(history: bool = False):
 
     logger.info("=" * 80)
 
+    #process history
     watchlist = db.get_watchlist()
-
     if len(watchlist) > 0:
         logger.info(f"Watchlist found: {len(watchlist)} items")
     else:
         logger.error("No watchlist found. Unable to proceed further.")
         exit()
-
     logger.info("=" * 80)
 
     if history:
@@ -172,6 +174,7 @@ def main(history: bool = False):
 
     logger.info("=" * 80)
 
+    #process market stats
     status = process_market_stats()
     if status:
         logger.info("Market stats updated")
@@ -181,6 +184,7 @@ def main(history: bool = False):
 
     logger.info("=" * 80)
 
+    #process doctrines
     status = process_doctrine_stats()
     if status:
         logger.info("Doctrines updated")
@@ -208,4 +212,6 @@ if __name__ == "__main__":
             display_cli_help()
             exit()
 
+    t0 = time.perf_counter()
     main(history=include_history)
+    logger.info(f"Main function completed in {time.perf_counter()-t0:.1f}s")

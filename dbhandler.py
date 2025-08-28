@@ -157,7 +157,9 @@ def upsert_remote_database(table: Base, df: pd.DataFrame)->bool:
             distinct_incoming = len({row[pk_col.name] for row in data})
             logger.info(f"distinct incoming: {distinct_incoming}")
             count = session.execute(select(func.count()).select_from(t)).scalar_one()
+            logger.info(f"count: {count}")
             if count < distinct_incoming:
+                logger.error(f"Row count too low: expected at least {distinct_incoming} unique {pk_col.name}s, got {count}")
                 raise RuntimeError(
                     f"Row count too low: expected at least {distinct_incoming} unique {pk_col.name}s, got {count}"
                 )
@@ -167,11 +169,10 @@ def upsert_remote_database(table: Base, df: pd.DataFrame)->bool:
 
     except SQLAlchemyError as e:
         logger.error("Failed upserting remote DB", exc_info=e)
-        return False
+        raise e
     finally:
         session.close()
         remote_engine.dispose()
-
 
 def get_market_history(type_id: int) -> pd.DataFrame:
     db = DatabaseConfig("wcmkt3")
@@ -275,8 +276,8 @@ def update_history(history: list[dict]):
     history_df = pd.DataFrame.from_records(history)
     history_df = add_timestamp(history_df)
     history_df = add_autoincrement(history_df)
-    history_df = validate_columns(history_df, valid_history_columns)
 
+    history_df = validate_columns(history_df, valid_history_columns)
     history_df = convert_datetime_columns(history_df,['date'])
 
     history_df.infer_objects()
@@ -286,6 +287,7 @@ def update_history(history: list[dict]):
         upsert_remote_database(MarketHistory, history_df)
     except Exception as e:
         logger.error(f"history data update failed: {e}")
+        return False
 
     status = get_remote_status()['market_history']
     if status > 0:
@@ -329,12 +331,4 @@ def update_market_orders(orders: list[dict])->bool:
 
 
 if __name__ == "__main__":
-
-    with open("data/market_history_new.json", "r") as f:
-        history = json.load(f)
-
-    status = update_history(history)
-    if status:
-        logger.info("Market history updated")
-    else:
-        logger.error("Failed to update market history")
+    pass
