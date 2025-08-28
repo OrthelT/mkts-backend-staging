@@ -1,9 +1,10 @@
 
 import json
 import pandas as pd
-from sqlalchemy import text, select, insert, func
+from sqlalchemy import text, select, insert, func, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert  # libSQL/SQLite
 
 from utils import get_type_name
 from dotenv import load_dotenv
@@ -101,7 +102,7 @@ def insert_type_data(data: list[dict]):
             json.dump(unprocessed_data, f)
     return data
 
-def update_remote_database(table: Base, df: pd.DataFrame):
+def update_remote_database(table: Base, df: pd.DataFrame)->bool:
     data = df.to_dict(orient="records")
 
     MAX_PARAMETER_BYTES = 256 * 1024  # 256 KB
@@ -139,6 +140,7 @@ def update_remote_database(table: Base, df: pd.DataFrame):
                 )
 
         logger.info(f"Database updated successfully: {count} rows in {table.__tablename__}")
+        return True
 
     except SQLAlchemyError as e:
         # any SQL error rolls back in the context manager
@@ -148,43 +150,6 @@ def update_remote_database(table: Base, df: pd.DataFrame):
     finally:
         session.close()
         remote_engine.dispose()
-    return True
-
-def get_watchlist() -> pd.DataFrame:
-    db = DatabaseConfig("wcmkt3")
-    df = db.get_watchlist()
-    return df
-
-def get_nakah_watchlist() -> pd.DataFrame:
-    db = DatabaseConfig("wcmkt3_turso")
-    engine = db.engine
-    with engine.connect() as conn:
-        df = pd.read_sql_table("nakah_watchlist", conn)
-        if len(df) == 0:
-            logger.error("No nakah watchlist found")
-            return None
-        else:
-            print(f"nakah watchlist loaded: {len(df)} items")
-            logger.info(f"nakah watchlist loaded: {len(df)} items")
-    return df
-
-def update_watchlist_data():
-    df = pd.read_csv("data/all_watchlist.csv")
-    db = DatabaseConfig("wcmkt3")
-    engine = db.engine
-    with engine.connect() as conn:
-        df.to_sql("watchlist", conn, if_exists="replace", index=False)
-        conn.commit()
-    conn.close()
-
-def update_nakah_watchlist(df):
-    db = DatabaseConfig("wcmkt3")
-    engine = db.engine
-    with engine.connect() as conn:
-        df.to_sql("nakah_watchlist", conn, if_exists="replace", index=False)
-        conn.commit()
-    engine.dispose()
-    print("nakah_watchlist updated")
 
 def get_market_orders(type_id: int) -> pd.DataFrame:
     db = DatabaseConfig("wcmkt3")
@@ -214,53 +179,6 @@ def get_table_length(table: str) -> int:
         stmt = text(f"SELECT COUNT(*) FROM {table}")
         result = conn.execute(stmt)
         return result.fetchone()[0]
-
-def load_additional_tables():
-    df = pd.read_csv("data/doctrine_map.csv")
-    targets = pd.read_csv("data/ship_targets.csv")
-    db = DatabaseConfig("wcmkt3")
-    engine = db.engine
-    with engine.connect() as conn:
-        df.to_sql("doctrine_map", conn, if_exists="replace", index=False)
-        targets.to_sql("ship_targets", conn, if_exists="replace", index=False)
-        conn.commit()
-    conn.close()
-
-# def sync_db(db_url="wcmkt2.db", sync_url=turso_url, auth_token=turso_auth_token):
-#     logger.info("database sync started")
-#     # Skip sync in development mode or when sync_url/auth_token are not provided
-#     if not sync_url or not auth_token:
-#         logger.info(
-#             "Skipping database sync in development mode or missing sync credentials"
-#         )
-#         return
-
-#     try:
-#         sync_start = time.time()
-#         conn = libsql.connect(db_url, sync_url=sync_url, auth_token=auth_token)
-#         logger.info("\n")
-#         logger.info("=" * 80)
-#         logger.info(f"Database sync started at {sync_start}")
-#         try:
-#             conn.sync()
-#             logger.info(
-#                 f"Database synced in {1000 * (time.time() - sync_start)} milliseconds"
-#             )
-#             print(
-#                 f"Database synced in {1000 * (time.time() - sync_start)} milliseconds"
-#             )
-#         except Exception as e:
-#             logger.error(f"Sync failed: {str(e)}")
-
-#         last_sync = datetime.now(timezone.utc)
-#         print(last_sync)
-#     except Exception as e:
-#         if "Sync is not supported" in str(e):
-#             logger.info(
-#                 "Skipping sync: This appears to be a local file database that doesn't support sync"
-#             )
-#         else:
-#             logger.error(f"Sync failed: {str(e)}")
 
 def get_remote_table_list():
     db = DatabaseConfig("wcmkt3")
@@ -342,7 +260,7 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
         print(f"Added {type_info.type_name} to watchlist")
 
 
-def process_history(history: list[dict]):
+def update_history(history: list[dict]):
     valid_history_columns = MarketHistory.__table__.columns.keys()
     history_df = pd.DataFrame.from_records(history)
     history_df = add_timestamp(history_df)
@@ -368,21 +286,24 @@ def process_history(history: list[dict]):
         return False
     return True
 
-def process_market_orders(orders: list[dict])->bool:
-        valid_columns = MarketOrders.__table__.columns.keys()
-        valid_columns = [col for col in valid_columns]
+def update_market_orders(orders: list[dict])->bool:
+
         orders_df = pd.DataFrame.from_records(orders)
         type_names = get_type_names(orders_df)
         orders_df = orders_df.merge(type_names, on="type_id", how="left")
-        orders_df = orders_df[valid_columns]
+
+
         # Convert datetime string fields to Python datetime objects for SQLite
         orders_df = convert_datetime_columns(orders_df, ['issued'])
         orders_df = add_timestamp(orders_df)
 
         orders_df = orders_df.infer_objects()
         orders_df = orders_df.fillna(0)
+        print(f"orders_df.isna().sum(): {orders_df.isna().sum()}")
 
         orders_df = add_autoincrement(orders_df)
+
+        valid_columns = MarketOrders.__table__.columns.keys()
         orders_df = validate_columns(orders_df, valid_columns)
 
         print(f"Orders fetched:{len(orders_df)} items")
@@ -391,9 +312,23 @@ def process_market_orders(orders: list[dict])->bool:
         status = update_remote_database(MarketOrders, orders_df)
         if status:
             logger.info(f"Orders updated:{get_table_length('marketorders')} items")
+            return True
         else:
             logger.error("Failed to update market orders")
-        return status
+            return False
+
 
 if __name__ == "__main__":
-    pass
+
+    with open("data/market_orders_new.json", "r") as f:
+        orders = json.load(f)
+
+    status = update_market_orders(orders)
+    if status:
+        logger.info("Market orders updated")
+    else:
+        logger.error("Failed to update market orders")
+        exit()
+
+    print(f"Market orders updated: {get_table_length('marketorders')} items")
+    logger.info(f"Market orders updated: {get_table_length('marketorders')} items")

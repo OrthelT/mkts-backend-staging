@@ -10,15 +10,19 @@ from models import RegionOrders, Base
 import pandas as pd
 logger = configure_logging(__name__)
 from utils import get_type_names, get_type_name
-from dbhandler import add_region_history, get_watchlist_ids, get_nakah_watchlist
+from dbhandler import add_region_history, get_watchlist_ids
 from millify import millify
 from models import RegionHistory
 import libsql
 from proj_config import deployment_sys_id
-from config import DatabaseConfig
+from config import DatabaseConfig, ESIConfig
 from jita import get_jita_prices_df
 from utils import add_timestamp, add_autoincrement, validate_columns, convert_datetime_columns
 from dbhandler import update_remote_database, get_remote_status, get_table_length
+
+def get_nakah_watchlist(esi: ESIConfig):
+    watchlist = esi.get_watchlist()
+    return watchlist
 
 def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
     """

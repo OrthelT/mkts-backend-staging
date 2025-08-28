@@ -8,6 +8,7 @@ from proj_config import sde_local_url, wcmkt_local_url, wc_fittings_local_db_url
 import requests
 logger = configure_logging(__name__)
 from jita import get_jita_prices
+from config import ESIConfig, DatabaseConfig
 
 def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
     engine = sa.create_engine(sde_local_url)
@@ -165,6 +166,16 @@ def get_fit_items(fit_id: int) -> pd.DataFrame:
     df = pd.DataFrame(raptor_fit)
     return df
 
+def update_watchlist_data(esi: ESIConfig, watchlist_csv: str = "data/watchlist.csv")->bool:
+    df = pd.read_csv(watchlist_csv)
+    db = DatabaseConfig("wcmkt3")
+    engine = db.engine
+    with engine.connect() as conn:
+        df.to_sql("watchlist", conn, if_exists="replace", index=False)
+        conn.commit()
+    conn.close()
+    logger.info(f"Watchlist updated: {len(df)} items")
+    return True
 
 if __name__ == "__main__":
     pass
