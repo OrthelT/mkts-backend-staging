@@ -5,7 +5,6 @@ from sqlalchemy import text, select, insert, func, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert  # libSQL/SQLite
-
 from utils import get_type_name
 from dotenv import load_dotenv
 from logging_config import configure_logging
@@ -103,6 +102,11 @@ def insert_type_data(data: list[dict]):
     return data
 
 def upsert_remote_database(table: Base, df: pd.DataFrame)->bool:
+    #special handling for derived tables like MarketStats that should be completely cleared before updating
+    WIPE_REPLACE_TABLES = ["marketstats", "doctrines"]
+    tabname = table.__tablename__
+    is_wipe_replace = tabname in WIPE_REPLACE_TABLES
+    logger.info(f"Processing table: {tabname}, wipe_replace: {is_wipe_replace}")
     #refactored to use upsert instead of insert
     logger.info(f"Upserting {len(df)} rows into {table.__tablename__}")
     data = df.to_dict(orient="records")
@@ -120,38 +124,49 @@ def upsert_remote_database(table: Base, df: pd.DataFrame)->bool:
     remote_engine = db.remote_engine
     session = Session(bind=remote_engine)
 
-    t = table.__table__  # <-- the Table object behind the declarative class
-
-    # primary key column (assumes a single-column PK)
+    t = table.__table__
     pk_cols = list(t.primary_key.columns)
     if len(pk_cols) != 1:
         raise ValueError("This helper expects a single-column primary key.")
     pk_col = pk_cols[0]
-    # non-PK columns to update on conflict
-    non_pk_cols = [c for c in t.columns if c is not pk_col]
+
     try:
         logger.info(f"Upserting {len(data)} rows into {table.__tablename__}")
         with session.begin():
-            for idx in range(0, len(data), chunk_size):
-                chunk = data[idx: idx + chunk_size]
+            if is_wipe_replace:
+                logger.info(f"Wiping and replacing {len(data)} rows into {table.__tablename__}")
+                # --- Wipe & replace for derived tables (MarketStats, etc.) ---
+                session.query(table).delete()
+                logger.info(f"Wiped data from {table.__tablename__}")
 
-                base = sqlite_insert(t).values(chunk)
-                excluded = base.excluded  # EXCLUDED pseudo-table
+                for idx in range(0, len(data), chunk_size):
+                    chunk = data[idx: idx + chunk_size]
+                    stmt = insert(t).values(chunk)  # generic INSERT
+                    session.execute(stmt)
+                    logger.info(f"  • chunk {idx // chunk_size + 1}, {len(chunk)} rows")
 
-                # map: {"colname": EXCLUDED.colname, ...} for non-PK
-                set_mapping = {c.name: excluded[c.name] for c in non_pk_cols}
+                # Verify exact row count match
+                count = session.execute(select(func.count()).select_from(t)).scalar_one()
+                if count != len(data):
+                    raise RuntimeError(f"Row count mismatch: expected {len(data)}, got {count}")
+            else:
+                non_pk_cols = [c for c in t.columns if c not in pk_cols]
 
-                # NULL-safe change detection (SQLAlchemy compiles this for SQLite)
-                changed_pred = or_(*[c.is_distinct_from(excluded[c.name]) for c in non_pk_cols])
+                for idx in range(0, len(data), chunk_size):
+                    chunk = data[idx: idx + chunk_size]
+                    base = sqlite_insert(t).values(chunk)
+                    excluded = base.excluded  # EXCLUDED pseudo-table
+                    # map: {"colname": EXCLUDED.colname, ...} for non-PK
+                    set_mapping = {c.name: excluded[c.name] for c in non_pk_cols}
+                    changed_pred = or_(*[c.is_distinct_from(excluded[c.name]) for c in non_pk_cols])
 
-                stmt = base.on_conflict_do_update(
-                    index_elements=[pk_col],     # or [pk_col.name]
-                    set_=set_mapping,
-                    where=changed_pred           # only update if any value actually changed
-                )
-
-                session.execute(stmt)
-                logger.info(f"  • chunk {idx // chunk_size + 1}, {len(chunk)} rows")
+                    stmt = base.on_conflict_do_update(
+                        index_elements=[pk_col],     # or [pk_col.name]
+                        set_=set_mapping,
+                        where=changed_pred           # only update if any value actually changed
+                    )
+                    session.execute(stmt)
+                    logger.info(f"  • chunk {idx // chunk_size + 1}, {len(chunk)} rows")
 
             # sanity check: number of distinct PKs in incoming data <= table rowcount
             distinct_incoming = len({row[pk_col.name] for row in data})

@@ -42,8 +42,6 @@ class MarketStats(Base):
         last_update={self.last_update!r}
         """
 
-
-
 class MarketOrders(Base):
     __tablename__ = "marketorders"
     order_id: Mapped[int] = mapped_column(Integer, primary_key=True)
