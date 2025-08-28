@@ -52,7 +52,7 @@ class TypeInfo:
 
     def get_type_info(self):
         db = DatabaseConfig("sde")
-        stmt = sa.text("SELECT * FROM inv_info WHERE typeID = :type_id")
+        stmt = text("SELECT * FROM inv_info WHERE typeID = :type_id")
         engine = db.engine
         with engine.connect() as conn:
             result = conn.execute(stmt, {"type_id": self.type_id})
@@ -102,7 +102,9 @@ def insert_type_data(data: list[dict]):
             json.dump(unprocessed_data, f)
     return data
 
-def update_remote_database(table: Base, df: pd.DataFrame)->bool:
+def upsert_remote_database(table: Base, df: pd.DataFrame)->bool:
+    #refactored to use upsert instead of insert
+    logger.info(f"Upserting {len(df)} rows into {table.__tablename__}")
     data = df.to_dict(orient="records")
 
     MAX_PARAMETER_BYTES = 256 * 1024  # 256 KB
@@ -112,54 +114,63 @@ def update_remote_database(table: Base, df: pd.DataFrame)->bool:
     column_count = len(df.columns)
     chunk_size = min(2000, MAX_PARAMETERS // column_count)
 
-    print(f"Table {table.__tablename__} has {column_count} columns, using chunk size {chunk_size}")
+    logger.info(f"Table {table.__tablename__} has {column_count} columns, using chunk size {chunk_size}")
 
     db = DatabaseConfig("wcmkt3")
     remote_engine = db.remote_engine
     session = Session(bind=remote_engine)
 
-    try:
-        print(f"Updating {table.__tablename__} with {len(data)} rows")
-        with session.begin():
-            # 1. Wipe out old rows
-            session.query(table).delete()
+    t = table.__table__  # <-- the Table object behind the declarative class
 
-            # 2. Insert in chunks
+    # primary key column (assumes a single-column PK)
+    pk_cols = list(t.primary_key.columns)
+    if len(pk_cols) != 1:
+        raise ValueError("This helper expects a single-column primary key.")
+    pk_col = pk_cols[0]
+    # non-PK columns to update on conflict
+    non_pk_cols = [c for c in t.columns if c is not pk_col]
+    try:
+        logger.info(f"Upserting {len(data)} rows into {table.__tablename__}")
+        with session.begin():
             for idx in range(0, len(data), chunk_size):
                 chunk = data[idx: idx + chunk_size]
-                stmt  = insert(table).values(chunk)
-                session.execute(stmt)
-                print(f"  • chunk {idx // chunk_size + 1}, {len(chunk)} rows")
 
-            # 3. Verify the row count
-            count_stmt = select(func.count()).select_from(table)
-            count = session.execute(count_stmt).scalar_one()
-            if count != len(data):
-                raise RuntimeError(
-                    f"Row count mismatch: expected {len(data)}, got {count}"
+                base = sqlite_insert(t).values(chunk)
+                excluded = base.excluded  # EXCLUDED pseudo-table
+
+                # map: {"colname": EXCLUDED.colname, ...} for non-PK
+                set_mapping = {c.name: excluded[c.name] for c in non_pk_cols}
+
+                # NULL-safe change detection (SQLAlchemy compiles this for SQLite)
+                changed_pred = or_(*[c.is_distinct_from(excluded[c.name]) for c in non_pk_cols])
+
+                stmt = base.on_conflict_do_update(
+                    index_elements=[pk_col],     # or [pk_col.name]
+                    set_=set_mapping,
+                    where=changed_pred           # only update if any value actually changed
                 )
 
-        logger.info(f"Database updated successfully: {count} rows in {table.__tablename__}")
+                session.execute(stmt)
+                logger.info(f"  • chunk {idx // chunk_size + 1}, {len(chunk)} rows")
+
+            # sanity check: number of distinct PKs in incoming data <= table rowcount
+            distinct_incoming = len({row[pk_col.name] for row in data})
+            logger.info(f"distinct incoming: {distinct_incoming}")
+            count = session.execute(select(func.count()).select_from(t)).scalar_one()
+            if count < distinct_incoming:
+                raise RuntimeError(
+                    f"Row count too low: expected at least {distinct_incoming} unique {pk_col.name}s, got {count}"
+                )
+
+        logger.info(f"Upsert complete: {count} rows present in {table.__tablename__}")
         return True
 
     except SQLAlchemyError as e:
-        # any SQL error rolls back in the context manager
-        logger.error("Failed updating remote DB", exc_info=e)
+        logger.error("Failed upserting remote DB", exc_info=e)
         return False
-
     finally:
         session.close()
         remote_engine.dispose()
-
-def get_market_orders(type_id: int) -> pd.DataFrame:
-    db = DatabaseConfig("wcmkt3")
-    engine = db.engine
-    with engine.connect() as conn:
-        stmt = "SELECT * FROM marketorders WHERE type_id = ?"
-        result = conn.execute(stmt, (type_id,))
-        headers = [col[0] for col in result.description]
-    conn.close()
-    return pd.DataFrame(result.fetchall(), columns=headers)
 
 
 def get_market_history(type_id: int) -> pd.DataFrame:
@@ -259,7 +270,6 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
         logger.info(f"Added {type_info.type_name} to watchlist")
         print(f"Added {type_info.type_name} to watchlist")
 
-
 def update_history(history: list[dict]):
     valid_history_columns = MarketHistory.__table__.columns.keys()
     history_df = pd.DataFrame.from_records(history)
@@ -273,7 +283,7 @@ def update_history(history: list[dict]):
     history_df.fillna(0)
 
     try:
-        update_remote_database(MarketHistory, history_df)
+        upsert_remote_database(MarketHistory, history_df)
     except Exception as e:
         logger.error(f"history data update failed: {e}")
 
@@ -309,7 +319,7 @@ def update_market_orders(orders: list[dict])->bool:
         print(f"Orders fetched:{len(orders_df)} items")
         logger.info(f"Orders fetched:{len(orders_df)} items")
 
-        status = update_remote_database(MarketOrders, orders_df)
+        status = upsert_remote_database(MarketOrders, orders_df)
         if status:
             logger.info(f"Orders updated:{get_table_length('marketorders')} items")
             return True
@@ -320,15 +330,11 @@ def update_market_orders(orders: list[dict])->bool:
 
 if __name__ == "__main__":
 
-    with open("data/market_orders_new.json", "r") as f:
-        orders = json.load(f)
+    with open("data/market_history_new.json", "r") as f:
+        history = json.load(f)
 
-    status = update_market_orders(orders)
+    status = update_history(history)
     if status:
-        logger.info("Market orders updated")
+        logger.info("Market history updated")
     else:
-        logger.error("Failed to update market orders")
-        exit()
-
-    print(f"Market orders updated: {get_table_length('marketorders')} items")
-    logger.info(f"Market orders updated: {get_table_length('marketorders')} items")
+        logger.error("Failed to update market history")

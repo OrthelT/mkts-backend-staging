@@ -18,7 +18,7 @@ from proj_config import deployment_sys_id
 from config import DatabaseConfig, ESIConfig
 from jita import get_jita_prices_df
 from utils import add_timestamp, add_autoincrement, validate_columns, convert_datetime_columns
-from dbhandler import update_remote_database, get_remote_status, get_table_length
+from dbhandler import upsert_remote_database, get_remote_status, get_table_length
 
 def get_nakah_watchlist(esi: ESIConfig):
     watchlist = esi.get_watchlist()
@@ -466,7 +466,7 @@ def process_region_history(watchlist: pd.DataFrame):
     history_df.fillna(0)
 
     try:
-        update_remote_database(RegionHistory, history_df)
+        upsert_remote_database(RegionHistory, history_df)
     except Exception as e:
         logger.error(f"history data update failed: {e}")
 

@@ -1,7 +1,7 @@
 import sys
 import pandas as pd
 from logging_config import configure_logging
-from dbhandler import get_table_length, update_remote_database, update_history, update_market_orders
+from dbhandler import get_table_length, upsert_remote_database, update_history, update_market_orders
 from models import MarketOrders, MarketStats, Doctrines
 from utils import get_type_names, validate_columns, add_timestamp, add_autoincrement, convert_datetime_columns
 from data_processing import calculate_market_stats, calculate_doctrine_stats
@@ -72,6 +72,8 @@ def process_history():
     logger.info("Processing history")
     data = run_async_history()
     if data:
+        with open("data/market_history_new.json", "w") as f:
+            json.dump(data, f)
         status = update_history(data)
         if status:
             logger.info(f"History updated:{get_table_length('market_history')} items")
@@ -106,7 +108,7 @@ def process_market_stats():
         return False
     try:
         logger.info("Updating market stats in database")
-        status = update_remote_database(MarketStats, market_stats_df)
+        status = upsert_remote_database(MarketStats, market_stats_df)
         if status:
             logger.info(f"Market stats updated:{get_table_length('marketstats')} items")
             return True
@@ -122,7 +124,7 @@ def process_doctrine_stats():
     doctrine_stats_df = calculate_doctrine_stats()
     # Convert timestamp field to Python datetime objects for SQLite
     doctrine_stats_df = convert_datetime_columns(doctrine_stats_df, ['timestamp'])
-    status = update_remote_database(Doctrines, doctrine_stats_df)
+    status = upsert_remote_database(Doctrines, doctrine_stats_df)
     if status:
         logger.info(f"Doctrines updated:{get_table_length('doctrines')} items")
         return True
