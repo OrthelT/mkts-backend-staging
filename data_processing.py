@@ -3,7 +3,6 @@ import sqlalchemy as sa
 from sqlalchemy import create_engine, text, insert, select
 from logging_config import configure_logging
 from models import MarketStats, Doctrines, Watchlist, DeploymentWatchlist
-from proj_config import sde_local_url
 from config import DatabaseConfig, ESIConfig
 
 esi = ESIConfig("primary")

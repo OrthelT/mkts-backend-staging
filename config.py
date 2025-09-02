@@ -283,4 +283,5 @@ def verbose_sync(db: DatabaseConfig):
     print("---------------------------")
 
 if __name__ == "__main__":
-    pass
+    db = DatabaseConfig("wcmkt3")
+    db.validate_sync()

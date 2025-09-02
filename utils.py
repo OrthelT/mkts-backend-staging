@@ -4,14 +4,18 @@ import time
 import json
 import sqlalchemy as sa
 from sqlalchemy import text, create_engine
-from proj_config import sde_local_url, wcmkt_local_url, wc_fittings_local_db_url
 import requests
 logger = configure_logging(__name__)
 from jita import get_jita_prices
 from config import ESIConfig, DatabaseConfig
 
+sde_db = DatabaseConfig("sde")
+fittings_db = DatabaseConfig("fittings")
+wcmkt_db = DatabaseConfig("wcmkt3")
+
+
 def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
-    engine = sa.create_engine(sde_local_url)
+    engine = sa.create_engine(sde_db.url)
     with engine.connect() as conn:
         stmt = text("SELECT typeID, typeName, groupName, categoryName, categoryID FROM inv_info")
         res = conn.execute(stmt)
@@ -21,7 +25,7 @@ def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
     return df[["type_id", "type_name", "group_name", "category_name", "category_id"]]
 
 def get_type_name(type_id: int) -> str:
-    engine = sa.create_engine(sde_local_url)
+    engine = sa.create_engine(sde_db.url)
     with engine.connect() as conn:
         stmt = text("SELECT typeName FROM inv_info WHERE typeID = :type_id")
         res = conn.execute(stmt, {"type_id": type_id})
@@ -98,34 +102,8 @@ def standby(seconds: int):
         time.sleep(1)
     print()
 
-
-def simulate_market_orders() -> dict:
-    with open("data/market_orders.json", "r") as f:
-        data = json.load(f)
-    return data
-
-
-def simulate_market_history() -> dict:
-    df = pd.read_csv("data/valemarkethistory_2025-05-13_08-06-00.csv")
-    watchlist = pd.read_csv("data/all_watchlist.csv")
-    watchlist = watchlist[["type_id", "type_name"]]
-    df = df.merge(watchlist, on="type_id", how="left")
-    df = df[
-        [
-            "average",
-            "date",
-            "highest",
-            "lowest",
-            "order_count",
-            "volume",
-            "type_name",
-            "type_id",
-        ]
-    ]
-    return df.to_dict(orient="records")
-
 def get_status():
-    engine = sa.create_engine(wcmkt_local_url)
+    engine = sa.create_engine(wcmkt_db.url)
     with engine.connect() as conn:
         dcount = conn.execute(text("SELECT COUNT(id) FROM doctrines"))
         doctrine_count = dcount.fetchone()[0]
@@ -146,7 +124,7 @@ def get_status():
 
 def get_fit_items(fit_id: int) -> pd.DataFrame:
     table_list_stmt = "SELECT type_id, quantity FROM fittings_fittingitem WHERE fit_id = (:fit_id)"
-    engine = create_engine(wc_fittings_local_db_url)
+    engine = create_engine(fittings_db.url)
     raptor_fit = []
     with engine.connect() as conn:
         result = conn.execute(text(table_list_stmt), {"fit_id": fit_id})
@@ -168,7 +146,7 @@ def get_fit_items(fit_id: int) -> pd.DataFrame:
 
 def update_watchlist_data(esi: ESIConfig, watchlist_csv: str = "data/watchlist.csv")->bool:
     df = pd.read_csv(watchlist_csv)
-    db = DatabaseConfig("wcmkt3")
+    db = wcmkt_db
     engine = db.engine
     with engine.connect() as conn:
         df.to_sql("watchlist", conn, if_exists="replace", index=False)

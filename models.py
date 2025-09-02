@@ -1,7 +1,6 @@
 from sqlalchemy import String, Integer, DateTime, Float, Boolean, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
 import libsql
-from proj_config import wcmkt_local_url, wcmkt_db_path
 from utils import get_type_name
 from datetime import datetime, timezone
 import json
