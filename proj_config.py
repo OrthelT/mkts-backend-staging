@@ -13,4 +13,3 @@ deployment_sys_id = 30000072
 deployment_reg_id = 10000001
 
 user_agent = 'wcmkts_backend/1.0, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)'
-

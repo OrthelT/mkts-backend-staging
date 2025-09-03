@@ -298,7 +298,7 @@ def region_orders():
     region_orders = get_region_orders_from_db(deployment_region_id)
     update_remote_database(RegionOrders, region_orders)
     system_orders = process_system_orders(deployment_system_id)
-    
+
     # Update Google Sheet with system orders data
     try:
         update_google_sheet(system_orders)
@@ -333,7 +333,7 @@ def main(history: bool = False, region_only: bool = False):
         logger.info("******************")
         logger.info("******************")
         exit()
-    
+
     valid_columns = MarketOrders.__table__.columns.keys()
     valid_columns = [col for col in valid_columns]
 
@@ -369,13 +369,11 @@ def main(history: bool = False, region_only: bool = False):
     #     logger.info(f"Watchlist updated:{get_table_length('watchlist')} items")
     # except Exception as e:
     #     logger.error(f"Failed to update watchlist: {e}")
-    
+
     if history:
         logger.info("Processing history")
         process_history(watchlist)
 
-        nakah_watchlist = get_nakah_watchlist()
-        process_region_history(nakah_watchlist)
     else:
         logger.info("Skipping history processing")
 
@@ -411,7 +409,7 @@ def main(history: bool = False, region_only: bool = False):
     print(f"Doctrines updated:{get_table_length('doctrines')} items")
 
     region_orders()
-        
+
 
 if __name__ == "__main__":
 
@@ -423,5 +421,5 @@ if __name__ == "__main__":
             include_history = True
         elif "--region_only" in sys.argv:
             region_only = True
-    
+
     main(history=include_history, region_only=region_only)
