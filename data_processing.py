@@ -226,7 +226,7 @@ def calculate_region_stats() -> pd.DataFrame:
     ) AS h ON w.type_id = h.type_id
     """
 
-    engine = sa.create_engine(wcmkt_local_url)
+    engine = wcmkt_db.engine
 
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
@@ -305,7 +305,7 @@ def add_missing_items_to_watchlist():
         df.columns = res.keys()
         print(df.columns)
 
-    watchlist = get_watchlist()
+    watchlist = wcmkt_db.get_watchlist()
     inv_cols = ['typeID', 'typeName', 'groupID', 'groupName', 'categoryID',
        'categoryName']
     df = df[inv_cols]

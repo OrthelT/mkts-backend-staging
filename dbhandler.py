@@ -286,9 +286,63 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
         logger.info(f"Added {type_info.type_name} to watchlist")
         print(f"Added {type_info.type_name} to watchlist")
 
-def update_history(history: list[dict]):
+def update_history(history_results: list[list[dict]]):
+    """
+    Process history data from async_history results.
+    Each element in history_results corresponds to a type_id and contains
+    an array of history records for that type_id.
+    """
     valid_history_columns = MarketHistory.__table__.columns.keys()
-    history_df = pd.DataFrame.from_records(history)
+
+    # Get the type_ids that were processed (in same order as results)
+    watchlist = DatabaseConfig("wcmkt3").get_watchlist()
+    type_ids = watchlist["type_id"].unique().tolist()
+
+    # Flatten the nested array structure while preserving type_id association
+    flattened_history = []
+    for i, type_history in enumerate(history_results):
+        if i >= len(type_ids):
+            logger.warning(f"More history results than type_ids, skipping index {i}")
+            continue
+
+        type_id = type_ids[i]
+        if isinstance(type_history, list):
+            for record in type_history:
+                # Add type_id to each record
+                record['type_id'] = str(type_id)
+                flattened_history.append(record)
+        else:
+            # Handle case where type_history is not a list
+            type_history['type_id'] = str(type_id)
+            flattened_history.append(type_history)
+
+    if not flattened_history:
+        logger.error("No history data to process")
+        return False
+
+    history_df = pd.DataFrame.from_records(flattened_history)
+
+    # Check what columns we actually have
+    logger.info(f"Available columns: {list(history_df.columns)}")
+    logger.info(f"Expected columns: {list(valid_history_columns)}")
+
+    # Add type_name column by looking up type_id
+    from utils import get_type_name
+    history_df['type_name'] = history_df['type_id'].apply(lambda x: get_type_name(int(x)))
+
+    # Check if we have the required columns
+    missing_columns = set(valid_history_columns) - set(history_df.columns)
+    if missing_columns:
+        logger.error(f"Missing required columns: {missing_columns}")
+        # Add missing columns with default values
+        for col in missing_columns:
+            if col == 'id':
+                continue  # This will be added by add_autoincrement
+            elif col == 'timestamp':
+                continue  # This will be added by add_timestamp
+            else:
+                history_df[col] = 0
+
     history_df = add_timestamp(history_df)
     history_df = add_autoincrement(history_df)
 

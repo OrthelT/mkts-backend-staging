@@ -155,5 +155,16 @@ def update_watchlist_data(esi: ESIConfig, watchlist_csv: str = "data/watchlist.c
     logger.info(f"Watchlist updated: {len(df)} items")
     return True
 
+def init_databases():
+    aliases = [
+        "wcmkt3",
+        "sde",
+        "fittings",
+        "wcmkt2"]
+    for alias in aliases:
+        db = DatabaseConfig(alias)
+        db.verify_db_exists()
+        logger.info(f"Database {alias} verified")
+
 if __name__ == "__main__":
     pass

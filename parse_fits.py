@@ -6,14 +6,17 @@ from collections import defaultdict
 from datetime import datetime
 import pandas as pd
 from sqlalchemy import create_engine, text, insert, select, MetaData, Table
-import libsql
 
-from proj_config import wc_fittings_local_db_url, sde_local_url, wcmkt_local_url
 from logging_config import configure_logging
+from config import DatabaseConfig
 
-mkt_db = wcmkt_local_url
-sde_db = sde_local_url
-fittings_db = wc_fittings_local_db_url
+db = DatabaseConfig("wcmkt3")
+sde_db = DatabaseConfig("sde")
+fittings_db = DatabaseConfig("fittings")
+
+mkt_db = db.url
+sde_db = sde_db.url
+fittings_db = fittings_db.url
 
 logger = configure_logging(__name__)
 
@@ -52,7 +55,8 @@ class FittingItem:
                 self.fit_name = f"Default {self.ship_type_name} fit"
 
     def get_type_id(self) -> int:
-        engine = create_engine(sde_db, echo=False)
+        db = DatabaseConfig("sde")
+        engine = db.engine
         query = text("SELECT typeID FROM inv_info WHERE typeName = :type_name")
         with engine.connect() as conn:
             result = conn.execute(query, {"type_name": self.type_name}).fetchone()
@@ -80,10 +84,11 @@ class DoctrineFit:
         self.fit_name = self.get_fit_name()
         self.ship_type_id = self.get_ship_type_id()
         self.ship_name = self.get_ship_name()
-        
+
 
     def get_doctrine_name(self):
-        engine = create_engine(fittings_db)
+        db = DatabaseConfig("fittings")
+        engine = db.engine
         with engine.connect() as conn:
             stmt = text("SELECT * FROM fittings_doctrine WHERE id = :doctrine_id")
             result = conn.execute(stmt, {"doctrine_id": self.doctrine_id})
@@ -92,7 +97,8 @@ class DoctrineFit:
             return name.strip()
 
     def get_ship_type_id(self):
-        engine = create_engine(fittings_db)
+        db = DatabaseConfig("fittings")
+        engine = db.engine
         with engine.connect() as conn:
             stmt = text("SELECT * FROM fittings_fitting WHERE id = :fit_id")
             result = conn.execute(stmt, {"fit_id": self.fit_id})
@@ -100,7 +106,8 @@ class DoctrineFit:
             return type_id
 
     def get_fit_name(self):
-        engine = create_engine(fittings_db)
+        db = DatabaseConfig("fittings")
+        engine = db.engine
         with engine.connect() as conn:
             stmt = text("SELECT * FROM fittings_fitting WHERE id = :fit_id")
             result = conn.execute(stmt, {"fit_id": self.fit_id})
@@ -108,15 +115,17 @@ class DoctrineFit:
             return name.strip()
 
     def get_ship_name(self):
-        engine = create_engine(sde_local_url)
+        db = DatabaseConfig("sde")
+        engine = db.engine
         with engine.connect() as conn:
             stmt = text("SELECT * FROM inv_info WHERE typeID = :type_id")
             result = conn.execute(stmt, {"type_id": self.ship_type_id})
             name = result.fetchone()[1]
             return name.strip()
-        
+
     def add_wcmkts2_doctrine_fits(self):
-        engine = create_engine(wcmkt_local_url)
+        db = DatabaseConfig("wcmkt3")
+        engine = db.engine
         with engine.connect() as conn:
             stmt = text("INSERT INTO doctrine_fits (doctrine_name, fit_name, ship_type_id, doctrine_id, fit_id, ship_name, target) VALUES (:doctrine_name, :fit_name, :ship_type_id, :doctrine_id, :fit_id, :ship_name, :target)")
             conn.execute(stmt, {"doctrine_name": self.doctrine_name, "fit_name": self.fit_name, "ship_type_id": self.ship_type_id, "doctrine_id": self.doctrine_id, "fit_id": self.fit_id, "ship_name": self.ship_name, "target": self.target})
@@ -275,7 +284,7 @@ def process_fit(fit_file: str, fit_id: int):
         print("fit not inserted, exiting")
 
 def insert_fittings_fittingitems(df: pd.DataFrame):
- 
+
     engine = create_engine(fittings_db, echo=False)
     with engine.connect() as conn:
         conn.execute(text("PRAGMA foreign_keys = OFF"))

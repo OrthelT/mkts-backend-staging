@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy_orm import database
 import pandas as pd
 import time
+import pathlib
 
 import libsql
 from dotenv import load_dotenv
@@ -191,6 +192,16 @@ class DatabaseConfig:
         conn.close()
         return df
 
+    def verify_db_exists(self):
+        path = pathlib.Path(self.path)
+        if not path.exists():
+            logger.error(f"Database file does not exist: {self.path}")
+            self.sync()
+        else:
+            logger.info(f"Database file exists: {self.path}")
+            self.sync()
+        return True
+
 class GoogleSheetConfig:
     def __init__(self):
         self.google_private_key_file = "wcdoctrines-1f629d861c2f.json" #name of your google service account key file
@@ -283,5 +294,4 @@ def verbose_sync(db: DatabaseConfig):
     print("---------------------------")
 
 if __name__ == "__main__":
-    db = DatabaseConfig("wcmkt3")
-    db.validate_sync()
+    pass

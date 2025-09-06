@@ -11,6 +11,7 @@ from esi_requests import fetch_market_orders
 import json
 from async_history import run_async_history
 import time
+from utils import init_databases
 # ---------------------------------------------
 # ESI Structure Market Tools for Eve Online
 # ---------------------------------------------
@@ -135,8 +136,14 @@ def process_doctrine_stats():
 
 def main(history: bool = False):
     """Main function to process market orders, history, market stats, and doctrines"""
+    #initialize the databases
+    logger.info("Initializing databases")
+    init_databases()
+    logger.info("Databases initialized")
+
     #initialize the logger
     logger.info("Starting main function")
+
     esi = ESIConfig("primary")
     db = DatabaseConfig("wcmkt3")
 
