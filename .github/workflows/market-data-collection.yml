@@ -17,16 +17,16 @@ on:
 jobs:
   collect-market-data:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.12'
-        
+
     - name: Install uv
       uses: astral-sh/setup-uv@v2
       with:
@@ -34,13 +34,13 @@ jobs:
 
     - name: Install dependencies
       run: uv sync
-      
+
     - name: Create required directories
       run: |
         mkdir -p logs
         mkdir -p data
         mkdir -p databackup
-        
+
     - name: Set up environment variables
       run: |
         echo "CLIENT_ID=${{ secrets.EVE_CLIENT_ID }}" >> $GITHUB_ENV
@@ -49,9 +49,9 @@ jobs:
         echo "TURSO_AUTH_TOKEN=${{ secrets.TURSO_AUTH_TOKEN }}" >> $GITHUB_ENV
         echo "SDE_URL=${{ secrets.SDE_URL }}" >> $GITHUB_ENV
         echo "SDE_AUTH_TOKEN=${{ secrets.SDE_AUTH_TOKEN }}" >> $GITHUB_ENV
-        
 
-        
+
+
     - name: Set up Google Service Account
       run: |
         echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}' > wcdoctrines-1f629d861c2f.json
@@ -59,7 +59,7 @@ jobs:
     - name: Set up EVE SSO refresh token
       run: |
         echo "REFRESH_TOKEN=${{ secrets.EVE_REFRESH_TOKEN }}" >> $GITHUB_ENV
-        
+
     - name: Download watchlist data
       run: |
         # Create watchlist if it doesn't exist in the repo
@@ -73,13 +73,11 @@ jobs:
         # Create empty database files if they don't exist
         touch wcmkt2.db
         touch sde_info.db
-        
+
     - name: Run market data collection
       run: |
         if [ "${{ github.event.inputs.include_history }}" = "true" ]; then
           uv run python main.py --history
-        elif [ "${{ github.event.inputs.region_only }}" = "true" ]; then
-          uv run python main.py --region_only
         elif [ "$(date -u +%H)" = "12" ]; then
           # Run with --history flag at 12:00 UTC
           uv run python main.py --history
@@ -88,7 +86,7 @@ jobs:
           uv run python main.py
         fi
       timeout-minutes: 30
-      
+
     - name: Upload logs as artifacts
       uses: actions/upload-artifact@v4
       if: always()
@@ -96,7 +94,7 @@ jobs:
         name: market-data-logs-${{ github.run_number }}
         path: logs/
         retention-days: 7
-        
+
     - name: Upload generated data as artifacts
       uses: actions/upload-artifact@v4
       if: always()
@@ -108,7 +106,7 @@ jobs:
           nakah_stats.csv
           market_orders.csv
         retention-days: 7
-        
+
     - name: Clean up sensitive files
       if: always()
       run: |
