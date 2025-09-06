@@ -68,6 +68,14 @@ jobs:
       run: |
         echo "REFRESH_TOKEN=${{ secrets.EVE_REFRESH_TOKEN }}" >> $GITHUB_ENV
 
+    - name: Debug environment variables
+      run: |
+        echo "Checking if required environment variables are set:"
+        echo "CLIENT_ID is set: $([ -n "$CLIENT_ID" ] && echo "YES" || echo "NO")"
+        echo "SECRET_KEY is set: $([ -n "$SECRET_KEY" ] && echo "YES" || echo "NO")"
+        echo "REFRESH_TOKEN is set: $([ -n "$REFRESH_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "REFRESH_TOKEN length: ${#REFRESH_TOKEN}"
+
     - name: Download watchlist data
       run: |
         # Create watchlist if it doesn't exist in the repo
