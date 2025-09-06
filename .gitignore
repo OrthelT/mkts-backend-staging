@@ -27,3 +27,5 @@ scratch.py
 backup
 backup/
 archive/
+envtest.txt
+parseenv.py
