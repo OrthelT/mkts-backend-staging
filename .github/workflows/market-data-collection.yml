@@ -75,6 +75,16 @@ jobs:
         echo "SECRET_KEY is set: $([ -n "$SECRET_KEY" ] && echo "YES" || echo "NO")"
         echo "REFRESH_TOKEN is set: $([ -n "$REFRESH_TOKEN" ] && echo "YES" || echo "NO")"
         echo "REFRESH_TOKEN length: ${#REFRESH_TOKEN}"
+        echo "TURSO_MKT_URL is set: $([ -n "$TURSO_MKT_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_MKT_TOKEN is set: $([ -n "$TURSO_MKT_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_SDE_URL is set: $([ -n "$TURSO_SDE_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_SDE_TOKEN is set: $([ -n "$TURSO_SDE_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_FITTING_URL is set: $([ -n "$TURSO_FITTING_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_FITTING_TOKEN is set: $([ -n "$TURSO_FITTING_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKT2_URL is set: $([ -n "$TURSO_WCMKT2_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKT2_TOKEN is set: $([ -n "$TURSO_WCMKT2_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKT3_URL is set: $([ -n "$TURSO_WCMKT3_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKT3_TOKEN is set: $([ -n "$TURSO_WCMKT3_TOKEN" ] && echo "YES" || echo "NO")"
 
     - name: Download watchlist data
       run: |

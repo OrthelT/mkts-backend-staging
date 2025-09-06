@@ -199,7 +199,7 @@ class DatabaseConfig:
             self.sync()
         else:
             logger.info(f"Database file exists: {self.path}")
-            self.sync()
+
         return True
 
 class GoogleSheetConfig:

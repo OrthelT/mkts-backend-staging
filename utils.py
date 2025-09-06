@@ -162,6 +162,7 @@ def init_databases():
         "fittings",
         "wcmkt2"]
     for alias in aliases:
+        logger.info(f"Initializing database {alias}")
         db = DatabaseConfig(alias)
         db.verify_db_exists()
         logger.info(f"Database {alias} verified")
