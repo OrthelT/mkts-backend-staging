@@ -49,6 +49,14 @@ jobs:
         echo "TURSO_AUTH_TOKEN=${{ secrets.TURSO_AUTH_TOKEN }}" >> $GITHUB_ENV
         echo "SDE_URL=${{ secrets.SDE_URL }}" >> $GITHUB_ENV
         echo "SDE_AUTH_TOKEN=${{ secrets.SDE_AUTH_TOKEN }}" >> $GITHUB_ENV
+        echo "TURSO_MKT_URL=${{ secrets.TURSO_MKT_URL }}" >> $GITHUB_ENV
+        echo "TURSO_MKT_TOKEN=${{ secrets.TURSO_MKT_TOKEN }}" >> $GITHUB_ENV
+        echo "TURSO_SDE_URL=${{ secrets.TURSO_SDE_URL }}" >> $GITHUB_ENV
+        echo "TURSO_SDE_TOKEN=${{ secrets.TURSO_SDE_TOKEN }}" >> $GITHUB_ENV
+        echo "TURSO_FITTING_URL=${{ secrets.TURSO_FITTING_URL }}" >> $GITHUB_ENV
+        echo "TURSO_FITTING_TOKEN=${{ secrets.TURSO_FITTING_TOKEN }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKT2_URL=${{ secrets.TURSO_WCMKT2_URL }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKT2_TOKEN=${{ secrets.TURSO_WCMKT2_TOKEN }}" >> $GITHUB_ENV
 
 
 
