@@ -163,9 +163,17 @@ def init_databases():
         "wcmkt2"]
     for alias in aliases:
         logger.info(f"Initializing database {alias}")
-        db = DatabaseConfig(alias)
-        db.verify_db_exists()
-        logger.info(f"Database {alias} verified")
+        try:
+            db = DatabaseConfig(alias)
+            logger.info(f"Database {alias} initialized")
+        except Exception as e:
+            logger.error(f"Error initializing database {alias}: {e}")
+            continue
+        try:
+            db.verify_db_exists()
+            logger.info(f"Database {alias} verified")
+        except Exception as e:
+            logger.error(f"Error initializing database {alias}: {e}")
 
 if __name__ == "__main__":
     pass
