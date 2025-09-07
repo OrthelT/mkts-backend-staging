@@ -50,6 +50,10 @@ def get_token(requested_scope):
     if not token:
         logger.info("No token.json → refreshing from GitHub secret")
         try:
+            logger.info(f"Attempting to refresh token with CLIENT_ID: {CLIENT_ID[:8]}...")
+            logger.info(f"Refresh token length: {len(REFRESH_TOKEN) if REFRESH_TOKEN else 'None'}")
+            logger.info(f"Requested scope: {requested_scope}")
+
             token = OAuth2Session(CLIENT_ID, scope=requested_scope).refresh_token(
                 TOKEN_URL,
                 refresh_token=REFRESH_TOKEN,
@@ -57,9 +61,12 @@ def get_token(requested_scope):
                 client_secret=SECRET_KEY
             )
             save_token(token)
+            logger.info("Token refreshed successfully")
             return token
         except Exception as e:
             logger.error(f"Failed to refresh token: {e}")
+            logger.error(f"CLIENT_ID: {CLIENT_ID}")
+            logger.error(f"REFRESH_TOKEN length: {len(REFRESH_TOKEN) if REFRESH_TOKEN else 'None'}")
             raise
     else:
         # 2) Cache exists → auto‑refresh if expired
