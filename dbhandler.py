@@ -8,7 +8,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert  # libSQL/SQLite
 from utils import get_type_name
 from dotenv import load_dotenv
 from logging_config import configure_logging
-from models import Base, MarketHistory,MarketOrders
+from models import Base, MarketHistory,MarketOrders, MarketStats
 
 from dataclasses import dataclass, field
 from config import DatabaseConfig
@@ -25,7 +25,7 @@ logger = configure_logging(__name__)
 # wcfittings_db_path = wcfittings_db_path
 # fittings_local_url = wc_fittings_local_db_url
 
-db = DatabaseConfig("wcmkt3")
+db = DatabaseConfig("wcmkt")
 wcmkt_path = db.path
 wcmkt_local_url = db.url
 wcmkt_turso_url = db.turso_url
@@ -120,7 +120,10 @@ def upsert_remote_database(table: Base, df: pd.DataFrame)->bool:
 
     logger.info(f"Table {table.__tablename__} has {column_count} columns, using chunk size {chunk_size}")
 
-    db = DatabaseConfig("wcmkt3")
+    db = DatabaseConfig("wcmkt")
+    print(f"db: {db}")
+    logger.info(f"updating: {db}")
+
     remote_engine = db.remote_engine
     session = Session(bind=remote_engine)
 
@@ -190,7 +193,7 @@ def upsert_remote_database(table: Base, df: pd.DataFrame)->bool:
         remote_engine.dispose()
 
 def get_market_history(type_id: int) -> pd.DataFrame:
-    db = DatabaseConfig("wcmkt3")
+    db = DatabaseConfig("wcmkt")
     engine = db.engine
     with engine.connect() as conn:
         stmt = "SELECT * FROM market_history WHERE type_id = ?"
@@ -200,7 +203,7 @@ def get_market_history(type_id: int) -> pd.DataFrame:
     return pd.DataFrame(result.fetchall(), columns=headers)
 
 def get_table_length(table: str) -> int:
-    db = DatabaseConfig("wcmkt3")
+    db = DatabaseConfig("wcmkt")
     engine = db.engine
     with engine.connect() as conn:
         stmt = text(f"SELECT COUNT(*) FROM {table}")
@@ -208,18 +211,18 @@ def get_table_length(table: str) -> int:
         return result.fetchone()[0]
 
 def get_remote_table_list():
-    db = DatabaseConfig("wcmkt3")
+    db = DatabaseConfig("wcmkt")
     remote_tables = db.get_table_list()
     return remote_tables
 
 def get_remote_status():
-    db = DatabaseConfig("wcmkt3")
+    db = DatabaseConfig("wcmkt")
     status_dict = db.get_status()
     return status_dict
 
 def get_watchlist_ids():
     stmt = text("SELECT DISTINCT type_id FROM watchlist")
-    db = DatabaseConfig("wcmkt3")
+    db = DatabaseConfig("wcmkt")
     engine = db.engine
     with engine.connect() as conn:
         result = conn.execute(stmt)
@@ -276,7 +279,7 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
 
     for type_info in missing_type_info:
         stmt5 = text("INSERT INTO watchlist (type_id, type_name, group_name, category_name, category_id, group_id) VALUES (:type_id, :type_name, :group_name, :category_name, :category_id, :group_id)")
-        db = DatabaseConfig("wcmkt3")
+        db = DatabaseConfig("wcmkt")
         engine = db.engine
         with engine.connect() as conn:
             conn.execute(stmt5, {"type_id": type_info.type_id, "type_name": type_info.type_name, "group_name": type_info.group_name, "category_name": type_info.category_name, "category_id": type_info.category_id, "group_id": type_info.group_id})
@@ -295,7 +298,7 @@ def update_history(history_results: list[list[dict]]):
     valid_history_columns = MarketHistory.__table__.columns.keys()
 
     # Get the type_ids that were processed (in same order as results)
-    watchlist = DatabaseConfig("wcmkt3").get_watchlist()
+    watchlist = DatabaseConfig("wcmkt").get_watchlist()
     type_ids = watchlist["type_id"].unique().tolist()
 
     # Flatten the nested array structure while preserving type_id association

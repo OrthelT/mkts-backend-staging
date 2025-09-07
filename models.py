@@ -26,7 +26,7 @@ class MarketStats(Base):
     last_update: Mapped[DateTime] = mapped_column(DateTime)
 
     def __repr__(self) -> str:
-        f"""marketstats(type_id={self.type_id!r},
+        return f"""marketstats(type_id={self.type_id!r},
         total_volume_remain={self.total_volume_remain!r},
         min_price={self.min_price!r},
         price={self.price!r},
@@ -39,7 +39,7 @@ class MarketStats(Base):
         category_name={self.category_name!r},
         days_remaining={self.days_remaining!r},
         last_update={self.last_update!r}
-        """
+        )"""
 
 class MarketOrders(Base):
     __tablename__ = "marketorders"
@@ -53,7 +53,7 @@ class MarketOrders(Base):
     volume_remain: Mapped[int] = mapped_column(Integer, nullable=True)
 
     def __repr__(self) -> str:
-        f"""marketorders(
+        return f"""marketorders(
         order_id={self.order_id!r},
         is_buy_order={self.is_buy_order!r},
         type_id={self.type_id!r},
@@ -79,7 +79,7 @@ class MarketHistory(Base):
     timestamp: Mapped[DateTime] = mapped_column(DateTime)
 
     def __repr__(self) -> str:
-        f"""market_history(
+        return f"""market_history(
         date={self.date!r},
         type_name={self.type_name!r},
         type_id={self.type_id!r},
@@ -114,7 +114,7 @@ class Doctrines(Base):
     timestamp: Mapped[DateTime] = mapped_column(DateTime)
 
     def __repr__(self) -> str:
-        f"""doctrines(
+        return f"""doctrines(
         fit_id={self.fit_id!r},
         ship_id={self.ship_id!r},
         ship_name={self.ship_name!r},
@@ -146,7 +146,7 @@ class ShipTargets(Base):
     created_at: Mapped[DateTime] = mapped_column(DateTime)
 
     def __repr__(self) -> str:
-        f"""ship_targets(
+        return f"""ship_targets(
         fit_id={self.fit_id!r},
         fit_name={self.fit_name!r},
         ship_id={self.ship_id!r},
@@ -162,7 +162,7 @@ class DoctrineMap(Base):
     fitting_id: Mapped[int] = mapped_column(Integer)
 
     def __repr__(self) -> str:
-        f"""doctrine_map(
+        return f"""doctrine_map(
         doctrine_id={self.doctrine_id!r},
         fitting_id={self.fitting_id!r}
         )"""
@@ -196,7 +196,7 @@ class NakahWatchlist(Base):
     category_name: Mapped[str] = mapped_column(String)
 
     def __repr__(self) -> str:
-        f"""watchlist(
+        return f"""watchlist(
         type_id={self.type_id!r},
         group_id={self.group_id!r},
         type_name={self.type_name!r},
@@ -315,7 +315,7 @@ class DeploymentWatchlist(Base):
     category_name: Mapped[str] = mapped_column(String, nullable=True)
 
     def __repr__(self) -> str:
-        f"""deployment_watchlist(
+        return f"""deployment_watchlist(
         type_id={self.type_id!r},
         group_id={self.group_id!r},
         type_name={self.type_name!r},
@@ -359,8 +359,6 @@ class RegionStats(Base):
 
 if __name__ == "__main__":
     pass
-
-    print(Watchlist.__repr__)
 
 # Event listeners to automatically populate type_name fields
 @event.listens_for(RegionHistory, 'before_insert')

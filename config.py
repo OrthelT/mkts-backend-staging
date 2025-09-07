@@ -21,6 +21,10 @@ load_dotenv()
 logger = configure_logging(__name__)
 
 class DatabaseConfig:
+    #configure this variable. It enables switching the db call across the application between wcmkt3 and wcmkt2.
+    #this is useful for testing and development.
+    wcdbmap = "wcmkt3"
+
     _db_paths = {
         "wcmkt3": "wcmkt3.db", #testing database
         "sde": "sde_info.db",
@@ -43,9 +47,17 @@ class DatabaseConfig:
     }
 
     def __init__(self, alias: str, dialect: str = "sqlite+libsql"):
+
+        if alias == "wcmkt":
+            alias = self.wcdbmap
+        elif alias == "wcmkt3" or alias == "wcmkt2":
+            logger.warning(f"Database alias '{alias}' is deprecated. Configure wcdbmap in config.py to select wcmkt2 or wcmkt3 instead.")
+
+
         if alias not in self._db_paths:
             raise ValueError(f"Unknown database alias '{alias}'. "
                              f"Available: {list(self._db_paths.keys())}")
+
 
         self.alias = alias
         self.path = self._db_paths[alias]
@@ -98,7 +110,6 @@ class DatabaseConfig:
             logger.info("Syncing database...")
             result = conn.sync()
         conn.close()
-
 
     def validate_sync(self)-> bool:
         alias = self.alias
@@ -287,11 +298,6 @@ class ESIConfig:
             raise ValueError(f"Invalid alias: {self.alias}. Valid aliases are: {self._valid_aliases}")
 
 
-def verbose_sync(db: DatabaseConfig):
-    sync_state = db.sync()
-    print("---------------------------")
-    print(f"sync_state: {sync_state}")
-    print("---------------------------")
-
 if __name__ == "__main__":
+
     pass

@@ -1,18 +1,16 @@
 import pandas as pd
 from logging_config import configure_logging
 import time
-import json
 import sqlalchemy as sa
 from sqlalchemy import text, create_engine
 import requests
 logger = configure_logging(__name__)
-from jita import get_jita_prices
 from config import ESIConfig, DatabaseConfig
+
 
 sde_db = DatabaseConfig("sde")
 fittings_db = DatabaseConfig("fittings")
-wcmkt_db = DatabaseConfig("wcmkt3")
-
+wcmkt_db = DatabaseConfig("wcmkt")
 
 def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
     engine = sa.create_engine(sde_db.url)

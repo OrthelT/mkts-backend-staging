@@ -54,7 +54,7 @@ async def call_one(client: httpx.AsyncClient, type_id: int, length: int) -> dict
             return r.json()
 
 async def async_history():
-    watchlist = DatabaseConfig("wcmkt3").get_watchlist()
+    watchlist = DatabaseConfig("wcmkt").get_watchlist()
     type_ids = watchlist["type_id"].unique().tolist() # example list of 835 IDs
 
     length = len(type_ids)

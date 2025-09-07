@@ -20,9 +20,10 @@ from utils import init_databases
 
 logger = configure_logging(__name__)
 
+
 def check_tables():
     tables = ["doctrines", "marketstats", "marketorders", "market_history"]
-    db = DatabaseConfig("wcmkt3")
+    db = DatabaseConfig("wcmkt")
     tables = db.get_table_list()
 
     for table in tables:
@@ -145,7 +146,7 @@ def main(history: bool = False):
     logger.info("Starting main function")
 
     esi = ESIConfig("primary")
-    db = DatabaseConfig("wcmkt3")
+    db = DatabaseConfig("wcmkt")
 
     #process market orders
     print("=" * 80)

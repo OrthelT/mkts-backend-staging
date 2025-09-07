@@ -6,7 +6,7 @@ from models import MarketStats, Doctrines, Watchlist, DeploymentWatchlist
 from config import DatabaseConfig, ESIConfig
 
 esi = ESIConfig("primary")
-wcmkt_db = DatabaseConfig("wcmkt3")
+wcmkt_db = DatabaseConfig("wcmkt")
 sde_db = DatabaseConfig("sde")
 
 logger = configure_logging(__name__)
@@ -156,141 +156,7 @@ def calculate_doctrine_stats() -> pd.DataFrame:
 
     return doctrine_stats
 
-def calculate_region_5_percentile_price() -> pd.DataFrame:
-    """Calculate 5th percentile price for region orders"""
-    query = """
-    SELECT
-    type_id,
-    price
-    FROM region_orders
-    WHERE is_buy_order = 0
-    """
 
-    engine = wcmkt_db.engine
-
-    with engine.connect() as conn:
-        df = pd.read_sql_query(query, conn)
-    engine.dispose()
-
-    if df.empty:
-        logger.warning("No region orders found for 5th percentile calculation")
-        return pd.DataFrame(columns=["type_id", "5_perc_price"])
-
-    df = df.groupby("type_id")["price"].quantile(0.05).reset_index()
-    df.price = df.price.apply(lambda x: round(x, 2))
-    df.columns = ["type_id", "5_perc_price"]
-    return df
-
-def calculate_region_stats() -> pd.DataFrame:
-    """
-    Calculate region statistics using deployment_watchlist, region_orders, and region_history.
-    Adapted from calculate_market_stats for regional data.
-    """
-    query = """
-    SELECT
-    w.type_id,
-    w.type_name,
-    w.group_name,
-    w.category_name,
-    w.category_id,
-    w.group_id,
-    o.min_price,
-    o.total_volume_remain,
-    h.avg_price,
-    h.avg_volume,
-    ROUND(CASE
-    WHEN h.avg_volume > 0 THEN o.total_volume_remain / h.avg_volume
-    ELSE 0
-    END, 2) as days_remaining
-
-    FROM deployment_watchlist w
-
-    LEFT JOIN (
-    SELECT
-        type_id,
-        MIN(price) as min_price,
-        SUM(volume_remain) as total_volume_remain
-    FROM region_orders
-        WHERE is_buy_order = 0
-        GROUP BY type_id
-    ) AS o
-    ON w.type_id = o.type_id
-    LEFT JOIN (
-    SELECT
-        type_id,
-        AVG(average) as avg_price,
-        AVG(volume) as avg_volume
-    FROM region_history
-    WHERE date >= DATE('now', '-30 day') AND average > 0 AND volume > 0
-    GROUP BY type_id
-    ) AS h ON w.type_id = h.type_id
-    """
-
-    engine = wcmkt_db.engine
-
-    with engine.connect() as conn:
-        df = pd.read_sql_query(query, conn)
-        logger.info(f"Region stats queried: {df.shape[0]} items")
-
-    engine.dispose()
-
-    if df.empty:
-        logger.warning("No region stats data found")
-        return pd.DataFrame()
-
-    logger.info(f"Calculating region 5 percentile price")
-    df2 = calculate_region_5_percentile_price()
-
-    logger.info(f"Merging 5 percentile price with region stats")
-    df = df.merge(df2, on="type_id", how="left")
-
-    logger.info(f"Processing region stats data")
-    df.days_remaining = df.days_remaining.apply(lambda x: round(x, 1))
-    df = df.rename(columns={"5_perc_price": "price"})
-    df["last_update"] = pd.Timestamp.now(tz="UTC")
-
-    # Get columns from RegionStats model
-    from models import RegionStats
-    db_cols = RegionStats.__table__.columns.keys()
-    df = df[db_cols]
-
-    df["avg_price"] = df["avg_price"].apply(lambda x: round(x, 2))
-    df["avg_volume"] = df["avg_volume"].apply(lambda x: round(x, 1))
-    df = df.infer_objects()
-    df = df.fillna(0)
-    df["total_volume_remain"] = df["total_volume_remain"].astype(int)
-
-    logger.info(f"Region stats calculated: {df.shape[0]} items")
-    return df
-
-def get_deployment_watchlist() -> pd.DataFrame:
-    query = """
-    SELECT
-    *
-    FROM deployment_watchlist
-    """
-    engine = wcmkt_db.engine
-    with engine.connect() as conn:
-        df = pd.read_sql_query(query, conn)
-    engine.dispose()
-    return df
-
-def generate_deployment_watchlist(csv_file_path: str = "data/nakah_watchlist_updated.csv"):
-    df = pd.read_csv(csv_file_path)
-
-
-    engine = wcmkt_db.engine
-
-
-    with engine.connect() as conn:
-        df.to_sql("deployment_watchlist", if_exists="replace", con=conn, index=False)
-        stmt = text("SELECT COUNT(*) FROM deployment_watchlist")
-        res = conn.execute(stmt)
-        data = res.fetchone()[0]
-        if data > 0:
-            logger.info(f"deployment watchlist updated with {data} items")
-        else:
-            logger.error("deployment_watchlist updated failed, no data present")
 
 def add_missing_items_to_watchlist():
     missing = [21889, 21888, 21890, 47926, 2629, 16274, 17889, 17888, 17887, 41490, 32014, 16273]

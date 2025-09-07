@@ -6,11 +6,12 @@ from collections import defaultdict
 from datetime import datetime
 import pandas as pd
 from sqlalchemy import create_engine, text, insert, select, MetaData, Table
+from sqlalchemy.orm import Session
 
 from logging_config import configure_logging
 from config import DatabaseConfig
 
-db = DatabaseConfig("wcmkt3")
+db = DatabaseConfig("wcmkt")
 sde_db = DatabaseConfig("sde")
 fittings_db = DatabaseConfig("fittings")
 
@@ -124,7 +125,7 @@ class DoctrineFit:
             return name.strip()
 
     def add_wcmkts2_doctrine_fits(self):
-        db = DatabaseConfig("wcmkt3")
+        db = DatabaseConfig("wcmkt")
         engine = db.engine
         with engine.connect() as conn:
             stmt = text("INSERT INTO doctrine_fits (doctrine_name, fit_name, ship_type_id, doctrine_id, fit_id, ship_name, target) VALUES (:doctrine_name, :fit_name, :ship_type_id, :doctrine_id, :fit_id, :ship_name, :target)")
@@ -274,7 +275,9 @@ def process_fit(fit_file: str, fit_id: int):
 
     fitdf = pd.DataFrame(fit, columns=['flag', 'quantity', 'type_id', 'fit_id', 'type_fk_id'])
     print(fitdf)
+
     pd.set_option('display.max_columns', None)
+    exit()
 
     confirm = input("Fit look ok? (Y to continue)")
     if confirm == "Y":
@@ -515,4 +518,5 @@ def check_type_ids(type_ids: list[int])->list[int] | None:
         return None
 
 if __name__ == '__main__':
+
     pass

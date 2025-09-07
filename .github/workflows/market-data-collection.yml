@@ -5,7 +5,8 @@ on:
     # Run with --history flag daily at 12:00 UTC
     - cron: '0 12 * * *'
     # Run every 2 hours without flags
-    - cron: '0 */2 * * *'
+    - cron: '0 0,2,4,6,8,10,14,16,18,20,22 * * *'
+
   workflow_dispatch: # Allow manual triggering
     inputs:
       include_history:
@@ -91,8 +92,6 @@ jobs:
       run: |
         # Remove any existing database files to ensure clean initialization
         rm -f wcmkt3.db wcmkt3.db-* sde_info.db sde_info.db-* wcfitting.db wcfitting.db-* wcmkt2.db wcmkt2.db-*
-
-
 
     - name: Run market data collection
       run: |
