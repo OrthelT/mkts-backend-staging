@@ -4,12 +4,11 @@ from sqlalchemy import create_engine, MetaData, inspect, text, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy_orm import database
 import pandas as pd
-import time
 import pathlib
 
 import libsql
 from dotenv import load_dotenv
-from config.logging_config import configure_logging
+from .logging_config import configure_logging
 
 load_dotenv()
 
