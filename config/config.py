@@ -9,10 +9,6 @@ import pathlib
 
 import libsql
 from dotenv import load_dotenv
-
-import sqlite3 as sql
-from esi.esi_auth import get_token
-import requests
 from config.logging_config import configure_logging
 
 load_dotenv()
@@ -98,7 +94,7 @@ class DatabaseConfig:
     @property
     def sqlite_local_connect(self):
         if self._sqlite_local_connect is None:
-            self._sqlite_local_connect = sql.connect(self.path)
+            self._sqlite_local_connect = libsql.connect(self.path)
         return self._sqlite_local_connect
 
     def sync(self):
@@ -215,5 +211,4 @@ class DatabaseConfig:
 
 
 if __name__ == "__main__":
-
     pass

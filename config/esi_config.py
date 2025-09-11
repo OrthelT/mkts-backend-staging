@@ -1,5 +1,5 @@
 from esi.esi_auth import get_token
-from config.logging_config import configure_logging
+from .logging_config import configure_logging
 logger = configure_logging(__name__)
 
 
@@ -16,6 +16,8 @@ class ESIConfig:
     A typical configuration might be to set the primary market as your nullsec staging citadel and the secondary market as Jita 4-4.
 
     Configure the variables below as needed. You can optionally define a shortcut alias for the primary or secondary market. if it helps you remember the alias. Set names to match your aliases, this is primarily used for logging.
+
+    Note: Secondary market is no longer used in the current deployment, and will need some refactoring to be used again.
     """
 
     _region_ids = {"primary_region_id": 10000003, "secondary_region_id": None}

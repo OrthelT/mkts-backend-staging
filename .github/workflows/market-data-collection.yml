@@ -55,11 +55,8 @@ jobs:
         echo "TURSO_WCMKT2_URL=${{ secrets.TURSO_WCMKT2_URL }}" >> $GITHUB_ENV
         echo "TURSO_WCMKT2_TOKEN=${{ secrets.TURSO_WCMKT2_TOKEN }}" >> $GITHUB_ENV
 
-
-
-    - name: Set up Google Service Account
-      run: |
-        echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}' > wcdoctrines-1f629d861c2f.json
+    #- name: Set up Google Service Account
+      #run: not currently implemented. add reference to secrets.GOOGLE_SHEET_KEY to use.
 
     - name: Set up EVE SSO refresh token
       run: |

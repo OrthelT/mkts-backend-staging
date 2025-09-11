@@ -29,3 +29,8 @@ backup/
 archive/
 envtest.txt
 parseenv.py
+data/
+*.db-*
+*.db
+.env
+.vscode/
