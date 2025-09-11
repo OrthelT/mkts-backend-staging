@@ -1,9 +1,19 @@
 import pandas as pd
 import sqlalchemy as sa
 from sqlalchemy import create_engine, text, insert, select
-from logging_config import configure_logging
-from models import MarketStats, Doctrines, Watchlist, DeploymentWatchlist
-from config import DatabaseConfig, ESIConfig
+from config.logging_config import configure_logging
+from db.models import MarketStats, Doctrines, Watchlist, DeploymentWatchlist
+from config.config import DatabaseConfig
+from config.esi_config import ESIConfig
+from db.db_queries import get_region_history
+from esi.esi_requests import fetch_region_history
+from utils.utils import add_timestamp, add_autoincrement, validate_columns, convert_datetime_columns
+from db.db_handlers import upsert_remote_database
+from db.db_queries import get_table_length, get_remote_status
+from db.models import RegionHistory
+from db.db_queries import get_system_orders_from_db
+from utils.utils import get_type_names
+from datetime import datetime, timezone
 
 esi = ESIConfig("primary")
 wcmkt_db = DatabaseConfig("wcmkt")
@@ -150,97 +160,47 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     doctrine_stats["fits_on_mkt"] = doctrine_stats["fits_on_mkt"].astype(int)
     doctrine_stats["avg_vol"] = doctrine_stats["avg_vol"].astype(int)
     doctrine_stats = doctrine_stats.reset_index(drop=True)
-
-    val_cols = Doctrines.__table__.columns.keys()
-    col_compare = set(doctrine_stats.columns) - set(val_cols)
-
     return doctrine_stats
 
+def process_system_orders(system_id: int) -> pd.DataFrame:
+    df = get_system_orders_from_db(system_id)
+    df = df[df['is_buy_order'] == False]
+    df2 = df.copy()
+    nakah_mkt = 60014068
+    nakah_df = df[df.location_id == nakah_mkt].reset_index(drop=True)
+    nakah_df = nakah_df[["price","type_id","volume_remain"]]
+    nakah_df = nakah_df.groupby("type_id").agg({"price": lambda x: x.quantile(0.05), "volume_remain": "sum"}).reset_index()
+    nakah_ids = nakah_df["type_id"].unique().tolist()
+    type_names = get_type_names(nakah_ids)
+    nakah_df = nakah_df.merge(type_names, on="type_id", how="left")
+    nakah_df = nakah_df[["type_id", "type_name", "group_name", "category_name", "price", "volume_remain"]]
+    nakah_df['timestamp'] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    nakah_df.to_csv("nakah_stats.csv", index=False)
+    return nakah_df
 
+def process_region_history(watchlist: pd.DataFrame):
+    region_history = fetch_region_history(watchlist)
+    valid_history_columns = RegionHistory.__table__.columns.keys()
+    history_df = pd.DataFrame.from_records(region_history)
+    history_df = add_timestamp(history_df)
+    history_df = add_autoincrement(history_df)
+    history_df = validate_columns(history_df, valid_history_columns)
 
-def add_missing_items_to_watchlist():
-    missing = [21889, 21888, 21890, 47926, 2629, 16274, 17889, 17888, 17887, 41490, 32014, 16273]
+    history_df = convert_datetime_columns(history_df,['date'])
 
-    engine = sde_db.engine
-    with engine.connect() as conn:
-        # Use proper parameter binding for IN clause with SQLite
-        from sqlalchemy import bindparam
-        stmt = text("SELECT * FROM inv_info WHERE typeID IN :missing").bindparams(bindparam('missing', expanding=True))
-        res = conn.execute(stmt, {"missing": missing})
-        df = pd.DataFrame(res.fetchall())
-        df.columns = res.keys()
-        print(df.columns)
+    history_df.infer_objects()
+    history_df.fillna(0)
 
-    watchlist = wcmkt_db.get_watchlist()
-    inv_cols = ['typeID', 'typeName', 'groupID', 'groupName', 'categoryID',
-       'categoryName']
-    df = df[inv_cols]
-    watchlist_cols = ['type_id', 'type_name', 'group_id', 'group_name', 'category_id', 'category_name']
-    df = df.rename(columns=dict(zip(inv_cols, watchlist_cols)))
-    df.to_csv("data/watchlist_missing.csv", index=False)
-    watchlist = pd.concat([watchlist, df], ignore_index=True)
-    watchlist.to_csv("data/watchlist_updated.csv", index=False)
-    deploy_watchlist = get_deployment_watchlist()
-    deploy_watchlist = pd.concat([deploy_watchlist, df], ignore_index=True)
-    deploy_watchlist.to_csv("data/deployment_watchlist_updated.csv", index=False)
+    try:
+        upsert_remote_database(RegionHistory, history_df)
+    except Exception as e:
+        logger.error(f"history data update failed: {e}")
 
-def update_watchlist_tables():
-    """Update both watchlist and deployment_watchlist tables with missing items"""
-    missing = [21889, 21888, 21890, 47926, 2629, 16274, 17889, 17888, 17887, 41490, 32014, 16273]
-
-    # Get missing items from SDE
-    engine = sde_db.engine
-    with engine.connect() as conn:
-        from sqlalchemy import bindparam
-        stmt = text("SELECT * FROM inv_info WHERE typeID IN :missing").bindparams(bindparam('missing', expanding=True))
-        res = conn.execute(stmt, {"missing": missing})
-        df = pd.DataFrame(res.fetchall())
-        df.columns = res.keys()
-
-    # Prepare data for database insertion
-    inv_cols = ['typeID', 'typeName', 'groupID', 'groupName', 'categoryID', 'categoryName']
-    watchlist_cols = ['type_id', 'type_name', 'group_id', 'group_name', 'category_id', 'category_name']
-    df = df[inv_cols]
-    df = df.rename(columns=dict(zip(inv_cols, watchlist_cols)))
-
-    # Update watchlist table
-    engine = wcmkt_db.engine
-    with engine.connect() as conn:
-        # Insert into watchlist table
-        for _, row in df.iterrows():
-            stmt = insert(Watchlist).values(
-                type_id=row['type_id'],
-                type_name=row['type_name'],
-                group_id=row['group_id'],
-                group_name=row['group_name'],
-                category_id=row['category_id'],
-                category_name=row['category_name']
-            )
-            try:
-                conn.execute(stmt)
-                conn.commit()
-                logger.info(f"Added {row['type_name']} (ID: {row['type_id']}) to watchlist")
-            except Exception as e:
-                logger.warning(f"Item {row['type_id']} may already exist in watchlist: {e}")
-
-        # Insert into deployment_watchlist table
-        for _, row in df.iterrows():
-            stmt = insert(DeploymentWatchlist).values(
-                type_id=row['type_id'],
-                type_name=row['type_name'],
-                group_id=row['group_id'],
-                group_name=row['group_name'],
-                category_id=row['category_id'],
-                category_name=row['category_name']
-            )
-            try:
-                conn.execute(stmt)
-                conn.commit()
-                logger.info(f"Added {row['type_name']} (ID: {row['type_id']}) to deployment_watchlist")
-            except Exception as e:
-                logger.warning(f"Item {row['type_id']} may already exist in deployment_watchlist: {e}")
-
-    logger.info(f"Updated both watchlist and deployment_watchlist tables with {len(df)} missing items")
-
+    status = get_remote_status()['market_history']
+    if status > 0:
+        logger.info(f"History updated:{get_table_length('market_history')} items")
+        print(f"History updated:{get_table_length('market_history')} items")
+    else:
+        logger.error(f"Failed to update market history")
 if __name__ == "__main__":
     pass

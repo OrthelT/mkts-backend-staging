@@ -6,9 +6,8 @@ from collections import defaultdict
 from datetime import datetime
 import pandas as pd
 from sqlalchemy import create_engine, text, insert, select, MetaData, Table
-from sqlalchemy.orm import Session
 
-from logging_config import configure_logging
+from config.logging_config import configure_logging
 from config import DatabaseConfig
 
 db = DatabaseConfig("wcmkt")

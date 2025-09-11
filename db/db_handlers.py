@@ -1,105 +1,33 @@
 
-import json
+import sys
+import os
+# Add the project root to Python path for direct execution
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pandas as pd
-from sqlalchemy import text, select, insert, func, or_
+from sqlalchemy import select, insert, func, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert  # libSQL/SQLite
-from utils import get_type_name
+from utils.utils import add_timestamp, add_autoincrement, validate_columns
 from dotenv import load_dotenv
-from logging_config import configure_logging
-from models import Base, MarketHistory,MarketOrders, MarketStats
+from config.logging_config import configure_logging
+from db.models import Base, MarketHistory,MarketOrders, MarketStats, RegionOrders
 
-from dataclasses import dataclass, field
-from config import DatabaseConfig
+from config.config import DatabaseConfig
 
-from utils import add_timestamp, add_autoincrement, validate_columns, convert_datetime_columns, get_type_names
+from utils.utils import add_timestamp, add_autoincrement, validate_columns, convert_datetime_columns, get_type_names
+from datetime import datetime, timezone
+from db.db_queries import get_table_length, get_remote_status
+from esi.esi_requests import fetch_region_orders
+import time
 
 load_dotenv()
 logger = configure_logging(__name__)
 
-# wcmkt_path = wcmkt_db_path
-# wcmkt_local_url = wcmkt_local_url
-# sde_local_path = sde_local_path
-# sde_local_url = sde_local_url
-# wcfittings_db_path = wcfittings_db_path
-# fittings_local_url = wc_fittings_local_db_url
-
 db = DatabaseConfig("wcmkt")
-wcmkt_path = db.path
-wcmkt_local_url = db.url
-wcmkt_turso_url = db.turso_url
-wcmkt_turso_token = db.token
-
 sde_db = DatabaseConfig("sde")
-sde_path = sde_db.path
-sde_local_url = sde_db.url
-sde_turso_url = sde_db.turso_url
-sde_turso_token = sde_db.token
 
-@dataclass
-class TypeInfo:
-    type_id: int
-    type_name: str = field(init=False)
-    group_name: str = field(init=False)
-    category_name: str = field(init=False)
-    category_id: int = field(init=False)
-    group_id: int = field(init=False)
-    volume: int = field(init=False)
-    def __post_init__(self):
-        self.get_type_info()
-
-    def get_type_info(self):
-        db = DatabaseConfig("sde")
-        stmt = text("SELECT * FROM inv_info WHERE typeID = :type_id")
-        engine = db.engine
-        with engine.connect() as conn:
-            result = conn.execute(stmt, {"type_id": self.type_id})
-            for row in result:
-                self.type_name = row.typeName
-                self.group_name = row.groupName
-                self.category_name = row.categoryName
-                self.category_id = row.categoryID
-                self.group_id = row.groupID
-                self.volume = row.volume
-        engine.dispose()
-
-
-def insert_type_data(data: list[dict]):
-    db = DatabaseConfig("sde")
-    engine = db.engine
-    unprocessed_data = []
-
-    with engine.connect() as conn:
-        for row in data:
-            try:
-                type_id = row["type_id"]
-                if type_id is None:
-                    logger.warning("Type ID is None, skipping...")
-                    continue
-                logger.info(f"Inserting type data for {row['type_id']}")
-
-                params = (type_id,)
-
-                query = "SELECT typeName FROM Joined_InvTypes WHERE typeID = ?"
-                result = conn.execute(query, params)
-                try:
-                    type_name = result.fetchone()[0]
-                except Exception as e:
-                    logger.error(f"Error fetching type name: {e}")
-                    unprocessed_data.append(row)
-                    continue
-
-                row["type_name"] = str(type_name)
-            except Exception as e:
-                logger.error(f"Error inserting type data: {e}")
-                data.remove(row)
-                logger.info(f"Removed row: {row}")
-    if unprocessed_data:
-        logger.info(f"Unprocessed data: {unprocessed_data}")
-        with open("unprocessed_data.json", "w") as f:
-            json.dump(unprocessed_data, f)
-    return data
 
 def upsert_remote_database(table: Base, df: pd.DataFrame)->bool:
     #special handling for derived tables like MarketStats that should be completely cleared before updating
@@ -202,92 +130,6 @@ def get_market_history(type_id: int) -> pd.DataFrame:
     conn.close()
     return pd.DataFrame(result.fetchall(), columns=headers)
 
-def get_table_length(table: str) -> int:
-    db = DatabaseConfig("wcmkt")
-    engine = db.engine
-    with engine.connect() as conn:
-        stmt = text(f"SELECT COUNT(*) FROM {table}")
-        result = conn.execute(stmt)
-        return result.fetchone()[0]
-
-def get_remote_table_list():
-    db = DatabaseConfig("wcmkt")
-    remote_tables = db.get_table_list()
-    return remote_tables
-
-def get_remote_status():
-    db = DatabaseConfig("wcmkt")
-    status_dict = db.get_status()
-    return status_dict
-
-def get_watchlist_ids():
-    stmt = text("SELECT DISTINCT type_id FROM watchlist")
-    db = DatabaseConfig("wcmkt")
-    engine = db.engine
-    with engine.connect() as conn:
-        result = conn.execute(stmt)
-        watchlist_ids = [row[0] for row in result]
-    conn.close()
-    engine.dispose()
-    return watchlist_ids
-
-def get_fit_items(fit_id: int):
-    stmt = text("SELECT type_id FROM fittings_fittingitem WHERE fit_id = :fit_id")
-    db = DatabaseConfig("fittings")
-    engine = db.engine
-    with engine.connect() as conn:
-        result = conn.execute(stmt, {"fit_id": fit_id})
-        fit_items = [row[0] for row in result]
-    conn.close()
-    engine.dispose()
-    return fit_items
-
-def get_fit_ids(doctrine_id: int):
-    stmt = text("SELECT fitting_id FROM fittings_doctrine_fittings WHERE doctrine_id = :doctrine_id")
-    db = DatabaseConfig("fittings")
-    engine = db.engine
-    with engine.connect() as conn:
-        result = conn.execute(stmt, {"doctrine_id": doctrine_id})
-        fit_ids = [row[0] for row in result]
-    conn.close()
-    engine.dispose()
-    return fit_ids
-
-def add_doctrine_type_info_to_watchlist(doctrine_id: int):
-    watchlist_ids = get_watchlist_ids()
-    fit_ids = get_fit_ids(doctrine_id)
-
-    missing_fit_items = []
-
-    for fit_id in fit_ids:
-        fit_items = get_fit_items(fit_id)
-        for item in fit_items:
-            if item not in watchlist_ids:
-                missing_fit_items.append(item)
-
-    missing_type_info = []
-
-    for item in missing_fit_items:
-        stmt4 = text("SELECT * FROM inv_info WHERE typeID = :item")
-        db = DatabaseConfig("sde")
-        engine = db.engine
-        with engine.connect() as conn:
-            result = conn.execute(stmt4, {"item": item})
-            for row in result:
-                type_info = TypeInfo(type_id=item)
-                missing_type_info.append(type_info)
-
-    for type_info in missing_type_info:
-        stmt5 = text("INSERT INTO watchlist (type_id, type_name, group_name, category_name, category_id, group_id) VALUES (:type_id, :type_name, :group_name, :category_name, :category_id, :group_id)")
-        db = DatabaseConfig("wcmkt")
-        engine = db.engine
-        with engine.connect() as conn:
-            conn.execute(stmt5, {"type_id": type_info.type_id, "type_name": type_info.type_name, "group_name": type_info.group_name, "category_name": type_info.category_name, "category_id": type_info.category_id, "group_id": type_info.group_id})
-            conn.commit()
-        conn.close()
-        engine.dispose()
-        logger.info(f"Added {type_info.type_name} to watchlist")
-        print(f"Added {type_info.type_name} to watchlist")
 
 def update_history(history_results: list[list[dict]]):
     """
@@ -330,7 +172,7 @@ def update_history(history_results: list[list[dict]]):
     logger.info(f"Expected columns: {list(valid_history_columns)}")
 
     # Add type_name column by looking up type_id
-    from utils import get_type_name
+    from utils.utils import get_type_name
     history_df['type_name'] = history_df['type_id'].apply(lambda x: get_type_name(int(x)))
 
     # Check if we have the required columns
@@ -402,5 +244,49 @@ def update_market_orders(orders: list[dict])->bool:
             return False
 
 
+def update_region_orders(region_id: int, order_type: str = 'sell') -> pd.DataFrame:
+    """
+    Fetch region orders from the database
+    Args:
+        region_id: int
+        order_type: str (sell, buy, all)
+    Returns:
+        pandas DataFrame
+    """
+    orders = fetch_region_orders(region_id, order_type)
+    engine = DatabaseConfig("wcmkt").engine
+    session = Session(bind=engine)
+
+    # Clear existing orders
+    session.query(RegionOrders).delete()
+    session.commit()
+    session.expunge_all()  # Clear all objects from identity map
+    session.close()
+    time.sleep(1)
+    session = Session(bind=engine)  # Create a fresh session
+
+    # Convert API response dicts to RegionOrders model instances
+    for order_data in orders:
+        # Convert the API response to match our model fields
+        region_order = RegionOrders(
+            order_id=order_data['order_id'],
+            duration=order_data['duration'],
+            is_buy_order=order_data['is_buy_order'],
+            issued=datetime.fromisoformat(order_data['issued'].replace('Z', '+00:00')),
+            location_id=order_data['location_id'],
+            min_volume=order_data['min_volume'],
+            price=order_data['price'],
+            range=order_data['range'],
+            system_id=order_data['system_id'],
+            type_id=order_data['type_id'],
+            volume_remain=order_data['volume_remain'],
+            volume_total=order_data['volume_total']
+        )
+        session.add(region_order)
+
+    session.commit()
+    session.close()
+
+    return pd.DataFrame(orders)
 if __name__ == "__main__":
     pass

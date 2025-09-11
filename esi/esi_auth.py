@@ -1,7 +1,7 @@
 import os, json, time
 from dotenv import load_dotenv
 from requests_oauthlib import OAuth2Session
-from logging_config import configure_logging
+from config.logging_config import configure_logging
 
 load_dotenv()
 logger = configure_logging(__name__)

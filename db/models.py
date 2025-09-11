@@ -1,7 +1,7 @@
 from sqlalchemy import String, Integer, DateTime, Float, Boolean, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
 import libsql
-from utils import get_type_name
+from utils.utils import get_type_name
 from datetime import datetime, timezone
 import json
 import sqlalchemy as sa

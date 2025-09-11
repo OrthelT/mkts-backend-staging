@@ -1,6 +1,6 @@
 import requests
 import pandas as pd
-
+from config.config import DatabaseConfig
 
 class JitaPrice:
     def __init__(self, type_id: int, price_data: dict):
@@ -24,33 +24,17 @@ class JitaPrice:
         }
 
 
+# def get_fuzz_prices(station_id: int, type_ids: list[int]) -> dict:
+#     fuzz_url = f"https://market.fuzzwork.co.uk/aggregates/?station={station_id}&types={','.join(map(str, type_ids))}"
+#     response = requests.get(fuzz_url)
+#     return response.json()
 
-def parse_jita_prices(price_data: dict) -> list[JitaPrice]:
-    jita_prices = []
-    for k in price_data.keys():
-        price_object = JitaPrice(k, price_data[k])
-        jita_prices.append(price_object.get_price_data())
-    return jita_prices
-
-
-
-def get_fuzz_prices(station_id: int, type_ids: list[int]) -> dict:
-    fuzz_url = f"https://market.fuzzwork.co.uk/aggregates/?station={station_id}&types={','.join(map(str, type_ids))}"
-    response = requests.get(fuzz_url)
-    return response.json()
-
-def get_jita_prices(type_ids: list[int]) -> dict:
-    jita_prices = get_fuzz_prices(60003760, type_ids)
-    return parse_jita_prices(jita_prices)
+# def get_jita_prices(type_ids: list[int]) -> dict:
+#     jita_prices = get_fuzz_prices(type_ids)
+#     print(jita_prices)
 
 
-def get_jita_prices_df(type_ids: list[int]) -> pd.DataFrame:
-    prices = get_jita_prices(type_ids)
-    price_df = pd.DataFrame(prices)
-    price_df = price_df.rename(columns={'type_id': 'type_id', 'sell_percentile': 'jita_sell', 'buy_percentile': 'jita_buy'})
-    price_df['type_id'] = price_df.type_id.astype(int)
-
-    return price_df
 
 if __name__ == "__main__":
-    pass
+    with __name__ == "__main__":
+        pass

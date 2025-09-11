@@ -2,8 +2,9 @@ import asyncio, random, time
 import httpx
 from aiolimiter import AsyncLimiter
 import backoff
-from config import DatabaseConfig,ESIConfig
-from logging_config import configure_logging
+from config.config import DatabaseConfig
+from config.esi_config import ESIConfig
+from config.logging_config import configure_logging
 
 url = ESIConfig("primary").market_history_url
 

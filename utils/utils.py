@@ -1,12 +1,13 @@
 import pandas as pd
-from logging_config import configure_logging
+from config.logging_config import configure_logging
 import time
 import sqlalchemy as sa
 from sqlalchemy import text, create_engine
 import requests
 logger = configure_logging(__name__)
-from config import ESIConfig, DatabaseConfig
-
+from config.config import DatabaseConfig
+from config.esi_config import ESIConfig
+import json
 
 sde_db = DatabaseConfig("sde")
 fittings_db = DatabaseConfig("fittings")
@@ -172,6 +173,43 @@ def init_databases():
             logger.info(f"Database {alias} verified")
         except Exception as e:
             logger.error(f"Error initializing database {alias}: {e}")
+
+
+def insert_type_data(data: list[dict]):
+    db = DatabaseConfig("sde")
+    engine = db.engine
+    unprocessed_data = []
+
+    with engine.connect() as conn:
+        for row in data:
+            try:
+                type_id = row["type_id"]
+                if type_id is None:
+                    logger.warning("Type ID is None, skipping...")
+                    continue
+                logger.info(f"Inserting type data for {row['type_id']}")
+
+                params = (type_id,)
+
+                query = "SELECT typeName FROM Joined_InvTypes WHERE typeID = ?"
+                result = conn.execute(query, params)
+                try:
+                    type_name = result.fetchone()[0]
+                except Exception as e:
+                    logger.error(f"Error fetching type name: {e}")
+                    unprocessed_data.append(row)
+                    continue
+
+                row["type_name"] = str(type_name)
+            except Exception as e:
+                logger.error(f"Error inserting type data: {e}")
+                data.remove(row)
+                logger.info(f"Removed row: {row}")
+    if unprocessed_data:
+        logger.info(f"Unprocessed data: {unprocessed_data}")
+        with open("unprocessed_data.json", "w") as f:
+            json.dump(unprocessed_data, f)
+    return data
 
 if __name__ == "__main__":
     pass
