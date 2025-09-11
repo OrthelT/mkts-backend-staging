@@ -156,10 +156,9 @@ def update_watchlist_data(esi: ESIConfig, watchlist_csv: str = "data/watchlist.c
 
 def init_databases():
     aliases = [
-        "wcmkt3",
+        "wcmkt",
         "sde",
-        "fittings",
-        "wcmkt2"]
+        "fittings"]
     for alias in aliases:
         logger.info(f"Initializing database {alias}")
         try:
@@ -173,7 +172,6 @@ def init_databases():
             logger.info(f"Database {alias} verified")
         except Exception as e:
             logger.error(f"Error initializing database {alias}: {e}")
-
 
 def insert_type_data(data: list[dict]):
     db = DatabaseConfig("sde")

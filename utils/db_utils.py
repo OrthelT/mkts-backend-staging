@@ -3,9 +3,9 @@ from sqlalchemy import text, insert
 from config.config import DatabaseConfig
 from config.logging_config import configure_logging
 logger = configure_logging(__name__)
-from utils.utils import get_watchlist_ids, get_fit_ids, get_fit_items
 from utils.get_type_info import TypeInfo
 from db.models import Watchlist, DeploymentWatchlist
+from db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items
 
 sde_db = DatabaseConfig("sde")
 wcmkt_db = DatabaseConfig("wcmkt")
@@ -103,6 +103,14 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
                 missing_fit_items.append(item)
 
     missing_type_info = []
+    logger.info(f"Adding {len(missing_fit_items)} missing items to watchlist")
+    print(f"Adding {len(missing_fit_items)} missing items to watchlist")
+    continue_adding = input("Continue adding? (y/n)")
+    if continue_adding == "n":
+        return
+    else:
+        logger.info(f"Continuing to add {len(missing_fit_items)} missing items to watchlist")
+        print(f"Continuing to add {len(missing_fit_items)} missing items to watchlist")
 
     for item in missing_fit_items:
         stmt4 = text("SELECT * FROM inv_info WHERE typeID = :item")
@@ -126,57 +134,55 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
         logger.info(f"Added {type_info.type_name} to watchlist")
         print(f"Added {type_info.type_name} to watchlist")
 
+#not currently used
+# def get_system_market_value(system_id: int) -> float:
+#     """
+#     Convenience function to get total market value for a system
 
-def get_system_market_value(system_id: int) -> float:
-    """
-    Convenience function to get total market value for a system
+#     Args:
+#         system_id: System ID to calculate market value for
 
-    Args:
-        system_id: System ID to calculate market value for
+#     Returns:
+#         Total market value as float
+#     """
+#     market_data = process_system_orders(system_id)
+#     return calculate_total_market_value(market_data)
 
-    Returns:
-        Total market value as float
-    """
-    market_data = process_system_orders(system_id)
-    return calculate_total_market_value(market_data)
+# def calculate_total_ship_count(market_data: pd.DataFrame) -> int:
+#     """
+#     Calculate the total number of ships on the market
 
+#     Args:
+#         market_data: DataFrame from process_system_orders containing category_name and volume_remain columns
 
-def calculate_total_ship_count(market_data: pd.DataFrame) -> int:
-    """
-    Calculate the total number of ships on the market
+#     Returns:
+#         Total ship count as int
+#     """
+#     if market_data is None or market_data.empty:
+#         logger.warning("No market data provided for ship count calculation")
+#         print("No market data provided for ship count calculation")
+#         return 0
 
-    Args:
-        market_data: DataFrame from process_system_orders containing category_name and volume_remain columns
+#     # Filter for ships only and sum volume_remain
+#     ships_data = market_data[market_data['category_name'] == 'Ship']
+#     total_ship_count = ships_data['volume_remain'].sum()
 
-    Returns:
-        Total ship count as int
-    """
-    if market_data is None or market_data.empty:
-        logger.warning("No market data provided for ship count calculation")
-        print("No market data provided for ship count calculation")
-        return 0
+#     logger.info(f"Total ships on market: {total_ship_count:,}")
+#     print(f"Total ships on market: {total_ship_count:,}")
+#     return int(total_ship_count)
 
-    # Filter for ships only and sum volume_remain
-    ships_data = market_data[market_data['category_name'] == 'Ship']
-    total_ship_count = ships_data['volume_remain'].sum()
+# def get_system_ship_count(system_id: int) -> int:
+    # """
+    # Convenience function to get total ship count for a system
 
-    logger.info(f"Total ships on market: {total_ship_count:,}")
-    print(f"Total ships on market: {total_ship_count:,}")
-    return int(total_ship_count)
+    # Args:
+    #     system_id: System ID to calculate ship count for
 
-
-def get_system_ship_count(system_id: int) -> int:
-    """
-    Convenience function to get total ship count for a system
-
-    Args:
-        system_id: System ID to calculate ship count for
-
-    Returns:
-        Total ship count as int
-    """
-    market_data = process_system_orders(system_id)
-    return calculate_total_ship_count(market_data)
+    # Returns:
+    #     Total ship count as int
+    # """
+    # market_data = process_system_orders(system_id)
+    # return calculate_total_ship_count(market_data)
 
 if __name__ == "__main__":
     pass
