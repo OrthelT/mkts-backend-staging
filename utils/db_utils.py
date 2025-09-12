@@ -2,10 +2,11 @@ import pandas as pd
 from sqlalchemy import text, insert
 from config.config import DatabaseConfig
 from config.logging_config import configure_logging
-logger = configure_logging(__name__)
 from utils.get_type_info import TypeInfo
 from db.models import Watchlist, DeploymentWatchlist
 from db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items
+
+logger = configure_logging(__name__)
 
 sde_db = DatabaseConfig("sde")
 wcmkt_db = DatabaseConfig("wcmkt")

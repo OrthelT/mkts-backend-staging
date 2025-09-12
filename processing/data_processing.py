@@ -1,11 +1,8 @@
 import pandas as pd
-import sqlalchemy as sa
-from sqlalchemy import create_engine, text, insert, select
 from config.logging_config import configure_logging
-from db.models import MarketStats, Doctrines, Watchlist, DeploymentWatchlist
+from db.models import MarketStats
 from config.config import DatabaseConfig
 from config.esi_config import ESIConfig
-from db.db_queries import get_region_history
 from esi.esi_requests import fetch_region_history
 from utils.utils import add_timestamp, add_autoincrement, validate_columns, convert_datetime_columns
 from db.db_handlers import upsert_remote_database
@@ -92,12 +89,12 @@ def calculate_market_stats() -> pd.DataFrame:
 
     engine.dispose()
 
-    logger.info(f"Calculating 5 percentile price")
+    logger.info("Calculating 5 percentile price")
     df2 = calculate_5_percentile_price()
-    logger.info(f"Merging 5 percentile price with market stats")
+    logger.info("Merging 5 percentile price with market stats")
     df = df.merge(df2, on="type_id", how="left")
 
-    logger.info(f"Renaming columns")
+    logger.info("Renaming columns")
     df.days_remaining = df.days_remaining.apply(lambda x: round(x, 1))
     df = df.rename(columns={"5_perc_price": "price"})
     df["last_update"] = pd.Timestamp.now(tz="UTC")
@@ -164,8 +161,7 @@ def calculate_doctrine_stats() -> pd.DataFrame:
 
 def process_system_orders(system_id: int) -> pd.DataFrame:
     df = get_system_orders_from_db(system_id)
-    df = df[df['is_buy_order'] == False]
-    df2 = df.copy()
+    df = not df['is_buy_order']
     nakah_mkt = 60014068
     nakah_df = df[df.location_id == nakah_mkt].reset_index(drop=True)
     nakah_df = nakah_df[["price","type_id","volume_remain"]]
@@ -201,6 +197,6 @@ def process_region_history(watchlist: pd.DataFrame):
         logger.info(f"History updated:{get_table_length('market_history')} items")
         print(f"History updated:{get_table_length('market_history')} items")
     else:
-        logger.error(f"Failed to update market history")
+        logger.error("Failed to update market history")
 if __name__ == "__main__":
     pass

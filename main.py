@@ -1,5 +1,4 @@
 import sys
-import pandas as pd
 from config.logging_config import configure_logging
 from db.db_queries import get_table_length
 from db.db_handlers import upsert_remote_database, update_history, update_market_orders

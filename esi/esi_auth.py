@@ -1,4 +1,6 @@
-import os, json, time
+import os
+import json
+import time
 from dotenv import load_dotenv
 from requests_oauthlib import OAuth2Session
 from config.logging_config import configure_logging

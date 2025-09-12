@@ -1,13 +1,14 @@
 import pandas as pd
-from config.logging_config import configure_logging
+import json
 import time
 import sqlalchemy as sa
 from sqlalchemy import text, create_engine
 import requests
-logger = configure_logging(__name__)
 from config.config import DatabaseConfig
 from config.esi_config import ESIConfig
-import json
+from config.logging_config import configure_logging
+
+logger = configure_logging(__name__)
 
 sde_db = DatabaseConfig("sde")
 fittings_db = DatabaseConfig("fittings")

@@ -1,6 +1,3 @@
-import requests
-import pandas as pd
-from config.config import DatabaseConfig
 
 class JitaPrice:
     def __init__(self, type_id: int, price_data: dict):

@@ -1,8 +1,5 @@
 import os
-import sys
-from sqlalchemy import create_engine, MetaData, inspect, text, select, update
-from sqlalchemy.orm import Session
-from sqlalchemy_orm import database
+from sqlalchemy import create_engine, text
 import pandas as pd
 import pathlib
 
@@ -17,7 +14,7 @@ logger = configure_logging(__name__)
 class DatabaseConfig:
     #configure this variable. It enables switching the db call across the application between wcmkt3 and wcmkt2.
     #this is useful for testing and development.
-    wcdbmap = "wcmkt3"
+    wcdbmap = "wcmkt2"
 
     _db_paths = {
         "wcmkt3": "wcmkt3.db", #testing database
@@ -102,11 +99,11 @@ class DatabaseConfig:
         conn = self.libsql_sync_connect
         with conn:
             logger.info("Syncing database...")
-            result = conn.sync()
+            conn.sync()
         conn.close()
 
     def validate_sync(self)-> bool:
-        alias = self.alias
+
         with self.remote_engine.connect() as conn:
             result = conn.execute(text("SELECT MAX(last_update) FROM marketstats")).fetchone()
             remote_last_update = result[0]

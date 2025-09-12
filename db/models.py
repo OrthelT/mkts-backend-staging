@@ -1,10 +1,6 @@
-from sqlalchemy import String, Integer, DateTime, Float, Boolean, create_engine, event
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session
-import libsql
+from sqlalchemy import String, Integer, DateTime, Float, Boolean, event
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from utils.utils import get_type_name
-from datetime import datetime, timezone
-import json
-import sqlalchemy as sa
 
 class Base(DeclarativeBase):
     pass
@@ -234,6 +230,23 @@ class DoctrineFits(Base):
         target={self.target!r}
         )"""
 
+class LeadShip(Base):
+    __tablename__ = "lead_ships"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    doctrine_name: Mapped[str] = mapped_column(String)
+    doctrine_id: Mapped[int] = mapped_column(Integer)
+    lead_ship: Mapped[int] = mapped_column(Integer)
+    fit_id: Mapped[int] = mapped_column(Integer)
+
+    def __repr__(self) -> str:
+        return f"""lead_ships(
+        id={self.id!r},
+        doctrine_name={self.doctrine_name!r},
+        doctrine_id={self.doctrine_id!r},
+        lead_ship={self.lead_ship!r},
+        fit_id={self.fit_id!r}
+        )"""
+
 class RegionOrders(Base):
     __tablename__ = "region_orders"
     order_id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -367,6 +380,6 @@ def populate_region_history_type_name(mapper, connection, target):
     if target.type_id and not target.type_name:
         try:
             target.type_name = get_type_name(target.type_id)
-        except Exception as e:
+        except Exception:
             # If we can't get the type name, leave it as None
             pass

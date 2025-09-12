@@ -1,15 +1,24 @@
-from utils.db_utils import add_doctrine_type_info_to_watchlist
 from utils.get_type_info import TypeInfo
 from config.config import DatabaseConfig
 from sqlalchemy import text
-from utils.utils import get_type_name
-from db.models import Doctrines
+from db.models import LeadShip
 from dataclasses import dataclass
 import pandas as pd
-from utils.utils import init_databases
 from config.logging_config import configure_logging
+from sqlalchemy.orm import Session
+
+
 doctrines_fields = ['id', 'fit_id', 'ship_id', 'ship_name', 'hulls', 'type_id', 'type_name', 'fit_qty', 'fits_on_mkt', 'total_stock', 'price', 'avg_vol', 'days', 'group_id', 'group_name', 'category_id', 'category name', 'timestamp']
 logger = configure_logging(__name__)
+
+doctrine_fit_id = 494
+ship_id = 33157
+ship_name = 'Hurricane Fleet Issue'
+ship_target = 100
+created_at = '2025-07-05 00:00:00'
+doctrine_name = '2507  WC-EN Shield DPS HFI v1.0'
+fit_name = '2507  WC-EN Shield DPS HFI v1.0'
+ship_type_id = 33157
 
 @dataclass
 class DoctrineFit:
@@ -116,8 +125,6 @@ def add_hurricane_fleet_issue_to_doctrines():
         )
     """)
 
-
-
     # Prepare the data
     insert_data = {
         'id': next_id,  # Manually generated unique ID
@@ -145,7 +152,7 @@ def add_hurricane_fleet_issue_to_doctrines():
     with engine.connect() as conn:
         conn.execute(stmt, insert_data)
         conn.commit()
-        logger.info(f"Successfully added Hurricane Fleet Issue (fit_id 494) to doctrines table")
+        logger.info("Successfully added Hurricane Fleet Issue (fit_id 494) to doctrines table")
         print("Hurricane Fleet Issue added to doctrines table successfully!")
     conn.close()
     engine.dispose()
@@ -165,6 +172,18 @@ def add_fit_to_doctrines_table(DoctrineFit: DoctrineFit):
         print("Fit added to doctrines table")
     conn.close()
     engine.dispose()
+
+def add_lead_ship():
+    hfi = LeadShip(doctrine_name=doctrine_name, doctrine_id=84, lead_ship=ship_id, fit_id=doctrine_fit_id)
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine
+    session = Session(bind=engine)
+    with session.begin():
+        session.add(hfi)
+        session.commit()
+        print("Lead ship added")
+    session.close()
+
 
 if __name__ == "__main__":
     pd.set_option('display.max_columns', None)

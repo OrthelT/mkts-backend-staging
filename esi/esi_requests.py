@@ -182,7 +182,6 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
     page = 1
     error_count = 0
     logger.info(f"Getting orders for region {region_id} with order type {order_type}")
-    status_codes = {}
     begin_time = time.time()
 
     while page <= max_pages:
@@ -252,7 +251,7 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
 
 
         if order_page == []:
-            logger.info(f"No more orders found")
+            logger.info("No more orders found")
             logger.info("--------------------------------\n\n")
             return orders
         else:
@@ -300,7 +299,6 @@ def fetch_region_item_history(region_id: int, type_id: int) -> list[dict]:
 def fetch_region_history(watchlist: pd.DataFrame) -> list[dict]:
     esi = ESIConfig("secondary")
     MARKET_HISTORY_URL = esi.market_history_url
-    deployment_reg_id = esi.region_id
 
     logger.info("Fetching history")
     if watchlist is None or watchlist.empty:

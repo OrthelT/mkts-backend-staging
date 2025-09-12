@@ -12,12 +12,12 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert  # libSQL/SQLite
 from utils.utils import add_timestamp, add_autoincrement, validate_columns
 from dotenv import load_dotenv
 from config.logging_config import configure_logging
-from db.models import Base, MarketHistory,MarketOrders, MarketStats, RegionOrders
+from db.models import Base, MarketHistory,MarketOrders, RegionOrders
 
 from config.config import DatabaseConfig
 
-from utils.utils import add_timestamp, add_autoincrement, validate_columns, convert_datetime_columns, get_type_names
-from datetime import datetime, timezone
+from utils.utils import convert_datetime_columns, get_type_names
+from datetime import datetime
 from db.db_queries import get_table_length, get_remote_status
 from esi.esi_requests import fetch_region_orders
 import time
@@ -208,7 +208,7 @@ def update_history(history_results: list[list[dict]]):
         logger.info(f"History updated:{get_table_length('market_history')} items")
         print(f"History updated:{get_table_length('market_history')} items")
     else:
-        logger.error(f"Failed to update market history")
+        logger.error("Failed to update market history")
         return False
     return True
 

@@ -1,23 +1,23 @@
 import requests
-import os
 import json
 import time
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from config.logging_config import configure_logging
-from db.models import RegionOrders, Base
+from db.models import RegionOrders
 import pandas as pd
-logger = configure_logging(__name__)
 from utils import get_type_names, get_type_name
-from db.db_handlers import add_region_history, get_watchlist_ids
+from db.db_handlers import add_region_history
 from millify import millify
 from db.models import RegionHistory
-import libsql
 from config import DatabaseConfig, ESIConfig
 from jita import get_jita_prices_df
 from utils import add_timestamp, add_autoincrement, validate_columns, convert_datetime_columns
 from db.db_handlers import upsert_remote_database, get_remote_status, get_table_length
+
+
+logger = configure_logging(__name__)
 
 """
 This module is a legacy module used to process system orders and calculate market metrics
@@ -115,7 +115,7 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
 
 
         if order_page == []:
-            logger.info(f"No more orders found")
+            logger.info("No more orders found")
             logger.info("--------------------------------\n\n")
             return orders
         else:
@@ -340,72 +340,6 @@ def get_system_ship_count(system_id: int) -> int:
     market_data = process_system_orders(system_id)
     return calculate_total_ship_count(market_data)
 
-def fetch_region_item_history(region_id: int, type_id: int) -> list[dict]:
-    url = f"https://esi.evetech.net/latest/markets/{region_id}/history"
-
-    querystring = {"type_id":type_id}
-
-    headers = {
-        "Accept-Language": "en",
-        "If-None-Match": "",
-        "X-Compatibility-Date": "2020-01-01",
-        "X-Tenant": "tranquility",
-        "Accept": "application/json"
-    }
-
-    try:
-        response = requests.get(url, headers=headers, params=querystring, timeout=10)
-
-        if response.status_code == 200:
-            return response.json()
-        else:
-            print(f"    HTTP {response.status_code} for type_id {type_id}")
-            return []
-
-    except requests.exceptions.Timeout:
-        print(f"    Timeout for type_id {type_id}")
-        return []
-    except requests.exceptions.RequestException as e:
-        print(f"    Request error for type_id {type_id}: {e}")
-        return []
-    except Exception as e:
-        print(f"    Unexpected error for type_id {type_id}: {e}")
-        return []
-
-def fetch_region_history(region_id: int, type_ids: list[int])->list[dict]:
-    history = []
-    total_items = len(type_ids)
-
-    logger.info(f"Starting fetch_region_history for {total_items} items in region {region_id}")
-    logger.info("=" * 60)
-
-    for i, type_id in enumerate(type_ids, 1):
-        print(f"Processing item {i}/{total_items} (type_id: {type_id})", end="", flush=True)
-
-        try:
-            start_time = time.time()
-            item_history = fetch_region_item_history(region_id, type_id)
-            print(item_history)
-            quit()
-            elapsed_time = time.time() - start_time
-
-            if item_history and len(item_history) > 0:
-                print(f" ✓ {len(item_history)} records in {elapsed_time:.2f}s")
-            else:
-                print(f" ⚠ No data in {elapsed_time:.2f}s")
-
-            history.append(item_history)
-
-        except Exception as e:
-            print(f" ❌ Error: {e}")
-            # Still add the item to history with empty data
-            history.append([])
-
-    logger.info("=" * 60)
-    logger.info(f"Completed fetch_region_history: {len(history)} items processed")
-
-    return history
-
 def get_region_history(type_ids: list[int])->list[dict]:
     engine = DatabaseConfig("wcmkt2").engine
     print("engine created")
@@ -448,7 +382,7 @@ def get_orders_stats(system_id: int) -> pd.DataFrame:
         od.append(data)
     df = pd.DataFrame(od)
 
-    df2 = df[df['buy_order'] == False]
+    df2 = not df['buy_order']
     df2 = df2.groupby('type_id').agg({'volume_remain': 'sum', 'price': 'mean'}).reset_index()
     types_df = get_type_names(df2['type_id'].tolist())
     df3 = df2.merge(types_df, on='type_id', how='left')
@@ -482,7 +416,7 @@ def process_region_history(watchlist: pd.DataFrame):
         logger.info(f"History updated:{get_table_length('market_history')} items")
         print(f"History updated:{get_table_length('market_history')} items")
     else:
-        logger.error(f"Failed to update market history")
+        logger.error("Failed to update market history")
 
 def add_region_history(history: list[dict]):
     timestamp = datetime.now(timezone.utc)
