@@ -1,5 +1,5 @@
-from config.esi_config import ESIConfig
-from config.logging_config import configure_logging
+from mkts_backend.config.esi_config import ESIConfig
+from mkts_backend.config.logging_config import configure_logging
 import requests
 import time
 import json
@@ -8,18 +8,9 @@ import millify
 
 logger = configure_logging(__name__)
 
+
 def fetch_market_orders(esi: ESIConfig, order_type: str = "all", etag: str = None, test_mode: bool = False) -> list[dict]:
     logger.info("Fetching market orders")
-    """
-    order_type: str = "all" | "buy" | "sell" (default is "all", only used for secondary market)
-    page: int = 1 is the default page number. This can be used to fetch a single page of orders, or as an argument dynamically updated in a loop.
-    etag: str = None is the etag of the last response for the requested page. This is used to optionally check for changes in the market orders. The esi will return a 304 if the etag is the same as the last response.
-
-    Returns:
-        requests.Response: Response object containing the market orders
-    Raises:
-        ValueError: If the alias is invalid
-    """
     page = 1
     max_pages = 1
     orders = []
@@ -31,12 +22,10 @@ def fetch_market_orders(esi: ESIConfig, order_type: str = "all", etag: str = Non
 
     while page <= max_pages:
         request_count += 1
-
         logger.info(f"NEW REQUEST: request_count: {request_count}, page: {page}, max_pages: {max_pages}")
 
         if esi.alias == "primary":
             querystring = {"page": str(page)}
-
         elif esi.alias == "secondary":
             querystring = {"page": str(page), "order_type": order_type}
         else:
@@ -56,7 +45,6 @@ def fetch_market_orders(esi: ESIConfig, order_type: str = "all", etag: str = Non
             else:
                 max_pages = int(response.headers.get("X-Pages"))
                 logger.info(f"page: {page}, max_pages: {max_pages}")
-
         else:
             logger.error(f"Error fetching market orders: {response.status_code}")
             error_count += 1
@@ -72,10 +60,10 @@ def fetch_market_orders(esi: ESIConfig, order_type: str = "all", etag: str = Non
         else:
             logger.info(f"Data retrieved for {page}/{max_pages}. total orders: {len(orders)}")
             return orders
-        logger.info("-"*60)
+        logger.info("-" * 60)
 
     logger.info(f"market_orders complete:{page}/{max_pages} pages. total orders: {len(orders)} orders")
-    logger.info("+="*40)
+    logger.info("+=" * 40)
     return orders
 
 
@@ -101,7 +89,6 @@ def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
 
     history = []
     request_count = 0
-
     watchlist_length = len(type_ids)
 
     while request_count < watchlist_length:
@@ -111,12 +98,7 @@ def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
         querystring = {"type_id": type_id}
         request_count += 1
         try:
-
-            print(
-                f"\rFetching history for ({request_count}/{watchlist_length})",
-                end="",
-                flush=True,
-            )
+            print(f"\rFetching history for ({request_count}/{watchlist_length})", end="", flush=True)
             t1 = time.perf_counter()
             response = requests.get(url, headers=headers, timeout=10, params=querystring)
             response.raise_for_status()
@@ -137,9 +119,7 @@ def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
                 else:
                     logger.warning(f"Unexpected data format for {item_name}")
             else:
-                logger.error(
-                    f"Error fetching history for {item_name}: {response.status_code}"
-                )
+                logger.error(f"Error fetching history for {item_name}: {response.status_code}")
 
         except Exception as e:
             logger.error(f"Error processing {item_name}: {e}")
@@ -169,14 +149,6 @@ def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
 
 
 def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
-    """
-    Get all orders for a given region and order type
-    Args:
-        region_id: int
-        order_type: str (sell, buy, all)
-    Returns:
-        list of order dicts
-    """
     orders = []
     max_pages = 1
     page = 1
@@ -222,7 +194,6 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
         elif status_code == 200:
             logger.info(f"page {page} of {max_pages} | status: {status_code} | {elapsed}s")
         else:
-            # Handle case where response failed (timeout, connection error, etc.)
             logger.error(f"page {page} of {max_pages} | request failed | {elapsed}s")
             error_count += 1
             if error_count > 5:
@@ -231,8 +202,6 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
             time.sleep(1)
             continue
 
-
-        # Only process response if we have a valid status code
         if status_code == 200:
             error_remain = response.headers.get('X-Error-Limit-Remain')
             if error_remain == '0':
@@ -246,9 +215,7 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
 
             order_page = response.json()
         else:
-            # Skip processing this page due to error
             continue
-
 
         if order_page == []:
             logger.info("No more orders found")
@@ -266,26 +233,23 @@ def fetch_region_orders(region_id: int, order_type: str = 'sell') -> list[dict]:
 
 def fetch_region_item_history(region_id: int, type_id: int) -> list[dict]:
     url = f"https://esi.evetech.net/latest/markets/{region_id}/history"
-
-    querystring = {"type_id":type_id}
+    querystring = {"type_id": type_id}
 
     headers = {
         "Accept-Language": "en",
         "If-None-Match": "",
         "X-Compatibility-Date": "2020-01-01",
         "X-Tenant": "tranquility",
-        "Accept": "application/json"
+        "Accept": "application/json",
     }
 
     try:
         response = requests.get(url, headers=headers, params=querystring, timeout=10)
-
         if response.status_code == 200:
             return response.json()
         else:
             print(f"    HTTP {response.status_code} for type_id {type_id}")
             return []
-
     except requests.exceptions.Timeout:
         print(f"    Timeout for type_id {type_id}")
         return []
@@ -295,6 +259,7 @@ def fetch_region_item_history(region_id: int, type_id: int) -> list[dict]:
     except Exception as e:
         print(f"    Unexpected error for type_id {type_id}: {e}")
         return []
+
 
 def fetch_region_history(watchlist: pd.DataFrame) -> list[dict]:
     esi = ESIConfig("secondary")
@@ -314,20 +279,14 @@ def fetch_region_history(watchlist: pd.DataFrame) -> list[dict]:
     headers = esi.headers()
 
     history = []
-
     watchlist_length = len(watchlist)
     for i, type_id in enumerate(type_ids):
         item_name = watchlist[watchlist["type_id"] == type_id]["type_name"].values[0]
         try:
             url = f"{MARKET_HISTORY_URL}"
-
             querystring = {"type_id": str(type_id)}
 
-            print(
-                f"\rFetching history for ({i + 1}/{watchlist_length})",
-                end="",
-                flush=True,
-            )
+            print(f"\rFetching history for ({i + 1}/{watchlist_length})", end="", flush=True)
             response = requests.get(url, headers=headers, params=querystring)
             response.raise_for_status()
 
@@ -342,9 +301,7 @@ def fetch_region_history(watchlist: pd.DataFrame) -> list[dict]:
                 else:
                     logger.warning(f"Unexpected data format for {item_name}")
             else:
-                logger.error(
-                    f"Error fetching history for {item_name}: {response.status_code}"
-                )
+                logger.error(f"Error fetching history for {item_name}: {response.status_code}")
         except Exception as e:
             logger.error(f"Error processing {item_name}: {e}")
             continue
@@ -354,9 +311,11 @@ def fetch_region_history(watchlist: pd.DataFrame) -> list[dict]:
         with open("region_history.json", "w") as f:
             json.dump(history, f)
         return history
-
     else:
         logger.error("No history records found")
         return None
+
+
 if __name__ == "__main__":
     pass
+

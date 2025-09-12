@@ -1,8 +1,8 @@
 from dataclasses import dataclass, field
-from config.config import DatabaseConfig
+from mkts_backend.config.config import DatabaseConfig
 from sqlalchemy import text
+from mkts_backend.config.logging_config import configure_logging
 
-from config.logging_config import configure_logging
 logger = configure_logging(__name__)
 
 
@@ -15,6 +15,7 @@ class TypeInfo:
     category_id: int = field(init=False)
     group_id: int = field(init=False)
     volume: int = field(init=False)
+
     def __post_init__(self):
         self.get_type_info()
 
@@ -33,5 +34,7 @@ class TypeInfo:
                 self.volume = row.volume
         engine.dispose()
 
+
 if __name__ == "__main__":
     pass
+

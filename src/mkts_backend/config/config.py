@@ -2,22 +2,21 @@ import os
 from sqlalchemy import create_engine, text
 import pandas as pd
 import pathlib
-
+# os.environ.setdefault("RUST_LOG", "trace")
 import libsql
 from dotenv import load_dotenv
-from .logging_config import configure_logging
+from mkts_backend.config.logging_config import configure_logging
 
 load_dotenv()
 
 logger = configure_logging(__name__)
 
+
 class DatabaseConfig:
-    #configure this variable. It enables switching the db call across the application between wcmkt3 and wcmkt2.
-    #this is useful for testing and development.
     wcdbmap = "wcmkt2"
 
     _db_paths = {
-        "wcmkt3": "wcmkt3.db", #testing database
+        "wcmkt3": "wcmkt3.db",
         "sde": "sde_info.db",
         "fittings": "wcfitting.db",
         "wcmkt2": "wcmkt2.db",
@@ -38,17 +37,17 @@ class DatabaseConfig:
     }
 
     def __init__(self, alias: str, dialect: str = "sqlite+libsql"):
-
         if alias == "wcmkt":
             alias = self.wcdbmap
         elif alias == "wcmkt3" or alias == "wcmkt2":
-            logger.warning(f"Database alias '{alias}' is deprecated. Configure wcdbmap in config.py to select wcmkt2 or wcmkt3 instead.")
-
+            logger.warning(
+                f"Database alias '{alias}' is deprecated. Configure wcdbmap in config.py to select wcmkt2 or wcmkt3 instead."
+            )
 
         if alias not in self._db_paths:
-            raise ValueError(f"Unknown database alias '{alias}'. "
-                             f"Available: {list(self._db_paths.keys())}")
-
+            raise ValueError(
+                f"Unknown database alias '{alias}'. Available: {list(self._db_paths.keys())}"
+            )
 
         self.alias = alias
         self.path = self._db_paths[alias]
@@ -72,7 +71,12 @@ class DatabaseConfig:
         if self._remote_engine is None:
             turso_url = self._db_turso_urls[f"{self.alias}_turso"]
             auth_token = self._db_turso_auth_tokens[f"{self.alias}_turso"]
-            self._remote_engine = create_engine(f"sqlite+{turso_url}?secure=true", connect_args={"auth_token": auth_token,},)
+            self._remote_engine = create_engine(
+                f"sqlite+{turso_url}?secure=true",
+                connect_args={
+                    "auth_token": auth_token,
+                },
+            )
         return self._remote_engine
 
     @property
@@ -84,7 +88,9 @@ class DatabaseConfig:
     @property
     def libsql_sync_connect(self):
         if self._libsql_sync_connect is None:
-            self._libsql_sync_connect = libsql.connect(f"{self.path}", sync_url = self.turso_url, auth_token=self.token)
+            self._libsql_sync_connect = libsql.connect(
+                f"{self.path}", sync_url=self.turso_url, auth_token=self.token
+            )
         return self._libsql_sync_connect
 
     @property
@@ -94,7 +100,6 @@ class DatabaseConfig:
         return self._sqlite_local_connect
 
     def sync(self):
-
         logger.info("connection established")
         conn = self.libsql_sync_connect
         with conn:
@@ -102,8 +107,7 @@ class DatabaseConfig:
             conn.sync()
         conn.close()
 
-    def validate_sync(self)-> bool:
-
+    def validate_sync(self) -> bool:
         with self.remote_engine.connect() as conn:
             result = conn.execute(text("SELECT MAX(last_update) FROM marketstats")).fetchone()
             remote_last_update = result[0]
@@ -116,7 +120,7 @@ class DatabaseConfig:
         logger.info(f"validation_test: {validation_test}")
         return validation_test
 
-    def get_table_list(self, local_only: bool = True)-> list[tuple]:
+    def get_table_list(self, local_only: bool = True) -> list[tuple]:
         if local_only:
             engine = self.engine
             with engine.connect() as conn:
@@ -135,40 +139,30 @@ class DatabaseConfig:
                 return table_list
 
     def get_table_columns(self, table_name: str, local_only: bool = True, full_info: bool = False) -> list[dict]:
-        """
-        Get column information for a specific table.
-
-        Args:
-            table_name: Name of the table to inspect
-            local_only: If True, use local database; if False, use remote database
-
-        Returns:
-            List of dictionaries containing column information
-        """
         if local_only:
             engine = self.engine
         else:
             engine = self.remote_engine
 
         with engine.connect() as conn:
-            # Use string formatting for PRAGMA since it doesn't support parameterized queries well
             stmt = text(f"PRAGMA table_info({table_name})")
             result = conn.execute(stmt)
             columns = result.fetchall()
             if full_info:
                 column_info = []
                 for col in columns:
-                    column_info.append({
-                    "cid": col.cid,
-                    "name": col.name,
-                    "type": col.type,
-                    "notnull": col.notnull,
-                    "dflt_value": col.dflt_value,
-                    "pk": col.pk
-                })
+                    column_info.append(
+                        {
+                            "cid": col.cid,
+                            "name": col.name,
+                            "type": col.type,
+                            "notnull": col.notnull,
+                            "dflt_value": col.dflt_value,
+                            "pk": col.pk,
+                        }
+                    )
             else:
                 column_info = [col.name for col in columns]
-
 
             return column_info
 
@@ -203,8 +197,3 @@ class DatabaseConfig:
             logger.info(f"Database file exists: {self.path}")
 
         return True
-
-
-
-if __name__ == "__main__":
-    pass

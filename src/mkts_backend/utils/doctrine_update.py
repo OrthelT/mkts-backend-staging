@@ -1,16 +1,13 @@
 import datetime
-import sys
-import os
-# Add the project root to Python path for direct execution
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.get_type_info import TypeInfo
-from config.config import DatabaseConfig
-from sqlalchemy import text
-from db.models import LeadShip
 from dataclasses import dataclass, field
 import pandas as pd
-from config.logging_config import configure_logging
+from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from mkts_backend.utils.get_type_info import TypeInfo
+from mkts_backend.config.config import DatabaseConfig
+from mkts_backend.db.models import LeadShip
+from mkts_backend.config.logging_config import configure_logging
 
 
 doctrines_fields = ['id', 'fit_id', 'ship_id', 'ship_name', 'hulls', 'type_id', 'type_name', 'fit_qty', 'fits_on_mkt', 'total_stock', 'price', 'avg_vol', 'days', 'group_id', 'group_name', 'category_id', 'category name', 'timestamp']
@@ -24,9 +21,6 @@ doctrine_name = '2507  WC-EN Shield DPS HFI v1.0'
 fit_name = '2507  WC-EN Shield DPS HFI v1.0'
 ship_type_id = 33157
 
-doctrine_fit_fields = ['id', 'fit_id', 'ship_id', 'ship_name', 'hulls', 'type_id', 'type_name',
-       'fit_qty', 'fits_on_mkt', 'total_stock', 'price', 'avg_vol', 'days',
-       'group_id', 'group_name', 'category_id', 'category_name', 'timestamp']
 
 @dataclass
 class DoctrineFit:
@@ -48,9 +42,10 @@ class DoctrineFit:
     category_name: str
     timestamp: str = field(init=False)
 
-
     def __post_init__(self):
-        self.timestamp =datetime.datetime.strftime(datetime.datetime.now(datetime.timezone.utc), '%Y-%m-%d %H:%M:%S')
+        self.timestamp = datetime.datetime.strftime(datetime.datetime.now(datetime.timezone.utc), '%Y-%m-%d %H:%M:%S')
+
+
 def add_ship_target():
     db = DatabaseConfig("wcmkt")
     stmt = text("""INSERT INTO ship_targets ('fit_id', 'fit_name', 'ship_id', 'ship_name', 'ship_target', 'created_at')
@@ -62,6 +57,7 @@ def add_ship_target():
         print("Ship target added")
     conn.close()
     engine.dispose()
+
 
 def add_doctrine_map_from_fittings_doctrine_fittings(doctrine_id: int):
     db = DatabaseConfig("fittings")
@@ -83,21 +79,8 @@ def add_doctrine_map_from_fittings_doctrine_fittings(doctrine_id: int):
 
 
 def add_hurricane_fleet_issue_to_doctrines():
-    """
-    Add Hurricane Fleet Issue (fit_id 494) to the doctrines table with all required fields.
-    Uses market data from marketstats table and type info from TypeInfo class.
-
-    Field Logic:
-    - hulls: Number of ship hulls on market (for ship_id)
-    - total_stock: Total volume of the specific item on market (for type_id)
-    - fits_on_mkt: total_stock / fit_qty
-
-    For this ship entry (ship_id == type_id), both hulls and total_stock are the same value.
-    For module entries, hulls would be the ship volume and total_stock would be the module volume.
-    """
     from datetime import datetime, timezone
 
-    # Get market data for Hurricane Fleet Issue
     db = DatabaseConfig("wcmkt")
     engine = db.remote_engine
     with engine.connect() as conn:
@@ -110,10 +93,8 @@ def add_hurricane_fleet_issue_to_doctrines():
         logger.error("No market data found for Hurricane Fleet Issue (type_id 33157)")
         return False
 
-    # Get type info
     type_info = TypeInfo(33157)
 
-    # Get the next available ID
     engine = db.remote_engine
     with engine.connect() as conn:
         stmt = text('SELECT MAX(id) as max_id FROM doctrines')
@@ -124,18 +105,11 @@ def add_hurricane_fleet_issue_to_doctrines():
     conn.close()
     engine.dispose()
 
-    # Calculate fits_on_mkt: total_stock / fit_qty
-    fit_qty = 1  # As specified in the user's request
-
-    # For the Hurricane Fleet Issue ship itself:
-    # - hulls = number of Hurricane Fleet Issue ships on market (ship_id volume)
-    # - total_stock = number of Hurricane Fleet Issue ships on market (type_id volume)
-    # - Since ship_id == type_id in this case, both are the same value
-    hulls_on_market = market_data.total_volume_remain  # Hurricane Fleet Issue ships on market
-    total_stock_on_market = market_data.total_volume_remain  # Same value since ship_id == type_id
+    fit_qty = 1
+    hulls_on_market = market_data.total_volume_remain
+    total_stock_on_market = market_data.total_volume_remain
     fits_on_mkt = total_stock_on_market / fit_qty
 
-    # Prepare the insert statement with all required fields (including manually generated id)
     stmt = text("""
         INSERT INTO doctrines (
             id, fit_id, ship_id, ship_name, hulls, type_id, type_name, fit_qty,
@@ -148,18 +122,17 @@ def add_hurricane_fleet_issue_to_doctrines():
         )
     """)
 
-    # Prepare the data
     insert_data = {
-        'id': next_id,  # Manually generated unique ID
+        'id': next_id,
         'fit_id': 494,
         'ship_id': 33157,
         'ship_name': 'Hurricane Fleet Issue',
-        'hulls': int(hulls_on_market),  # Number of Hurricane Fleet Issue ships on market
+        'hulls': int(hulls_on_market),
         'type_id': 33157,
         'type_name': type_info.type_name,
         'fit_qty': fit_qty,
         'fits_on_mkt': float(fits_on_mkt),
-        'total_stock': int(total_stock_on_market),  # Total volume of Hurricane Fleet Issue ships on market
+        'total_stock': int(total_stock_on_market),
         'price': float(market_data.price),
         'avg_vol': float(market_data.avg_volume),
         'days': float(market_data.days_remaining),
@@ -170,7 +143,6 @@ def add_hurricane_fleet_issue_to_doctrines():
         'timestamp': datetime.now(timezone.utc).isoformat()
     }
 
-    # Execute the insert
     engine = db.remote_engine
     with engine.connect() as conn:
         conn.execute(stmt, insert_data)
@@ -181,6 +153,7 @@ def add_hurricane_fleet_issue_to_doctrines():
     engine.dispose()
 
     return True
+
 
 def add_fit_to_doctrines_table(DoctrineFit: DoctrineFit):
     db = DatabaseConfig("wcmkt")
@@ -195,6 +168,7 @@ def add_fit_to_doctrines_table(DoctrineFit: DoctrineFit):
     conn.close()
     engine.dispose()
 
+
 def add_lead_ship():
     hfi = LeadShip(doctrine_name=doctrine_name, doctrine_id=84, lead_ship=ship_id, fit_id=doctrine_fit_id)
     db = DatabaseConfig("wcmkt")
@@ -206,45 +180,49 @@ def add_lead_ship():
         print("Lead ship added")
     session.close()
 
-def process_hfi_fit_items(type_ids: list[int])->list[DoctrineFit]   :
+
+def process_hfi_fit_items(type_ids: list[int]) -> list[DoctrineFit]:
     items = []
     for type_id in type_ids:
-        item = DoctrineFit(fit_id=494, ship_id=33157, ship_name='Hurricane Fleet Issue', type_id=type_id, type_name='Hurricane Fleet Issue', fit_qty=1, fits_on_mkt=100, total_stock=100, price=100, avg_vol=100, days=100, group_id=100, group_name='Hurricane Fleet Issue', category_id=100, category_name='Hurricane Fleet Issue')
+        item = DoctrineFit(
+            fit_id=494,
+            ship_id=33157,
+            ship_name='Hurricane Fleet Issue',
+            type_id=type_id,
+            type_name='Hurricane Fleet Issue',
+            fit_qty=1,
+            fits_on_mkt=100,
+            total_stock=100,
+            price=100,
+            avg_vol=100,
+            days=100,
+            group_id=100,
+            group_name='Hurricane Fleet Issue',
+            category_id=100,
+            category_name='Hurricane Fleet Issue'
+        )
         items.append(item)
     return items
 
-def get_fit_item_ids(doctrine_id: int)->dict[int, list[int]]:
+
+def get_fit_item_ids(doctrine_id: int) -> dict[int, list[int]]:
     fit_items = {}
     db = DatabaseConfig("fittings")
     engine = db.remote_engine
     with engine.connect() as conn:
-        stmt = text("SELECT fitting_id FROM fittings_doctrine_fittings WHERE doctrine_id = :doctrine_id")
-        df = pd.read_sql_query(stmt, conn, params={"doctrine_id": doctrine_id})
-        fitting_ids = df.fitting_id.tolist()
-
-        for fitting_id in fitting_ids:
-            stmt = text("SELECT type_id FROM fittings_fittingitem WHERE fit_id = :fitting_id")
-            df = pd.read_sql_query(stmt, conn, params={"fitting_id": fitting_id})
-            type_ids = df.type_id.tolist()
-            fit_items[fitting_id] = type_ids
+        stmt = text("SELECT * FROM fittings_doctrine_fittings WHERE doctrine_id = :doctrine_id")
+        result = conn.execute(stmt, {"doctrine_id": doctrine_id})
+        for row in result:
+            fit_id = row[2]
+            stmt = text("SELECT type_id FROM fittings_fittingitem WHERE fit_id = :fit_id")
+            res2 = conn.execute(stmt, {"fit_id": fit_id})
+            type_ids = [row[0] for row in res2]
+            fit_items[fit_id] = type_ids
     conn.close()
     engine.dispose()
     return fit_items
 
+
 if __name__ == "__main__":
-    pd.set_option('display.max_columns', None)
+    pass
 
-    # Add Hurricane Fleet Issue to doctrines table
-    print("Adding Hurricane Fleet Issue to doctrines table...")
-    add_hurricane_fleet_issue_to_doctrines()
-
-    # Verify the data was inserted
-    print("\nVerifying inserted data:")
-    db = DatabaseConfig("wcmkt")
-    engine = db.remote_engine
-    with engine.connect() as conn:
-        stmt = text("SELECT * FROM doctrines WHERE fit_id = 494")
-        df = pd.read_sql_query(stmt, conn)
-        print(df)
-    conn.close()
-    engine.dispose()

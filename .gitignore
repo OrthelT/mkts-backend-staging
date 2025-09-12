@@ -34,3 +34,5 @@ data/
 *.db
 .env
 .vscode/
+AGENTS.md
+REFACTORING_PLAN.md

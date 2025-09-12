@@ -581,7 +581,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/c9/60/f81b9440107ac22cd
 [[package]]
 name = "mkts-backend"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
     { name = "backoff" },

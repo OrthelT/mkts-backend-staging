@@ -4,24 +4,24 @@ import time
 import httpx
 from aiolimiter import AsyncLimiter
 import backoff
-from config.config import DatabaseConfig
-from config.esi_config import ESIConfig
-from config.logging_config import configure_logging
+from mkts_backend.config.config import DatabaseConfig
+from mkts_backend.config.esi_config import ESIConfig
+from mkts_backend.config.logging_config import configure_logging
 
 url = ESIConfig("primary").market_history_url
 
 logger = configure_logging(__name__)
 request_count = 0
 
-
-# Respect 300 requests per minute = 5/sec
 limiter = AsyncLimiter(300, time_period=60.0)
-sema = asyncio.Semaphore(50)  # controls socket concurrency
+sema = asyncio.Semaphore(50)
 
-HEADERS = {"User-Agent": "TaylorDataApp/1.0"}  # customize
+HEADERS = {"User-Agent": "TaylorDataApp/1.0"}
+
 
 def _on_backoff(details):
     print(f"Retrying after {details['tries']} tries; waited {details['wait']:.2f}s")
+
 
 @backoff.on_exception(
     backoff.expo,
@@ -34,8 +34,8 @@ async def call_one(client: httpx.AsyncClient, type_id: int, length: int) -> dict
     global request_count
 
     logger.info(f"Fetching history for {type_id}")
-    async with limiter:   # enforces 300/minute
-        await asyncio.sleep(random.uniform(0, 0.05))  # jitter
+    async with limiter:
+        await asyncio.sleep(random.uniform(0, 0.05))
         async with sema:
             r = await client.get(
                 f"{url}",
@@ -56,9 +56,10 @@ async def call_one(client: httpx.AsyncClient, type_id: int, length: int) -> dict
             r.raise_for_status()
             return r.json()
 
+
 async def async_history():
     watchlist = DatabaseConfig("wcmkt").get_watchlist()
-    type_ids = watchlist["type_id"].unique().tolist() # example list of 835 IDs
+    type_ids = watchlist["type_id"].unique().tolist()
 
     length = len(type_ids)
     logger.info(f"Fetching history for {length} items")
@@ -69,8 +70,11 @@ async def async_history():
     logger.info(f"Request count: {request_count}")
     return results
 
+
 def run_async_history():
     return asyncio.run(async_history())
 
+
 if __name__ == "__main__":
     pass
+

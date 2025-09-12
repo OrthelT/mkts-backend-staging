@@ -57,23 +57,22 @@ SDE_AUTH_TOKEN=<optional_sde_db_token>
 
 ```bash
 # Run with market orders only
-python main.py
+uv run mkts-backend
 
 # Run with historical data processing
-python main.py --history
+uv run mkts-backend --history
 ```
 
 ## Architecture
 
 ### Core Components
 
-- **`main.py`**: Main application orchestrating data collection and processing
-- **`dbhandler.py`**: Database operations and ORM session management
-- **`models.py`**: SQLAlchemy ORM models for all data tables
-- **`nakah.py`**: Regional market processing and system-specific analysis
-- **`google_sheets_utils.py`**: Google Sheets integration and automation
-- **`data_processing.py`**: Market statistics and doctrine analysis calculations
-- **`ESI_OAUTH_FLOW.py`**: Eve Online SSO authentication handling
+- **`mkts_backend/cli.py`**: CLI entrypoint (`mkts-backend`) orchestrating jobs
+- **`mkts_backend/db/`**: ORM models, handlers, and query utilities
+- **`mkts_backend/esi/`**: ESI auth, requests, and async history clients
+- **`mkts_backend/processing/`**: Market stats and doctrine analysis pipelines
+- **`mkts_backend/utils/`**: Utility modules (names, parsing, Jita helpers)
+- **`mkts_backend/config/`**: DB, ESI, Google Sheets, and logging config
 
 ### Data Flow
 

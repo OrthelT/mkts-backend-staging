@@ -36,6 +36,30 @@ jobs:
     - name: Install dependencies
       run: uv sync
 
+    - name: Install package (editable)
+      run: uv pip install -e .
+
+    - name: Smoke import check
+      run: |
+        uv run python - << 'PY'
+        import importlib
+        modules = [
+            'mkts_backend',
+            'mkts_backend.cli',
+            'mkts_backend.config.config',
+            'mkts_backend.config.logging_config',
+            'mkts_backend.db.models',
+            'mkts_backend.db.db_handlers',
+            'mkts_backend.db.db_queries',
+            'mkts_backend.esi.esi_requests',
+            'mkts_backend.processing.data_processing',
+            'mkts_backend.utils.utils',
+        ]
+        for m in modules:
+            importlib.import_module(m)
+        print('Import check OK:', ', '.join(modules))
+        PY
+
     - name: Create required directories
       run: |
         mkdir -p logs
@@ -93,13 +117,13 @@ jobs:
     - name: Run market data collection
       run: |
         if [ "${{ github.event.inputs.include_history }}" = "true" ]; then
-          uv run python main.py --history
+          uv run mkts-backend --history
         elif [ "$(date -u +%H)" = "12" ]; then
           # Run with --history flag at 12:00 UTC
-          uv run python main.py --history
+          uv run mkts-backend --history
         else
           # Run without flags for all other scheduled runs
-          uv run python main.py
+          uv run mkts-backend
         fi
       timeout-minutes: 30
 

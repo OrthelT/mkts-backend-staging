@@ -8,10 +8,11 @@ import sys
 import os
 import pandas as pd
 
-# Add the project root to Python path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add the project src to Python path for local runs
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(project_root, "src"))
 
-from config.gsheets_config import GoogleSheetConfig
+from mkts_backend.config.gsheets_config import GoogleSheetConfig
 
 def main():
     """Demonstrate various ways to use the GoogleSheetConfig class."""

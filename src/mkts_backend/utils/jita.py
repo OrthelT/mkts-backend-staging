@@ -1,4 +1,3 @@
-
 class JitaPrice:
     def __init__(self, type_id: int, price_data: dict):
         self.type_id = type_id
@@ -21,17 +20,5 @@ class JitaPrice:
         }
 
 
-# def get_fuzz_prices(station_id: int, type_ids: list[int]) -> dict:
-#     fuzz_url = f"https://market.fuzzwork.co.uk/aggregates/?station={station_id}&types={','.join(map(str, type_ids))}"
-#     response = requests.get(fuzz_url)
-#     return response.json()
-
-# def get_jita_prices(type_ids: list[int]) -> dict:
-#     jita_prices = get_fuzz_prices(type_ids)
-#     print(jita_prices)
-
-
-
 if __name__ == "__main__":
-    with __name__ == "__main__":
-        pass
+    pass
