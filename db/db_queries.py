@@ -1,9 +1,16 @@
-from config.config import DatabaseConfig
+import sys
+import os
+# Add the project root to Python path for direct execution
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 import pandas as pd
 from db.models import RegionOrders
+from config.config import DatabaseConfig
+from utils.get_type_info import TypeInfo
+
 
 def get_table_length(table: str) -> int:
     db = DatabaseConfig("wcmkt")
@@ -34,7 +41,7 @@ def get_watchlist_ids():
     engine.dispose()
     return watchlist_ids
 
-def get_fit_items(fit_id: int):
+def get_fit_items(fit_id: int) -> list[int]:
     stmt = text("SELECT type_id FROM fittings_fittingitem WHERE fit_id = :fit_id")
     db = DatabaseConfig("fittings")
     engine = db.engine
@@ -135,4 +142,10 @@ def get_region_history()-> pd.DataFrame:
     conn.close()
     return df
 if __name__ == "__main__":
-    pass
+    items = get_fit_items(494)
+    for item in items:
+        item_id = item
+        item_name = TypeInfo(type_id=item_id)
+        type_id = item_name.type_id
+        type_name = item_name.type_name
+        print(type_id, type_name)

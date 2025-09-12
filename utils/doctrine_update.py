@@ -1,8 +1,13 @@
+import datetime
+import sys
+import os
+# Add the project root to Python path for direct execution
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.get_type_info import TypeInfo
 from config.config import DatabaseConfig
 from sqlalchemy import text
 from db.models import LeadShip
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import pandas as pd
 from config.logging_config import configure_logging
 from sqlalchemy.orm import Session
@@ -15,19 +20,37 @@ doctrine_fit_id = 494
 ship_id = 33157
 ship_name = 'Hurricane Fleet Issue'
 ship_target = 100
-created_at = '2025-07-05 00:00:00'
 doctrine_name = '2507  WC-EN Shield DPS HFI v1.0'
 fit_name = '2507  WC-EN Shield DPS HFI v1.0'
 ship_type_id = 33157
+
+doctrine_fit_fields = ['id', 'fit_id', 'ship_id', 'ship_name', 'hulls', 'type_id', 'type_name',
+       'fit_qty', 'fits_on_mkt', 'total_stock', 'price', 'avg_vol', 'days',
+       'group_id', 'group_name', 'category_id', 'category_name', 'timestamp']
 
 @dataclass
 class DoctrineFit:
     fit_id: int
     ship_id: int
     ship_name: str
-    ship_target: int
-    created_at: str
+    hulls: int
+    type_id: int
+    type_name: str
+    fit_qty: int
+    fits_on_mkt: float
+    total_stock: int
+    price: float
+    avg_vol: float
+    days: float
+    group_id: int
+    group_name: str
+    category_id: int
+    category_name: str
+    timestamp: str = field(init=False)
 
+
+    def __post_init__(self):
+        self.timestamp =datetime.datetime.strftime(datetime.datetime.now(datetime.timezone.utc), '%Y-%m-%d %H:%M:%S')
 def add_ship_target():
     db = DatabaseConfig("wcmkt")
     stmt = text("""INSERT INTO ship_targets ('fit_id', 'fit_name', 'ship_id', 'ship_name', 'ship_target', 'created_at')
@@ -162,7 +185,6 @@ def add_hurricane_fleet_issue_to_doctrines():
 def add_fit_to_doctrines_table(DoctrineFit: DoctrineFit):
     db = DatabaseConfig("wcmkt")
     columns = db.get_table_columns("doctrines")
-    print(columns)
     stmt = text("""INSERT INTO doctrines ('fit_id', 'fit_name', 'ship_id', 'ship_name', 'ship_target', 'created_at')
     VALUES (494, '2507  WC-EN Shield DPS HFI v1.0', 33157, 'Hurricane Fleet Issue', 100, '2025-07-05 00:00:00')""")
     engine = db.remote_engine
@@ -184,6 +206,30 @@ def add_lead_ship():
         print("Lead ship added")
     session.close()
 
+def process_hfi_fit_items(type_ids: list[int])->list[DoctrineFit]   :
+    items = []
+    for type_id in type_ids:
+        item = DoctrineFit(fit_id=494, ship_id=33157, ship_name='Hurricane Fleet Issue', type_id=type_id, type_name='Hurricane Fleet Issue', fit_qty=1, fits_on_mkt=100, total_stock=100, price=100, avg_vol=100, days=100, group_id=100, group_name='Hurricane Fleet Issue', category_id=100, category_name='Hurricane Fleet Issue')
+        items.append(item)
+    return items
+
+def get_fit_item_ids(doctrine_id: int)->dict[int, list[int]]:
+    fit_items = {}
+    db = DatabaseConfig("fittings")
+    engine = db.remote_engine
+    with engine.connect() as conn:
+        stmt = text("SELECT fitting_id FROM fittings_doctrine_fittings WHERE doctrine_id = :doctrine_id")
+        df = pd.read_sql_query(stmt, conn, params={"doctrine_id": doctrine_id})
+        fitting_ids = df.fitting_id.tolist()
+
+        for fitting_id in fitting_ids:
+            stmt = text("SELECT type_id FROM fittings_fittingitem WHERE fit_id = :fitting_id")
+            df = pd.read_sql_query(stmt, conn, params={"fitting_id": fitting_id})
+            type_ids = df.type_id.tolist()
+            fit_items[fitting_id] = type_ids
+    conn.close()
+    engine.dispose()
+    return fit_items
 
 if __name__ == "__main__":
     pd.set_option('display.max_columns', None)

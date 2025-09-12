@@ -1,3 +1,9 @@
+import sys
+import os
+# Add the project root to Python path for direct execution
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
 from sqlalchemy import String, Integer, DateTime, Float, Boolean, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from utils.utils import get_type_name
@@ -207,7 +213,7 @@ class DoctrineInfo(Base):
     doctrine_id: Mapped[int] = mapped_column(Integer)
     doctrine_name: Mapped[str] = mapped_column(String)
 
-class DoctrineFits(Base):
+class DoctrineFit(Base):
     __tablename__ = "doctrine_fits"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     doctrine_name: Mapped[str] = mapped_column(String)

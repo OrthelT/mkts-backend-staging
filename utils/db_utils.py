@@ -1,10 +1,17 @@
+import sys
+import os
+# Add the project root to Python path for direct execution
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pandas as pd
 from sqlalchemy import text, insert
 from config.config import DatabaseConfig
 from config.logging_config import configure_logging
-from utils.get_type_info import TypeInfo
+from utils import get_type_info
+from get_type_info import TypeInfo
 from db.models import Watchlist, DeploymentWatchlist
 from db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items
+from utils.utils import init_databases
 
 logger = configure_logging(__name__)
 
@@ -186,4 +193,16 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
     # return calculate_total_ship_count(market_data)
 
 if __name__ == "__main__":
-    pass
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine
+    with engine.connect() as conn:
+        stmt = text("SELECT * FROM doctrines")
+        df = pd.read_sql_query(stmt, conn)
+        fit_df = pd.DataFrame(columns=df.columns)
+        for index, row in df.iterrows():
+            fit_id = 494
+            fit_items = get_fit_items(fit_id)
+            for item in fit_items:
+                print(item)
+    conn.close()
+    engine.dispose()
