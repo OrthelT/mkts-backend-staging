@@ -12,7 +12,7 @@ from mkts_backend.utils.utils import (
     add_autoincrement,
     validate_columns,
     convert_datetime_columns,
-    get_type_names,
+    get_type_names_from_df,
 )
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.db.models import Base, MarketHistory, MarketOrders, RegionOrders
@@ -199,7 +199,7 @@ def update_history(history_results: list[list[dict]]):
 
 def update_market_orders(orders: list[dict]) -> bool:
     orders_df = pd.DataFrame.from_records(orders)
-    type_names = get_type_names(orders_df)
+    type_names = get_type_names_from_df(orders_df)
     orders_df = orders_df.merge(type_names, on="type_id", how="left")
 
     orders_df = convert_datetime_columns(orders_df, ['issued'])
@@ -254,4 +254,3 @@ def update_region_orders(region_id: int, order_type: str = 'sell') -> pd.DataFra
     session.close()
 
     return pd.DataFrame(orders)
-

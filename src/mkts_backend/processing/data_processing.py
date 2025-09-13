@@ -9,7 +9,7 @@ from mkts_backend.utils.utils import (
     add_autoincrement,
     validate_columns,
     convert_datetime_columns,
-    get_type_names,
+    get_type_names_from_df,
 )
 from mkts_backend.db.db_handlers import upsert_remote_database
 from mkts_backend.db.db_queries import (
@@ -24,7 +24,6 @@ wcmkt_db = DatabaseConfig("wcmkt")
 sde_db = DatabaseConfig("sde")
 
 logger = configure_logging(__name__)
-
 
 def calculate_5_percentile_price() -> pd.DataFrame:
     query = """
@@ -44,7 +43,6 @@ def calculate_5_percentile_price() -> pd.DataFrame:
     df.price = df.price.apply(lambda x: round(x, 2))
     df.columns = ["type_id", "5_perc_price"]
     return df
-
 
 def calculate_market_stats() -> pd.DataFrame:
     query = """
@@ -115,7 +113,6 @@ def calculate_market_stats() -> pd.DataFrame:
     logger.info(f"Market stats calculated: {df.shape[0]} items")
     return df
 
-
 def calculate_doctrine_stats() -> pd.DataFrame:
     doctrine_query = """
     SELECT
@@ -162,7 +159,6 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     doctrine_stats = doctrine_stats.reset_index(drop=True)
     return doctrine_stats
 
-
 def process_system_orders(system_id: int) -> pd.DataFrame:
     df = get_system_orders_from_db(system_id)
     df = not df['is_buy_order']
@@ -173,13 +169,12 @@ def process_system_orders(system_id: int) -> pd.DataFrame:
         nakah_df.groupby("type_id").agg({"price": lambda x: x.quantile(0.05), "volume_remain": "sum"}).reset_index()
     )
     nakah_ids = nakah_df["type_id"].unique().tolist()
-    type_names = get_type_names(nakah_ids)
+    type_names = get_type_names_from_df(nakah_ids)
     nakah_df = nakah_df.merge(type_names, on="type_id", how="left")
     nakah_df = nakah_df[["type_id", "type_name", "group_name", "category_name", "price", "volume_remain"]]
     nakah_df['timestamp'] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     nakah_df.to_csv("nakah_stats.csv", index=False)
     return nakah_df
-
 
 def process_region_history(watchlist: pd.DataFrame):
     region_history = fetch_region_history(watchlist)
@@ -207,4 +202,3 @@ def process_region_history(watchlist: pd.DataFrame):
 
 if __name__ == "__main__":
     pass
-

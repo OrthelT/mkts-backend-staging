@@ -14,7 +14,7 @@ sde_db = DatabaseConfig("sde")
 fittings_db = DatabaseConfig("fittings")
 wcmkt_db = DatabaseConfig("wcmkt")
 
-def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
+def get_type_names_from_df(df: pd.DataFrame) -> pd.DataFrame:
     engine = sa.create_engine(sde_db.url)
     with engine.connect() as conn:
         stmt = text("SELECT typeID, typeName, groupName, categoryName, categoryID FROM inv_info")

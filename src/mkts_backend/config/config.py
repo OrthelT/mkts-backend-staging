@@ -197,3 +197,6 @@ class DatabaseConfig:
             logger.info(f"Database file exists: {self.path}")
 
         return True
+
+if __name__ == "__main__":
+    pass

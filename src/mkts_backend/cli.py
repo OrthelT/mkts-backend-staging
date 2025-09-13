@@ -139,7 +139,6 @@ def process_doctrine_stats():
         logger.error("Failed to update doctrines")
         return False
 
-
 def main(history: bool = False):
     """Main function to process market orders, history, market stats, and doctrines"""
     logger.info("Initializing databases")

@@ -8,7 +8,7 @@ from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.db.models import RegionOrders, RegionHistory
 import pandas as pd
 from mkts_backend.utils.utils import (
-    get_type_names,
+    get_type_names_from_df,
     get_type_name,
     add_timestamp,
     add_autoincrement,
@@ -64,4 +64,3 @@ def get_region_orders_from_db(region_id: int, system_id: int, db: DatabaseConfig
 
     session.close()
     return pd.DataFrame(orders_data)
-

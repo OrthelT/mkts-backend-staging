@@ -4,6 +4,7 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from mkts_backend.db.models import LeadShips
+from mkts_backend.db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items
 from mkts_backend.utils.get_type_info import TypeInfo
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
@@ -175,7 +176,6 @@ def add_lead_ship():
         print("Lead ship added")
     session.close()
 
-
 def process_hfi_fit_items(type_ids: list[int]) -> list[DoctrineFit]:
     items = []
     for type_id in type_ids:
@@ -198,7 +198,6 @@ def process_hfi_fit_items(type_ids: list[int]) -> list[DoctrineFit]:
         )
         items.append(item)
     return items
-
 
 def get_fit_item_ids(doctrine_id: int) -> dict[int, list[int]]:
     fit_items = {}
@@ -260,5 +259,73 @@ def add_ship_target_triggers():
     conn.close()
     engine.dispose()
 
+def add_doctrine_type_info_to_watchlist(doctrine_id: int):
+    watchlist_ids = get_watchlist_ids()
+    fit_ids = get_fit_ids(doctrine_id)
+
+    missing_fit_items = []
+
+    for fit_id in fit_ids:
+        fit_items = get_fit_items(fit_id)
+        for item in fit_items:
+            if item not in watchlist_ids:
+                missing_fit_items.append(item)
+
+    missing_type_info = []
+    logger.info(f"Adding {len(missing_fit_items)} missing items to watchlist")
+    print(f"Adding {len(missing_fit_items)} missing items to watchlist")
+    continue_adding = input("Continue adding? (y/n)")
+    if continue_adding == "n":
+        return
+    else:
+        logger.info(f"Continuing to add {len(missing_fit_items)} missing items to watchlist")
+        print(f"Continuing to add {len(missing_fit_items)} missing items to watchlist")
+
+    for item in missing_fit_items:
+        stmt4 = text("SELECT * FROM inv_info WHERE typeID = :item")
+        db = DatabaseConfig("sde")
+        engine = db.engine
+        with engine.connect() as conn:
+            result = conn.execute(stmt4, {"item": item})
+            for row in result:
+                type_info = TypeInfo(type_id=item)
+                missing_type_info.append(type_info)
+
+    for type_info in missing_type_info:
+        stmt5 = text("INSERT INTO watchlist (type_id, type_name, group_name, category_name, category_id, group_id) VALUES (:type_id, :type_name, :group_name, :category_name, :category_id, :group_id)")
+        db = DatabaseConfig("wcmkt")
+        engine = db.engine
+        with engine.connect() as conn:
+            conn.execute(stmt5, {"type_id": type_info.type_id, "type_name": type_info.type_name, "group_name": type_info.group_name, "category_name": type_info.category_name, "category_id": type_info.category_id, "group_id": type_info.group_id})
+            conn.commit()
+        conn.close()
+        engine.dispose()
+        logger.info(f"Added {type_info.type_name} to watchlist")
+        print(f"Added {type_info.type_name} to watchlist")
+
+def add_doctrine_fits_to_wcmkt(df: pd.DataFrame, remote: bool = False):
+
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine if remote else db.engine
+    print(db.alias + " " + " " + str(remote))
+    session = Session(engine)
+    fits_added = []
+    with session.begin():
+        for index, row in df.iterrows():
+            fit = DoctrineFit(doctrine_name=row["doctrine_name"], fit_name=row["fit_name"], ship_type_id=row["ship_type_id"], ship_name=row["ship_name"], fit_id=row["fit_id"], doctrine_id=row["doctrine_id"], target=row["target"])
+            session.add(fit)
+            print(f"Added {fit.fit_name} to doctrine_fits table")
+    session.commit()
+    session.close()
+    engine.dispose()
+
+def check_doctrine_fits_in_wcmkt(doctrine_id: int, remote: bool = False)->pd.DataFrame:
+    db = DatabaseConfig("wcmkt")
+    print(db.alias + " " + " " + str(remote))
+    engine = db.remote_engine if remote else db.engine
+    with engine.connect() as conn:
+        stmt = text("SELECT * FROM doctrine_fits WHERE doctrine_id = :doctrine_id")
+        df = pd.read_sql_query(stmt, conn, params={"doctrine_id": doctrine_id})
+    return df
 if __name__ == "__main__":
     pass
