@@ -14,7 +14,6 @@ sde_db = DatabaseConfig("sde")
 fittings_db = DatabaseConfig("fittings")
 wcmkt_db = DatabaseConfig("wcmkt")
 
-
 def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
     engine = sa.create_engine(sde_db.url)
     with engine.connect() as conn:
@@ -25,7 +24,6 @@ def get_type_names(df: pd.DataFrame) -> pd.DataFrame:
     engine.dispose()
     return df[["type_id", "type_name", "group_name", "category_name", "category_id"]]
 
-
 def get_type_name(type_id: int) -> str:
     engine = sa.create_engine(sde_db.url)
     with engine.connect() as conn:
@@ -34,7 +32,6 @@ def get_type_name(type_id: int) -> str:
         type_name = res.fetchone()[0]
     engine.dispose()
     return type_name
-
 
 def get_type_names_from_esi(df: pd.DataFrame) -> pd.DataFrame:
     type_ids = df["type_id"].unique().tolist()
@@ -73,25 +70,20 @@ def get_type_names_from_esi(df: pd.DataFrame) -> pd.DataFrame:
         logger.error("No names found for any chunks")
         return None
 
-
 def get_null_count(df):
     return df.isnull().sum()
 
-
 def validate_columns(df, valid_columns):
     return df[valid_columns]
-
 
 def add_timestamp(df):
     df["timestamp"] = pd.Timestamp.now(tz="UTC")
     df["timestamp"] = df["timestamp"].dt.tz_convert(None)
     return df
 
-
 def add_autoincrement(df):
     df["id"] = df.index + 1
     return df
-
 
 def convert_datetime_columns(df, datetime_columns):
     for col in datetime_columns:
@@ -99,14 +91,12 @@ def convert_datetime_columns(df, datetime_columns):
             df[col] = pd.to_datetime(df[col], utc=True).dt.tz_convert(None)
     return df
 
-
 def standby(seconds: int):
     for i in range(seconds):
         message = f"\rWaiting for {seconds - i} seconds"
         print(message, end="", flush=True)
         time.sleep(1)
     print()
-
 
 def get_status():
     engine = sa.create_engine(wcmkt_db.url)
@@ -127,7 +117,6 @@ def get_status():
     print(f"Market History: {history_count}")
     print(f"Market Stats: {stats_count}")
     print(f"Region Orders: {region_orders_count}")
-
 
 def get_fit_items(fit_id: int) -> pd.DataFrame:
     table_list_stmt = "SELECT type_id, quantity FROM fittings_fittingitem WHERE fit_id = (:fit_id)"
@@ -151,7 +140,6 @@ def get_fit_items(fit_id: int) -> pd.DataFrame:
     df = pd.DataFrame(raptor_fit)
     return df
 
-
 def update_watchlist_data(esi: ESIConfig, watchlist_csv: str = "data/watchlist.csv") -> bool:
     df = pd.read_csv(watchlist_csv)
     db = wcmkt_db
@@ -162,7 +150,6 @@ def update_watchlist_data(esi: ESIConfig, watchlist_csv: str = "data/watchlist.c
     conn.close()
     logger.info(f"Watchlist updated: {len(df)} items")
     return True
-
 
 def init_databases():
     aliases = ["wcmkt", "sde", "fittings"]
@@ -179,7 +166,6 @@ def init_databases():
             logger.info(f"Database {alias} verified")
         except Exception as e:
             logger.error(f"Error initializing database {alias}: {e}")
-
 
 def insert_type_data(data: list[dict]):
     db = DatabaseConfig("sde")
@@ -217,7 +203,38 @@ def insert_type_data(data: list[dict]):
             json.dump(unprocessed_data, f)
     return data
 
+def update_ship_target(fit_id: int, ship_target: int):
+    old_ship_target = check_ship_target(fit_id)
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine
+    with engine.connect() as conn:
 
+        print(f"Current ship target for fit_id {fit_id} is {old_ship_target}, updating to {ship_target}")
+        stmt = text("UPDATE ship_targets SET ship_target = :ship_target WHERE fit_id = :fit_id")
+        conn.execute(stmt, {"ship_target": ship_target, "fit_id": fit_id})
+        conn.commit()
+        conn.close()
+        engine.dispose()
+
+    new_ship_target = check_ship_target(fit_id)
+    print(f"New ship target for fit_id {fit_id} is {new_ship_target}")
+    if new_ship_target != old_ship_target:
+        logger.info(f"Ship target for fit_id {fit_id} was updated from {old_ship_target} to {new_ship_target}")
+        print(f"Ship target for fit_id {fit_id} was updated from {old_ship_target} to {new_ship_target}")
+    else:
+        logger.info(f"Ship target for fit_id {fit_id} was {old_ship_target}={new_ship_target}, no update needed")
+        print(f"Ship target for fit_id {fit_id} was {old_ship_target}={new_ship_target}, no update needed")
+
+def check_ship_target(fit_id: int):
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine
+    with engine.connect() as conn:
+        stmt = text("SELECT * FROM ship_targets WHERE fit_id = :fit_id")
+        res = conn.execute(stmt, {"fit_id": fit_id})
+        target = res.fetchone()
+        target = target._mapping['ship_target']
+    conn.close()
+    engine.dispose()
+    return target
 if __name__ == "__main__":
     pass
-

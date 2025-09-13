@@ -2,10 +2,8 @@ from sqlalchemy import String, Integer, DateTime, Float, Boolean, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from mkts_backend.utils.utils import get_type_name
 
-
 class Base(DeclarativeBase):
     pass
-
 
 class MarketStats(Base):
     __tablename__ = "marketstats"
@@ -130,6 +128,17 @@ class DoctrineMap(Base):
 
     def __repr__(self) -> str:
         return f"doctrine_map(doctrine_id={self.doctrine_id!r}, fitting_id={self.fitting_id!r})"
+
+class LeadShips(Base):
+    __tablename__ = "lead_ships"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    doctrine_name: Mapped[str] = mapped_column(String)
+    doctrine_id: Mapped[int] = mapped_column(Integer)
+    lead_ship: Mapped[int] = mapped_column(Integer)
+    fit_id: Mapped[int] = mapped_column(Integer)
+
+    def __repr__(self) -> str:
+        return f"lead_ships(doctrine_name={self.doctrine_name!r}, doctrine_id={self.doctrine_id!r}, lead_ship={self.lead_ship!r}, fit_id={self.fit_id!r})"
 
 
 class Watchlist(Base):

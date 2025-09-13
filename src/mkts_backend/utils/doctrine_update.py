@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from mkts_backend.utils.get_type_info import TypeInfo
 from mkts_backend.config.config import DatabaseConfig
-from mkts_backend.db.models import LeadShip
 from mkts_backend.config.logging_config import configure_logging
 
 
@@ -45,7 +44,6 @@ class DoctrineFit:
     def __post_init__(self):
         self.timestamp = datetime.datetime.strftime(datetime.datetime.now(datetime.timezone.utc), '%Y-%m-%d %H:%M:%S')
 
-
 def add_ship_target():
     db = DatabaseConfig("wcmkt")
     stmt = text("""INSERT INTO ship_targets ('fit_id', 'fit_name', 'ship_id', 'ship_name', 'ship_target', 'created_at')
@@ -76,7 +74,6 @@ def add_doctrine_map_from_fittings_doctrine_fittings(doctrine_id: int):
             logger.info(f"Added doctrine_map for doctrine_id: {doctrine_id}, fitting_id: {row.fitting_id}")
     conn.close()
     engine.dispose()
-
 
 def add_hurricane_fleet_issue_to_doctrines():
     from datetime import datetime, timezone
@@ -170,7 +167,7 @@ def add_fit_to_doctrines_table(DoctrineFit: DoctrineFit):
 
 
 def add_lead_ship():
-    hfi = LeadShip(doctrine_name=doctrine_name, doctrine_id=84, lead_ship=ship_id, fit_id=doctrine_fit_id)
+    hfi = LeadShips(doctrine_name=doctrine_name, doctrine_id=84, lead_ship=ship_id, fit_id=doctrine_fit_id)
     db = DatabaseConfig("wcmkt")
     engine = db.remote_engine
     session = Session(bind=engine)
@@ -222,7 +219,48 @@ def get_fit_item_ids(doctrine_id: int) -> dict[int, list[int]]:
     engine.dispose()
     return fit_items
 
+def add_ship_target_triggers():
+    """This functions adds triggers to automatically ppopulate
+    doctrine_fits table with changes to  the ship targets table.
+    """
+
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine
+    with engine.connect() as conn:
+        stmt1 = text("""
+            CREATE TRIGGER update_doctrine_fits_target
+            AFTER UPDATE OF ship_target ON ship_targets
+            BEGIN
+                UPDATE doctrine_fits
+                SET target = NEW.ship_target
+                WHERE fit_id = NEW.fit_id;
+                END;""")
+        stmt2 = text("""
+            CREATE TRIGGER insert_doctrine_fits_target
+            AFTER INSERT ON ship_targets
+            BEGIN
+                UPDATE doctrine_fits
+                SET target = NEW.ship_target
+                WHERE fit_id = NEW.fit_id;
+            END;""")
+        stmt3 = text("""
+        CREATE TRIGGER delete_doctrine_fits_target
+            AFTER DELETE ON ship_targets
+        BEGIN
+            UPDATE doctrine_fits
+            SET target = 20
+            WHERE fit_id = OLD.fit_id;
+        END;
+        """)
+
+        logger.info("update trigger added")
+
+        logger.info("insert trigger added")
+        conn.execute(stmt3)
+        conn.commit()
+        print("Triggers committed")
+    conn.close()
+    engine.dispose()
 
 if __name__ == "__main__":
     pass
-

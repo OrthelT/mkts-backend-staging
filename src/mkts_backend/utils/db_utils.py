@@ -3,7 +3,7 @@ from sqlalchemy import text, insert
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.utils import TypeInfo
-from mkts_backend.db.models import Watchlist, DeploymentWatchlist
+from mkts_backend.db.models import Watchlist
 from mkts_backend.db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items
 from mkts_backend.utils.utils import init_databases
 
@@ -33,7 +33,6 @@ def add_missing_items_to_watchlist():
     df.to_csv("data/watchlist_missing.csv", index=False)
     watchlist = pd.concat([watchlist, df], ignore_index=True)
     watchlist.to_csv("data/watchlist_updated.csv", index=False)
-
 
 def update_watchlist_tables(missing_items: list[int]):
     engine = sde_db.engine
@@ -85,7 +84,6 @@ def update_watchlist_tables(missing_items: list[int]):
 
     logger.info(f"Updated both watchlist and deployment_watchlist tables with {len(df)} missing items")
 
-
 def add_doctrine_type_info_to_watchlist(doctrine_id: int):
     watchlist_ids = get_watchlist_ids()
     fit_ids = get_fit_ids(doctrine_id)
@@ -132,9 +130,5 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
 
 
 if __name__ == "__main__":
-    db = DatabaseConfig("wcmkt")
-    engine = db.remote_engine
-    with engine.connect() as conn:
-        stmt = text("SELECT * FROM doctrines")
-        df = pd.read_sql_query(stmt, conn)
 
+    pass
