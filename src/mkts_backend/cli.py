@@ -145,11 +145,11 @@ def main(history: bool = False):
     logger.info("Initializing databases")
     init_databases()
     logger.info("Databases initialized")
-
     logger.info("Starting main function")
 
     esi = ESIConfig("primary")
     db = DatabaseConfig("wcmkt")
+    logger.info(f"Database: {db.alias}")
 
     print("=" * 80)
     print("Fetching market orders")
@@ -222,4 +222,3 @@ if __name__ == "__main__":
     t0 = time.perf_counter()
     main(history=include_history)
     logger.info(f"Main function completed in {time.perf_counter()-t0:.1f}s")
-

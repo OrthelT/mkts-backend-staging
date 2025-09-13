@@ -80,20 +80,20 @@ class Doctrines(Base):
     fit_id: Mapped[int] = mapped_column(Integer)
     ship_id: Mapped[int] = mapped_column(Integer)
     ship_name: Mapped[str] = mapped_column(String)
-    hulls: Mapped[int] = mapped_column(Integer)
+    hulls: Mapped[int] = mapped_column(Integer, nullable=True)
     type_id: Mapped[int] = mapped_column(Integer)
-    type_name: Mapped[str] = mapped_column(String)
+    type_name: Mapped[str] = mapped_column(String, nullable=True)
     fit_qty: Mapped[int] = mapped_column(Integer)
-    fits_on_mkt: Mapped[float] = mapped_column(Float)
-    total_stock: Mapped[int] = mapped_column(Integer)
-    price: Mapped[float] = mapped_column(Float)
-    avg_vol: Mapped[float] = mapped_column(Float)
-    days: Mapped[float] = mapped_column(Float)
-    group_id: Mapped[int] = mapped_column(Integer)
-    group_name: Mapped[str] = mapped_column(String)
-    category_id: Mapped[int] = mapped_column(Integer)
-    category_name: Mapped[str] = mapped_column(String)
-    timestamp: Mapped[DateTime] = mapped_column(DateTime)
+    fits_on_mkt: Mapped[float] = mapped_column(Float, nullable=True)
+    total_stock: Mapped[int] = mapped_column(Integer, nullable=True)
+    price: Mapped[float] = mapped_column(Float, nullable=True)
+    avg_vol: Mapped[float] = mapped_column(Float, nullable=True)
+    days: Mapped[float] = mapped_column(Float, nullable=True)
+    group_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    group_name: Mapped[str] = mapped_column(String, nullable=True)
+    category_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    category_name: Mapped[str] = mapped_column(String, nullable=True)
+    timestamp: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
 
     def __repr__(self) -> str:
         return (
@@ -250,4 +250,3 @@ def populate_region_history_type_name(mapper, connection, target):
             target.type_name = get_type_name(target.type_id)
         except Exception:
             pass
-
