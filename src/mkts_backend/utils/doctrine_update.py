@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-
+from mkts_backend.db.models import LeadShips
 from mkts_backend.utils.get_type_info import TypeInfo
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
@@ -19,7 +19,6 @@ ship_target = 100
 doctrine_name = '2507  WC-EN Shield DPS HFI v1.0'
 fit_name = '2507  WC-EN Shield DPS HFI v1.0'
 ship_type_id = 33157
-
 
 @dataclass
 class DoctrineFit:
@@ -56,14 +55,12 @@ def add_ship_target():
     conn.close()
     engine.dispose()
 
-
 def add_doctrine_map_from_fittings_doctrine_fittings(doctrine_id: int):
     db = DatabaseConfig("fittings")
     engine = db.remote_engine
     with engine.connect() as conn:
         stmt = text("SELECT * FROM fittings_doctrine_fittings WHERE doctrine_id = :doctrine_id")
         df = pd.read_sql_query(stmt, conn, params={"doctrine_id": doctrine_id})
-        print(df)
     conn.close()
     doctrine_map_db = DatabaseConfig("wcmkt")
     engine = doctrine_map_db.remote_engine
@@ -72,6 +69,8 @@ def add_doctrine_map_from_fittings_doctrine_fittings(doctrine_id: int):
             stmt = text("INSERT INTO doctrine_map ('doctrine_id', 'fitting_id') VALUES (:doctrine_id, :fitting_id)")
             conn.execute(stmt, {"doctrine_id": doctrine_id, "fitting_id": row.fitting_id})
             logger.info(f"Added doctrine_map for doctrine_id: {doctrine_id}, fitting_id: {row.fitting_id}")
+        conn.commit()
+        print("Doctrine map added")
     conn.close()
     engine.dispose()
 
@@ -150,7 +149,6 @@ def add_hurricane_fleet_issue_to_doctrines():
     engine.dispose()
 
     return True
-
 
 def add_fit_to_doctrines_table(DoctrineFit: DoctrineFit):
     db = DatabaseConfig("wcmkt")
