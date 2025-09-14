@@ -1,11 +1,11 @@
 name: Market Data Collection
 
 on:
-  # schedule:
-  #   # Run with --history flag daily at 12:00 UTC
-  #   - cron: '0 12 * * *'
-  #   # Run every 2 hours without flags
-  #   - cron: '0 0,2,4,6,8,10,14,16,18,20,22 * * *'
+  schedule:
+    # Run with --history flag daily at 12:00 UTC
+    - cron: '30 12 * * *'
+    # Run every 2 hours without flags
+    - cron: '30 0,2,4,6,8,10,14,16,18,20,22 * * *'
 
   workflow_dispatch: # Allow manual triggering
     inputs:
@@ -36,6 +36,30 @@ jobs:
     - name: Install dependencies
       run: uv sync
 
+    - name: Install package (editable)
+      run: uv pip install -e .
+
+    - name: Smoke import check
+      run: |
+        uv run python - << 'PY'
+        import importlib
+        modules = [
+            'mkts_backend',
+            'mkts_backend.cli',
+            'mkts_backend.config.config',
+            'mkts_backend.config.logging_config',
+            'mkts_backend.db.models',
+            'mkts_backend.db.db_handlers',
+            'mkts_backend.db.db_queries',
+            'mkts_backend.esi.esi_requests',
+            'mkts_backend.processing.data_processing',
+            'mkts_backend.utils.utils',
+        ]
+        for m in modules:
+            importlib.import_module(m)
+        print('Import check OK:', ', '.join(modules))
+        PY
+
     - name: Create required directories
       run: |
         mkdir -p logs
@@ -44,22 +68,39 @@ jobs:
 
     - name: Set up environment variables
       run: |
-        echo "CLIENT_ID=${{ secrets.EVE_CLIENT_ID }}" >> $GITHUB_ENV
-        echo "SECRET_KEY=${{ secrets.EVE_SECRET_KEY }}" >> $GITHUB_ENV
-        echo "TURSO_URL=${{ secrets.TURSO_URL }}" >> $GITHUB_ENV
-        echo "TURSO_AUTH_TOKEN=${{ secrets.TURSO_AUTH_TOKEN }}" >> $GITHUB_ENV
-        echo "SDE_URL=${{ secrets.SDE_URL }}" >> $GITHUB_ENV
-        echo "SDE_AUTH_TOKEN=${{ secrets.SDE_AUTH_TOKEN }}" >> $GITHUB_ENV
+        echo "CLIENT_ID=${{ secrets.CLIENT_ID }}" >> $GITHUB_ENV
+        echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> $GITHUB_ENV
+        echo "TURSO_MKT_URL=${{ secrets.TURSO_MKT_URL }}" >> $GITHUB_ENV
+        echo "TURSO_MKT_TOKEN=${{ secrets.TURSO_MKT_TOKEN }}" >> $GITHUB_ENV
+        echo "TURSO_SDE_URL=${{ secrets.TURSO_SDE_URL }}" >> $GITHUB_ENV
+        echo "TURSO_SDE_TOKEN=${{ secrets.TURSO_SDE_TOKEN }}" >> $GITHUB_ENV
+        echo "TURSO_FITTING_URL=${{ secrets.TURSO_FITTING_URL }}" >> $GITHUB_ENV
+        echo "TURSO_FITTING_TOKEN=${{ secrets.TURSO_FITTING_TOKEN }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKT2_URL=${{ secrets.TURSO_WCMKT2_URL }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKT2_TOKEN=${{ secrets.TURSO_WCMKT2_TOKEN }}" >> $GITHUB_ENV
 
-
-
-    - name: Set up Google Service Account
-      run: |
-        echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}' > wcdoctrines-1f629d861c2f.json
+    #- name: Set up Google Service Account
+      #run: not currently implemented. add reference to secrets.GOOGLE_SHEET_KEY to use.
 
     - name: Set up EVE SSO refresh token
       run: |
-        echo "REFRESH_TOKEN=${{ secrets.EVE_REFRESH_TOKEN }}" >> $GITHUB_ENV
+        echo "REFRESH_TOKEN=${{ secrets.REFRESH_TOKEN }}" >> $GITHUB_ENV
+
+    - name: Debug environment variables
+      run: |
+        echo "Checking if required environment variables are set:"
+        echo "CLIENT_ID is set: $([ -n "$CLIENT_ID" ] && echo "YES" || echo "NO")"
+        echo "SECRET_KEY is set: $([ -n "$SECRET_KEY" ] && echo "YES" || echo "NO")"
+        echo "REFRESH_TOKEN is set: $([ -n "$REFRESH_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "REFRESH_TOKEN length: ${#REFRESH_TOKEN}"
+        echo "TURSO_MKT_URL is set: $([ -n "$TURSO_MKT_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_MKT_TOKEN is set: $([ -n "$TURSO_MKT_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_SDE_URL is set: $([ -n "$TURSO_SDE_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_SDE_TOKEN is set: $([ -n "$TURSO_SDE_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_FITTING_URL is set: $([ -n "$TURSO_FITTING_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_FITTING_TOKEN is set: $([ -n "$TURSO_FITTING_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKT2_URL is set: $([ -n "$TURSO_WCMKT2_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKT2_TOKEN is set: $([ -n "$TURSO_WCMKT2_TOKEN" ] && echo "YES" || echo "NO")"
 
     - name: Download watchlist data
       run: |
@@ -68,25 +109,21 @@ jobs:
           echo "type_id,type_name,group_id,group_name,category_id,category_name" > databackup/all_watchlist.csv
         fi
 
-
-    - name: Initialize local databases
+    - name: Clean up any existing database files
       run: |
-        # Create empty database files if they don't exist
-        touch wcmkt2.db
-        touch sde_info.db
+        # Remove any existing database files to ensure clean initialization
+        rm -f wcmkt3.db wcmkt3.db-* sde_info.db sde_info.db-* wcfitting.db wcfitting.db-* wcmkt2.db wcmkt2.db-*
 
     - name: Run market data collection
       run: |
         if [ "${{ github.event.inputs.include_history }}" = "true" ]; then
-          uv run python main.py --history
-        elif [ "${{ github.event.inputs.region_only }}" = "true" ]; then
-          uv run python main.py --region_only
+          uv run mkts-backend --history
         elif [ "$(date -u +%H)" = "12" ]; then
           # Run with --history flag at 12:00 UTC
-          uv run python main.py --history
+          uv run mkts-backend --history
         else
           # Run without flags for all other scheduled runs
-          uv run python main.py
+          uv run mkts-backend
         fi
       timeout-minutes: 30
 
@@ -96,18 +133,6 @@ jobs:
       with:
         name: market-data-logs-${{ github.run_number }}
         path: logs/
-        retention-days: 7
-
-    - name: Upload generated data as artifacts
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: market-data-output-${{ github.run_number }}
-        path: |
-          market_orders.json
-          market_history.json
-          nakah_stats.csv
-          market_orders.csv
         retention-days: 7
 
     - name: Clean up sensitive files
