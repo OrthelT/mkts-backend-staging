@@ -47,10 +47,14 @@ Create a `.env` file with the following variables:
 ```env
 CLIENT_ID=<eve_sso_client_id>
 SECRET_KEY=<eve_sso_client_secret>
-TURSO_URL=<optional_remote_db_url>
-TURSO_AUTH_TOKEN=<optional_remote_db_token>
-SDE_URL=<optional_sde_db_url>
-SDE_AUTH_TOKEN=<optional_sde_db_token>
+TURSO_WCMKT2_URL=turso db url (production)
+TURSO_WCMKT2_TOKEN=turso db auth token (production)
+TURSO_WCMKT3_URL=turso db url (development)
+TURSO_WCMKT3_TOKEN=turso db token (development)
+TURSO_FITTING_URL=turso fitting db url
+TURSO_FITTING_TOKEN=turso fitting db token
+TURSO_SDE_URL=turso sde db url
+TURSO_SDE_TOKEN=turso sde db url
 ```
 
 ### Running the Application
@@ -148,13 +152,6 @@ The project uses modern Python dependencies managed with uv:
 - **libsql**: SQLite with sync capabilities
 - **gspread**: Google Sheets API integration
 - **mydbtools**: Custom database utilities
-
-### Testing
-
-```bash
-# Run tests
-python -m pytest tests/
-```
 
 ### Logging
 

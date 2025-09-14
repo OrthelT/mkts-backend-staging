@@ -1,6 +1,7 @@
 import pandas as pd
+from pandas.core.internals.blocks import NumpyBlock
 from mkts_backend.config.logging_config import configure_logging
-from mkts_backend.db.models import MarketStats, RegionHistory
+from mkts_backend.db.models import MarketStats, RegionHistory, MarketHistory
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.esi.esi_requests import fetch_region_history
@@ -18,6 +19,8 @@ from mkts_backend.db.db_queries import (
     get_system_orders_from_db,
 )
 from datetime import datetime, timezone
+from sqlalchemy.orm import Session
+from sqlalchemy import select, text
 
 esi = ESIConfig("primary")
 wcmkt_db = DatabaseConfig("wcmkt")
@@ -102,17 +105,133 @@ def calculate_market_stats() -> pd.DataFrame:
     df = df.rename(columns={"5_perc_price": "price"})
     df["last_update"] = pd.Timestamp.now(tz="UTC")
 
+    # Fill missing stats from history data
+    df = fill_missing_stats_from_history(df)
+
+    # Round numeric columns
+    df["avg_price"] = df["avg_price"].apply(lambda x: round(x, 2) if pd.notnull(x) and x > 0 else 0)
+    df["avg_volume"] = df["avg_volume"].apply(lambda x: round(x, 1) if pd.notnull(x) and x > 0 else 0)
+    df["total_volume_remain"] = df["total_volume_remain"].fillna(0).astype(int)
+    df["days_remaining"] = df["days_remaining"].fillna(0)
+
+    # Ensure we have all required database columns
     db_cols = MarketStats.__table__.columns.keys()
     df = df[db_cols]
-    return df
 
-    df = df.infer_objects()
-    df = df.fillna(0)
-    df["avg_price"] = df["avg_price"].apply(lambda x: round(x, 2) if x > 0 else 0)
-    df["avg_volume"] = df["avg_volume"].apply(lambda x: round(x, 1) if x > 0 else 0)
-    df["total_volume_remain"] = df["total_volume_remain"].astype(int)
     logger.info(f"Market stats calculated: {df.shape[0]} items")
     return df
+
+def fill_missing_stats_from_history(stats: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fill missing stats from market history data.
+    - When min_price is null: use minimum of average from market history
+    - When price is null: use average of average from market history
+    - When avg_price/avg_volume is null or no history data: use 0
+    """
+    # Get all type_ids that have any null values
+    null_mask = stats[['min_price', 'price', 'avg_price', 'avg_volume']].isnull().any(axis=1)
+    items_with_nulls = stats[null_mask]
+
+    if items_with_nulls.empty:
+        return stats
+
+    missing_ids = items_with_nulls["type_id"].unique().tolist()
+    # Convert to strings since MarketHistory.type_id is a String field
+    missing_ids = [str(id) for id in missing_ids]
+
+    logger.info(f"Missing IDs to query: {missing_ids[:5]}...")  # Log first 5 for debugging
+
+    db = DatabaseConfig("wcmkt")
+    engine = db.engine
+
+    try:
+        # Check if we have any missing_ids to query
+        if not missing_ids:
+            logger.warning("No missing IDs to query")
+            return stats
+
+        # Query market history using pandas read_sql for easier handling
+        # Convert list to comma-separated string for IN clause
+        id_list_str = ','.join([f"'{id}'" for id in missing_ids])
+        query = f"SELECT type_id, average, volume FROM market_history WHERE type_id IN ({id_list_str})"
+
+        logger.info(f"Querying history for {len(missing_ids)} type_ids")
+
+        try:
+            with engine.connect() as conn:
+                history_df = pd.read_sql_query(query, conn)
+        except Exception as e:
+            logger.error(f"Error in SQL query: {e}")
+            raise
+
+        logger.info(f"Found {len(history_df)} history records")
+
+        if history_df.empty:
+            # No history data available, set all nulls to 0
+            stats.loc[null_mask, 'avg_price'] = 0
+            stats.loc[null_mask, 'avg_volume'] = 0
+            stats.loc[null_mask, 'min_price'] = 0
+            stats.loc[null_mask, 'price'] = 0
+            return stats
+
+        try:
+            # Process each type_id individually to avoid aggregation issues
+            for type_id in missing_ids:
+                type_history = history_df[history_df['type_id'] == type_id]
+
+                if type_history.empty:
+                    continue
+
+                # Calculate statistics for this type_id
+                min_avg = type_history['average'].min()
+                mean_avg = type_history['average'].mean()
+                mean_vol = type_history['volume'].mean()
+
+                # Apply the rules for this type_id
+                type_mask = stats['type_id'].astype(str) == type_id
+
+                # 1. min_price null -> use minimum of average from market history
+                if stats.loc[type_mask, 'min_price'].isnull().any():
+                    stats.loc[type_mask & stats['min_price'].isnull(), 'min_price'] = min_avg
+
+                # 2. price null -> use average of average from market history
+                if stats.loc[type_mask, 'price'].isnull().any():
+                    stats.loc[type_mask & stats['price'].isnull(), 'price'] = mean_avg
+
+                # 3. avg_price null -> use mean_average or 0 if no history
+                if stats.loc[type_mask, 'avg_price'].isnull().any():
+                    stats.loc[type_mask & stats['avg_price'].isnull(), 'avg_price'] = mean_avg
+
+                # 4. avg_volume null -> use mean_volume or 0 if no history
+                if stats.loc[type_mask, 'avg_volume'].isnull().any():
+                    stats.loc[type_mask & stats['avg_volume'].isnull(), 'avg_volume'] = mean_vol
+        except Exception as e:
+            logger.error(f"Error in processing type_ids: {e}")
+            raise
+
+        try:
+            # For items with no history data at all, set to 0
+            no_history_mask = stats[['min_price', 'price', 'avg_price', 'avg_volume']].isnull().any(axis=1)
+            stats.loc[no_history_mask, ['min_price', 'price', 'avg_price', 'avg_volume']] = 0
+        except Exception as e:
+            logger.error(f"Error in final null handling: {e}")
+            raise
+
+        logger.info(f"Filled missing stats for {len(missing_ids)} items from market history")
+
+    except Exception as e:
+        logger.error(f"Error filling missing stats from history: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        # Fallback: set all nulls to 0
+        stats.loc[null_mask, ['min_price', 'price', 'avg_price', 'avg_volume']] = 0
+
+    finally:
+        engine.dispose()
+
+    return stats
+
+
 
 def calculate_doctrine_stats() -> pd.DataFrame:
     doctrine_query = """
@@ -181,7 +300,17 @@ def process_system_orders(system_id: int) -> pd.DataFrame:
 def process_region_history(watchlist: pd.DataFrame):
     region_history = fetch_region_history(watchlist)
     valid_history_columns = RegionHistory.__table__.columns.keys()
-    history_df = pd.DataFrame.from_records(region_history)
+
+    # Check if region_history is in the right format
+    if isinstance(region_history, list) and len(region_history) > 0:
+        if isinstance(region_history[0], dict):
+            history_df = pd.DataFrame(region_history)
+        else:
+            # Convert to list of dicts if needed
+            history_df = pd.DataFrame.from_records(region_history)
+    else:
+        # Create empty DataFrame with correct columns
+        history_df = pd.DataFrame(columns=valid_history_columns)
     history_df = add_timestamp(history_df)
     history_df = add_autoincrement(history_df)
     history_df = validate_columns(history_df, valid_history_columns)
@@ -203,4 +332,4 @@ def process_region_history(watchlist: pd.DataFrame):
 
 
 if __name__ == "__main__":
-    null_ids = [242, 450, 453, 484, 499, 580, 586, 590, 632, 1294, 2321, 2327, 2349, 2354, 2868, 3955, 9680, 9734, 11311, 11349, 15317, 16236, 16505, 16652, 18698, 18937, 19209, 31111, 31406, 32874]
+    pass

@@ -21,8 +21,8 @@ dependencies = [
     "httpx[http2]>=0.28.1",
     "aiolimiter>=1.2.1",
     "backoff>=2.2.1",
-    "libsql>=0.1.10",
     "sqlalchemy>=2.0.43",
+    "libsql>=0.1.11",
 ]
 
 [build-system]

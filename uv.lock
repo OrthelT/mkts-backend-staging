@@ -612,7 +612,7 @@ requires-dist = [
     { name = "google-auth", specifier = ">=2.40.3" },
     { name = "gspread", specifier = ">=6.2.1" },
     { name = "httpx", extras = ["http2"], specifier = ">=0.28.1" },
-    { name = "libsql", specifier = ">=0.1.10" },
+    { name = "libsql", specifier = ">=0.1.11" },
     { name = "matplotlib", specifier = ">=3.10.5" },
     { name = "millify", specifier = ">=0.1.1" },
     { name = "pandas", specifier = ">=2.3.0" },

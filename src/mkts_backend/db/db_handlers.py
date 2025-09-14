@@ -27,7 +27,7 @@ db = DatabaseConfig("wcmkt")
 sde_db = DatabaseConfig("sde")
 
 
-def upsert_database(table: Base, df: pd.DataFrame, remote: bool = False) -> bool:
+def upsert_database(table: Base, df: pd.DataFrame) -> bool:
     WIPE_REPLACE_TABLES = ["marketstats", "doctrines"]
     tabname = table.__tablename__
     is_wipe_replace = tabname in WIPE_REPLACE_TABLES
@@ -49,7 +49,7 @@ def upsert_database(table: Base, df: pd.DataFrame, remote: bool = False) -> bool
     db = DatabaseConfig("wcmkt")
     logger.info(f"updating: {db}")
 
-    remote_engine = db.remote_engine if remote else db.engine
+    remote_engine = db.remote_engine
     session = Session(bind=remote_engine)
 
     t = table.__table__

@@ -73,7 +73,6 @@ def process_market_orders(esi: ESIConfig, order_type: str = "all", test_mode: bo
         logger.error("no data returned from ESI call.")
         return False
 
-
 def process_history():
     logger.info("History mode enabled")
     logger.info("Processing history")
@@ -166,7 +165,7 @@ def main(history: bool = False):
     else:
         logger.error("No watchlist found. Unable to proceed further.")
         exit()
-    logger.info("=" * 80)
+
 
     if history:
         logger.info("Processing history ")
@@ -179,48 +178,29 @@ def main(history: bool = False):
         logger.info("History mode disabled. Skipping history processing")
 
     logger.info("=" * 80)
-    logger.info("Syncing database")
-    logger.info("=" * 80)
-    logger.info("Sleeping for 5 seconds")
-    time.sleep(5)
     db.sync()
-    time.sleep(5)
-    logger.info("Validating database sync")
-    db.validate_sync()
     logger.info("Database synced")
     logger.info("=" * 80)
-    logger.info("*" * 80)
 
     status = process_market_stats()
     if status:
         logger.info("Market stats updated")
-        logger.info("Syncing database")
-        logger.info("=" * 80)
-        logger.info("Sleeping for 5 seconds")
-        time.sleep(5)
-        db.sync()
-        time.sleep(5)
-        logger.info("Validating database sync")
-        db.validate_sync()
-        logger.info("Database synced")
-        logger.info("=" * 80)
-        logger.info("*" * 80)
     else:
         logger.error("Failed to update market stats")
         exit()
 
     logger.info("=" * 80)
 
+    logger.info("=" * 80)
+    logger.info("Syncing database")
+    db.sync()
+    logger.info("Database synced")
+    logger.info("=" * 80)
+
+
     status = process_doctrine_stats()
     if status:
         logger.info("Doctrines updated")
-        time.sleep(5)
-        db.sync()
-        time.sleep(5)
-        if not db.validate_sync():
-            logger.error("Database is not synced. Please sync the database before updating doctrines.")
-            raise Exception("Database is not synced. Please sync the database before updating doctrines.")
-            exit()
     else:
         logger.error("Failed to update doctrines")
         exit()

@@ -89,10 +89,13 @@ class DatabaseConfig:
 
     @property
     def libsql_sync_connect(self):
-        if self._libsql_sync_connect is None:
-            self._libsql_sync_connect = libsql.connect(
+        logger.info(f"Syncing database to {self.turso_url}")
+        logger.info(f"Auth token: {self.token}")
+        logger.info(f"Path: {self.path}")
+        self._libsql_sync_connect = libsql.connect(
                 f"{self.path}", sync_url=self.turso_url, auth_token=self.token
             )
+        logger.info("Sync connection established")
         return self._libsql_sync_connect
 
     @property
