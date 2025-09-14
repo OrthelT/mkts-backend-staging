@@ -5,7 +5,7 @@ from sqlalchemy import Engine, text, select
 from sqlalchemy.orm import Session
 from mkts_backend.db.models import *
 from mkts_backend.db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items
-from mkts_backend.utils.utils import get_type_name
+from mkts_backend.utils.utils import get_type_name, wcmkt_db
 from mkts_backend.utils.get_type_info import TypeInfo
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
@@ -330,7 +330,7 @@ def check_doctrine_fits_in_wcmkt(doctrine_id: int, remote: bool = False)->pd.Dat
     return df
 
 def reset_doctrines_table(remote: bool = False):
-    wcmkt3 = DatabaseConfig("wcmkt3")
+    wcmkt3 = DatabaseConfig("wcmkt")
     engine1 = wcmkt3.remote_engine if remote else wcmkt3.engine
     session = Session(bind=engine1)
     with session.begin():
@@ -339,7 +339,7 @@ def reset_doctrines_table(remote: bool = False):
     session.close()
     Base.metadata.create_all(engine1)
     print("Tables created")
-    wcmkt2 = DatabaseConfig("wcmkt2")
+    wcmkt2 = DatabaseConfig("wcmkt")
     engine2 = wcmkt2.remote_engine if remote else wcmkt2.engine
     stmt = "SELECT * FROM doctrines"
     with engine2.connect() as conn:
@@ -377,7 +377,7 @@ def add_doctrine_fit_to_doctrines_table(df: pd.DataFrame, fit_id: int, ship_id: 
     print(f"Added {len(df)} rows to doctrines table")
 
 def clean_doctrines_table(remote: bool = False):
-    db = DatabaseConfig("wcmkt3")
+    db = DatabaseConfig("wcmkt")
     engine = db.remote_engine if remote else db.engine
     session = Session(bind=engine)
     with session.begin():
@@ -391,7 +391,7 @@ def clean_doctrines_table(remote: bool = False):
 def add_doctrines_to_table(df: pd.DataFrame, remote: bool = False):
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     clean_doctrines_table(remote)
-    db = DatabaseConfig("wcmkt3")
+    db = DatabaseConfig("wcmkt")
     engine = db.remote_engine if remote else db.engine
     session = Session(bind=engine)
     with session.begin():
@@ -405,7 +405,7 @@ def add_doctrines_to_table(df: pd.DataFrame, remote: bool = False):
     print(f"Added {len(df)} rows to doctrines table")
 
 def check_doctrines_table(remote: bool = False):
-    db = DatabaseConfig("wcmkt3")
+    db = DatabaseConfig("wcmkt")
     engine = db.remote_engine if remote else db.engine
     session = Session(bind=engine)
     row_count = 0
@@ -424,4 +424,18 @@ def replace_doctrines_table(df: pd.DataFrame, remote: bool = False):
     check_doctrines_table(remote=True)
 
 if __name__ == "__main__":
-    pass
+    db = DatabaseConfig('wcmkt3')
+    engine = db.remote_engine
+    session = Session(bind=engine)
+    rows = []
+    with session.begin():
+        stmt = select(Doctrines).where(Doctrines.fit_id == 494)
+        result = session.scalars(stmt)
+        for row in result:
+            rowdict = row.__dict__
+            rowdict.pop('_sa_instance_state')
+            rows.append(rowdict)
+    df = pd.DataFrame(rows)
+    print(df)
+    session.close()
+    engine.dispose()
