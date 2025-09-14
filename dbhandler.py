@@ -74,6 +74,10 @@ def wcmkt_conn():
     conn = libsql.connect(wcmkt_path, sync_url=turso_url, auth_token=turso_auth_token)
     return conn
 
+def fittings_conn():
+    conn = libsql.connect(wcfittings_db_path, sync_url=turso_fittings_url, auth_token=turso_fittings_auth_token)
+    return conn
+
 def sde_remote_engine():
     engine = create_engine(sde_local_url, connect_args={"auth_token": sde_token}, echo=True)
     return engine
@@ -453,6 +457,21 @@ def get_region_deployment_history(deployment_date: datetime) -> pd.DataFrame:
         print("No 'date' column found in region history data")
         return df
 
+def init_database():
+    logger.info("Initializing fittings database")
+    conn = fittings_conn()
+    conn.sync()
+    conn.close()
+
+    logger.info("Initializing market database")
+    conn = wcmkt_conn()
+    conn.sync()
+    conn.close()
+
+    logger.info("Initializing SDE database")
+    conn = sde_conn()
+    conn.sync()
+    conn.close()
 
 if __name__ == "__main__":
     pass
