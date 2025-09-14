@@ -90,6 +90,18 @@ def process_history():
 
 def process_market_stats():
     logger.info("Calculating market stats")
+    logger.info("syncing database")
+    db = DatabaseConfig("wcmkt")
+    db.sync()
+    logger.info("database synced")
+    logger.info("validating database")
+    validation_test = db.validate_sync()
+    if validation_test:
+        logger.info("database validated")
+    else:
+        logger.error("database validation failed")
+        raise Exception("database validation failed in market stats")
+
     try:
         market_stats_df = calculate_market_stats()
         if len(market_stats_df) > 0:
@@ -126,6 +138,19 @@ def process_market_stats():
         return False
 
 def process_doctrine_stats():
+    logger.info("Calculating doctrines stats")
+    logger.info("syncing database")
+    db = DatabaseConfig("wcmkt")
+    db.sync()
+    logger.info("database synced")
+    logger.info("validating database")
+    validation_test = db.validate_sync()
+    if validation_test:
+        logger.info("database validated")
+    else:
+        logger.error("database validation failed")
+        raise Exception("database validation failed in doctrines stats")
+
     doctrine_stats_df = calculate_doctrine_stats()
     doctrine_stats_df = convert_datetime_columns(doctrine_stats_df, ["timestamp"])
     status = upsert_database(Doctrines, doctrine_stats_df)
@@ -146,6 +171,17 @@ def main(history: bool = False):
     esi = ESIConfig("primary")
     db = DatabaseConfig("wcmkt")
     logger.info(f"Database: {db.alias}")
+
+    logger.info("syncing database")
+    db.sync()
+    logger.info("database synced")
+    logger.info("validating database")
+    validation_test = db.validate_sync()
+    if validation_test:
+        logger.info("database validated")
+    else:
+        logger.error("database validation failed")
+        raise Exception("database validation failed in main")
 
     print("=" * 80)
     print("Fetching market orders")
@@ -177,26 +213,12 @@ def main(history: bool = False):
     else:
         logger.info("History mode disabled. Skipping history processing")
 
-    logger.info("=" * 80)
-    db.sync()
-    logger.info("Database synced")
-    logger.info("=" * 80)
-
     status = process_market_stats()
     if status:
         logger.info("Market stats updated")
     else:
         logger.error("Failed to update market stats")
         exit()
-
-    logger.info("=" * 80)
-
-    logger.info("=" * 80)
-    logger.info("Syncing database")
-    db.sync()
-    logger.info("Database synced")
-    logger.info("=" * 80)
-
 
     status = process_doctrine_stats()
     if status:

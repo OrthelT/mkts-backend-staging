@@ -20,7 +20,7 @@ from mkts_backend.db.db_queries import (
 )
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import select, text
+from sqlalchemy import select, text, func
 
 esi = ESIConfig("primary")
 wcmkt_db = DatabaseConfig("wcmkt")
@@ -93,20 +93,21 @@ def calculate_market_stats() -> pd.DataFrame:
         df = pd.read_sql_query(query, conn)
         logger.info(f"df: {df}")
         logger.info(f"Market stats queried: {df.shape[0]} items")
-
     engine.dispose()
+
+
+
     logger.info("Calculating 5 percentile price")
     df2 = calculate_5_percentile_price()
     logger.info("Merging 5 percentile price with market stats")
     df = df.merge(df2, on="type_id", how="left")
 
+    df = fill_nulls_from_history(df)
+
     logger.info("Renaming columns")
     df.days_remaining = df.days_remaining.apply(lambda x: round(x, 1))
     df = df.rename(columns={"5_perc_price": "price"})
     df["last_update"] = pd.Timestamp.now(tz="UTC")
-
-    # Fill missing stats from history data
-    df = fill_missing_stats_from_history(df)
 
     # Round numeric columns
     df["avg_price"] = df["avg_price"].apply(lambda x: round(x, 2) if pd.notnull(x) and x > 0 else 0)
@@ -121,117 +122,100 @@ def calculate_market_stats() -> pd.DataFrame:
     logger.info(f"Market stats calculated: {df.shape[0]} items")
     return df
 
-def fill_missing_stats_from_history(stats: pd.DataFrame) -> pd.DataFrame:
-    """
-    Fill missing stats from market history data.
-    - When min_price is null: use minimum of average from market history
-    - When price is null: use average of average from market history
-    - When avg_price/avg_volume is null or no history data: use 0
-    """
-    # Get all type_ids that have any null values
-    null_mask = stats[['min_price', 'price', 'avg_price', 'avg_volume']].isnull().any(axis=1)
-    items_with_nulls = stats[null_mask]
 
-    if items_with_nulls.empty:
+def fill_nulls_from_history(stats: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fill nulls from market history data.
+    """
+    logger.info("Filling nulls from history")
+
+    # Check if there are any null values to fill
+    if stats.isnull().sum().sum() == 0:
+        logger.info("No null values found, returning original stats")
+        return stats
+    else:
+        logger.info(f"stats has nulls: {stats.isnull().sum().sum()}")
+
+    stats['days_remaining'] = stats['days_remaining'].fillna(0)
+    stats['total_volume_remain'] = stats['total_volume_remain'].fillna(0)
+
+    logger.info("Getting nulls")
+    nulls = stats[stats.isnull().any(axis=1)]
+    nulls_type_ids = nulls.type_id.unique().tolist()
+    logger.info(f"nulls: {len(nulls)} items")
+    logger.info(f"nulls_type_ids: {nulls_type_ids}")
+
+    if not nulls_type_ids:
+        logger.info("No type_ids with nulls found")
         return stats
 
-    missing_ids = items_with_nulls["type_id"].unique().tolist()
-    # Convert to strings since MarketHistory.type_id is a String field
-    missing_ids = [str(id) for id in missing_ids]
-
-    logger.info(f"Missing IDs to query: {missing_ids[:5]}...")  # Log first 5 for debugging
-
-    db = DatabaseConfig("wcmkt")
-    engine = db.engine
-
+    logger.info("Querying history")
+    engine = wcmkt_db.engine
+    session = Session(engine)
     try:
-        # Check if we have any missing_ids to query
-        if not missing_ids:
-            logger.warning("No missing IDs to query")
-            return stats
+        with session.begin():
+            stmt = select(
+                MarketHistory.type_id,
+                func.avg(MarketHistory.average).label("avg_price"),
+                func.avg(MarketHistory.volume).label("avg_volume")
+            ).where(
+                MarketHistory.type_id.in_(nulls_type_ids)
+            ).where(
+                MarketHistory.average > 0
+            ).where(
+                MarketHistory.volume > 0
+            ).group_by(MarketHistory.type_id)
 
-        # Query market history using pandas read_sql for easier handling
-        # Convert list to comma-separated string for IN clause
-        id_list_str = ','.join([f"'{id}'" for id in missing_ids])
-        query = f"SELECT type_id, average, volume FROM market_history WHERE type_id IN ({id_list_str})"
+            res = session.execute(stmt)
+            history_data = res.fetchall()
+            logger.info(f"Found {len(history_data)} history records")
 
-        logger.info(f"Querying history for {len(missing_ids)} type_ids")
+            if history_data:
 
-        try:
-            with engine.connect() as conn:
-                history_df = pd.read_sql_query(query, conn)
-        except Exception as e:
-            logger.error(f"Error in SQL query: {e}")
-            raise
+                # Convert to DataFrame
+                history_df = pd.DataFrame(history_data, columns=res.keys())
+                history_df = history_df.set_index('type_id')
+                history_df.index = history_df.index.astype(int)
+                logger.info(f"history_df shape: {history_df.shape}")
 
-        logger.info(f"Found {len(history_df)} history records")
+                # Fill null values using merge for safer indexing
+                for type_id in nulls_type_ids:
+                    if type_id in history_df.index:
+                        logger.info(f"Filling nulls for type_id {type_id}, type_id is {type(type_id)}")
+                        # Fill price-related nulls with historical average price
+                        try:
+                            if pd.isnull(stats.loc[stats.type_id == type_id, 'avg_price']).any():
+                                stats.loc[stats.type_id == type_id, 'avg_price'] = history_df.loc[type_id, 'avg_price']
+                            if pd.isnull(stats.loc[stats.type_id == type_id, 'min_price']).any():
+                                stats.loc[stats.type_id == type_id, 'min_price'] = history_df.loc[type_id, 'avg_price']
+                        except Exception as e:
+                            logger.error(f"Error filling nulls for type_id {type_id}: {e}")
+                        # Fill volume-related nulls
+                        try:
+                            if pd.isnull(stats.loc[stats.type_id == type_id, 'avg_volume']).any():
+                                stats.loc[stats.type_id == type_id, 'avg_volume'] = history_df.loc[type_id, 'avg_volume']
+                        except Exception as e:
+                            logger.error(f"Error filling nulls for type_id {type_id}: {e}")
 
-        if history_df.empty:
-            # No history data available, set all nulls to 0
-            stats.loc[null_mask, 'avg_price'] = 0
-            stats.loc[null_mask, 'avg_volume'] = 0
-            stats.loc[null_mask, 'min_price'] = 0
-            stats.loc[null_mask, 'price'] = 0
-            return stats
-
-        try:
-            # Process each type_id individually to avoid aggregation issues
-            for type_id in missing_ids:
-                type_history = history_df[history_df['type_id'] == type_id]
-
-                if type_history.empty:
-                    continue
-
-                # Calculate statistics for this type_id
-                min_avg = type_history['average'].min()
-                mean_avg = type_history['average'].mean()
-                mean_vol = type_history['volume'].mean()
-
-                # Apply the rules for this type_id
-                type_mask = stats['type_id'].astype(str) == type_id
-
-                # 1. min_price null -> use minimum of average from market history
-                if stats.loc[type_mask, 'min_price'].isnull().any():
-                    stats.loc[type_mask & stats['min_price'].isnull(), 'min_price'] = min_avg
-
-                # 2. price null -> use average of average from market history
-                if stats.loc[type_mask, 'price'].isnull().any():
-                    stats.loc[type_mask & stats['price'].isnull(), 'price'] = mean_avg
-
-                # 3. avg_price null -> use mean_average or 0 if no history
-                if stats.loc[type_mask, 'avg_price'].isnull().any():
-                    stats.loc[type_mask & stats['avg_price'].isnull(), 'avg_price'] = mean_avg
-
-                # 4. avg_volume null -> use mean_volume or 0 if no history
-                if stats.loc[type_mask, 'avg_volume'].isnull().any():
-                    stats.loc[type_mask & stats['avg_volume'].isnull(), 'avg_volume'] = mean_vol
-        except Exception as e:
-            logger.error(f"Error in processing type_ids: {e}")
-            raise
-
-        try:
-            # For items with no history data at all, set to 0
-            no_history_mask = stats[['min_price', 'price', 'avg_price', 'avg_volume']].isnull().any(axis=1)
-            stats.loc[no_history_mask, ['min_price', 'price', 'avg_price', 'avg_volume']] = 0
-        except Exception as e:
-            logger.error(f"Error in final null handling: {e}")
-            raise
-
-        logger.info(f"Filled missing stats for {len(missing_ids)} items from market history")
+                        logger.info(f"Filled nulls for type_id {type_id}")
+                    else:
+                        logger.info(f"No history data found for type_id {type_id}")
+            else:
+                logger.info("No history data found for null type_ids")
 
     except Exception as e:
-        logger.error(f"Error filling missing stats from history: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        # Fallback: set all nulls to 0
-        stats.loc[null_mask, ['min_price', 'price', 'avg_price', 'avg_volume']] = 0
-
+        logger.error(f"Error filling nulls from history: {e}")
     finally:
+        session.close()
         engine.dispose()
+    if stats.isnull().sum().sum() > 0:
+        stats = stats.fillna(0)
 
+    if stats.isnull().sum().sum() == 0:
+        logger.info("No nulls found after filling")
+    else:
+        logger.error(f"stats has nulls after filling: {stats.isnull().sum().sum()}")
     return stats
-
-
 
 def calculate_doctrine_stats() -> pd.DataFrame:
     doctrine_query = """
@@ -275,6 +259,7 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     )
     doctrine_stats = doctrine_stats.infer_objects()
     doctrine_stats = doctrine_stats.fillna(0)
+
     doctrine_stats["fits_on_mkt"] = doctrine_stats["fits_on_mkt"].astype(int)
     doctrine_stats["avg_vol"] = doctrine_stats["avg_vol"].astype(int)
     doctrine_stats = doctrine_stats.reset_index(drop=True)
@@ -332,4 +317,6 @@ def process_region_history(watchlist: pd.DataFrame):
 
 
 if __name__ == "__main__":
-    pass
+    df = calculate_market_stats()
+
+    print(df)
