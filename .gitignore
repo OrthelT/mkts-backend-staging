@@ -1,3 +1,4 @@
+
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -18,12 +19,23 @@ tests/
 archive/
 db_cleanup.py
 hfi.txt
+*.db
 *.db-info
-model.db
 *.db-*
 esi_utilities.py
 scratch.py
 .cursor/
-config.py
-history.py
-reports/
+backup
+backup/
+archive/
+envtest.txt
+parseenv.py
+data/
+*.db-*
+*.db
+.env
+.vscode/
+AGENTS.md
+REFACTORING_PLAN.md
+advanced_intel_output/
+coalition_analytics_output/

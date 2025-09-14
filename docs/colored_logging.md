@@ -19,7 +19,7 @@ The logging system has been enhanced to support colored output in the console wh
 ### Default Configuration
 
 ```python
-from logging_config import configure_logging
+from mkts_backend.config.logging_config import configure_logging
 
 # Basic usage with default colors
 logger = configure_logging("my_module")
@@ -32,7 +32,7 @@ logger.error("This will appear in red")
 
 ```python
 import logging
-from logging_config import configure_logging
+from mkts_backend.config.logging_config import configure_logging
 
 # Custom configuration
 logger = configure_logging(
@@ -115,7 +115,7 @@ Available log levels (from lowest to highest priority):
 
 ### Example 1: Basic Usage
 ```python
-from logging_config import configure_logging
+from mkts_backend.config.logging_config import configure_logging
 
 logger = configure_logging("market_data")
 logger.info("Starting market data collection")
@@ -126,7 +126,7 @@ logger.error("Failed to fetch market data")
 ### Example 2: Custom Colors
 ```python
 import logging
-from logging_config import configure_logging
+from mkts_backend.config.logging_config import configure_logging
 
 # Custom color scheme for better visibility
 custom_colors = {
@@ -147,7 +147,7 @@ logger = configure_logging(
 ### Example 3: Different Console and File Levels
 ```python
 import logging
-from logging_config import configure_logging
+from mkts_backend.config.logging_config import configure_logging
 
 # Verbose console output, detailed file logging
 logger = configure_logging(
@@ -199,4 +199,4 @@ logger = configure_logging("my_module")
 
 # New way with colors
 logger = configure_logging("my_module", use_colors=True)
-``` 
+```

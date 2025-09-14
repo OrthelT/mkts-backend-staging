@@ -1,11 +1,11 @@
 # GitHub Actions Setup Guide
 
-This guide explains how to set up GitHub Actions to run the Eve Online market data collection script remotely.
+This guide explains how to set up GitHub Actions to run the Eve Online market data collection CLI remotely.
 
 ## Overview
 
 The GitHub Actions workflow is configured to:
-- Run automatically every 4 hours
+- Run on a defined schedule
 - Allow manual triggering with optional history processing
 - Use remote databases (Turso) for data persistence
 - Update Google Sheets with market data
@@ -19,16 +19,17 @@ Go to your GitHub repository → Settings → Secrets and variables → Actions,
 
 #### Required Secrets
 
-- `EVE_CLIENT_ID`: Your Eve Online ESI application client ID
-- `EVE_SECRET_KEY`: Your Eve Online ESI application secret key
-- `GOOGLE_SERVICE_ACCOUNT_KEY`: Your Google Service Account JSON key (entire file content)
+- `CLIENT_ID`: Eve Online ESI application client ID
+- `SECRET_KEY`: Eve Online ESI application secret key
+- `REFRESH_TOKEN`: Eve Online SSO refresh token (for structure markets)
+- `GOOGLE_SHEET_KEY`: Google Service Account JSON key (entire file content)
 
 #### Optional Secrets (for remote database sync)
 
-- `TURSO_URL`: Your Turso database URL
-- `TURSO_AUTH_TOKEN`: Your Turso authentication token
-- `SDE_URL`: Your SDE database URL  
-- `SDE_AUTH_TOKEN`: Your SDE authentication token
+- `TURSO_MKT_URL` and `TURSO_MKT_TOKEN`
+- `TURSO_SDE_URL` and `TURSO_SDE_TOKEN`
+- `TURSO_FITTING_URL` and `TURSO_FITTING_TOKEN`
+- `TURSO_WCMKT2_URL` and `TURSO_WCMKT2_TOKEN`
 
 ### 2. Eve Online ESI Application
 
@@ -63,11 +64,7 @@ If using remote database sync:
 
 ### Schedule
 
-The workflow runs automatically every 4 hours:
-```yaml
-schedule:
-  - cron: '0 */4 * * *'
-```
+The workflow runs on a schedule defined in `.github/workflows/market-data-collection.yml`.
 
 ### Manual Trigger
 
@@ -79,10 +76,7 @@ You can manually trigger the workflow:
 
 ### Timeout
 
-The workflow has a 30-minute timeout to prevent infinite runs:
-```yaml
-timeout-minutes: 30
-```
+The workflow has a timeout configured per job to prevent infinite runs.
 
 ## Output and Artifacts
 
@@ -98,7 +92,7 @@ Output files are uploaded as artifacts:
 
 ### Google Sheets
 
-Market data is automatically updated in your configured Google Sheet.
+Market data updates can be published to your configured Google Sheet via the `GoogleSheetConfig` module.
 
 ## Troubleshooting
 
@@ -133,33 +127,15 @@ Market data is automatically updated in your configured Google Sheet.
 
 ### Changing Schedule
 
-Edit the cron expression in `.github/workflows/market-data-collection.yml`:
-```yaml
-schedule:
-  - cron: '0 */6 * * *'  # Every 6 hours
-  - cron: '0 0 * * *'    # Daily at midnight
-  - cron: '0 0 * * 1'    # Weekly on Monday
-```
+Edit the cron expression in `.github/workflows/market-data-collection.yml`.
 
 ### Adding More Triggers
 
-Add additional trigger conditions:
-```yaml
-on:
-  schedule:
-    - cron: '0 */4 * * *'
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-```
+Add additional trigger conditions in the workflow `on:` section.
 
 ### Modifying Artifact Retention
 
-Change retention period:
-```yaml
-retention-days: 30  # Keep artifacts for 30 days
-```
+Change `retention-days` in the upload-artifact step.
 
 ## Monitoring
 
@@ -174,6 +150,15 @@ retention-days: 30  # Keep artifacts for 30 days
 - Review generated artifacts for completeness
 - Check Google Sheets for data updates
 - Monitor database sync status in logs
+
+## Running the CLI
+
+The refactored project exposes a console script:
+
+```bash
+uv run mkts-backend            # run market collection
+uv run mkts-backend --history  # include historical data processing
+```
 
 ## Cost Considerations
 
