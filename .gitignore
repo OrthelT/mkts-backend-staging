@@ -1,3 +1,4 @@
+
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -36,3 +37,5 @@ data/
 .vscode/
 AGENTS.md
 REFACTORING_PLAN.md
+advanced_intel_output/
+coalition_analytics_output/
