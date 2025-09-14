@@ -13,7 +13,7 @@ logger = configure_logging(__name__)
 
 
 class DatabaseConfig:
-    wcdbmap = "wcmkt2"
+    wcdbmap = "wcmkt2" #select wcmkt2 (production) or wcmkt3 (development)
 
     _db_paths = {
         "wcmkt3": "wcmkt3.db",
@@ -23,14 +23,14 @@ class DatabaseConfig:
     }
 
     _db_turso_urls = {
-        "wcmkt3_turso": os.getenv("TURSO_MKT_URL"),
+        "wcmkt3_turso": os.getenv("TURSO_WCMKT3_URL"),
         "sde_turso": os.getenv("TURSO_SDE_URL"),
         "fittings_turso": os.getenv("TURSO_FITTING_URL"),
         "wcmkt2_turso": os.getenv("TURSO_WCMKT2_URL"),
     }
 
     _db_turso_auth_tokens = {
-        "wcmkt3_turso": os.getenv("TURSO_MKT_TOKEN"),
+        "wcmkt3_turso": os.getenv("TURSO_WCMKT3_TOKEN"),
         "sde_turso": os.getenv("TURSO_SDE_TOKEN"),
         "fittings_turso": os.getenv("TURSO_FITTING_TOKEN"),
         "wcmkt2_turso": os.getenv("TURSO_WCMKT2_TOKEN"),
@@ -48,6 +48,8 @@ class DatabaseConfig:
             raise ValueError(
                 f"Unknown database alias '{alias}'. Available: {list(self._db_paths.keys())}"
             )
+
+
 
         self.alias = alias
         self.path = self._db_paths[alias]

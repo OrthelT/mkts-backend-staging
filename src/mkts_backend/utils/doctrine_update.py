@@ -1,10 +1,11 @@
 import datetime
 from dataclasses import dataclass, field
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import Engine, text, select
 from sqlalchemy.orm import Session
-from mkts_backend.db.models import LeadShips
+from mkts_backend.db.models import *
 from mkts_backend.db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items
+from mkts_backend.utils.utils import get_type_name
 from mkts_backend.utils.get_type_info import TypeInfo
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
@@ -327,5 +328,100 @@ def check_doctrine_fits_in_wcmkt(doctrine_id: int, remote: bool = False)->pd.Dat
         stmt = text("SELECT * FROM doctrine_fits WHERE doctrine_id = :doctrine_id")
         df = pd.read_sql_query(stmt, conn, params={"doctrine_id": doctrine_id})
     return df
+
+def reset_doctrines_table(remote: bool = False):
+    wcmkt3 = DatabaseConfig("wcmkt3")
+    engine1 = wcmkt3.remote_engine if remote else wcmkt3.engine
+    session = Session(bind=engine1)
+    with session.begin():
+        session.execute(text("DROP TABLE IF EXISTS doctrines"))
+        session.commit()
+    session.close()
+    Base.metadata.create_all(engine1)
+    print("Tables created")
+    wcmkt2 = DatabaseConfig("wcmkt2")
+    engine2 = wcmkt2.remote_engine if remote else wcmkt2.engine
+    stmt = "SELECT * FROM doctrines"
+    with engine2.connect() as conn:
+        df = pd.read_sql_query(stmt, conn)
+    conn.close()
+    engine2.dispose()
+    with engine1.connect() as conn:
+        df.to_sql("doctrines", conn, if_exists="replace", index=False)
+        conn.commit()
+    print(f"Added {len(df)} rows to doctrines table")
+    conn.close()
+    engine1.dispose()
+
+def add_doctrine_fit_to_doctrines_table(df: pd.DataFrame, fit_id: int, ship_id: int, ship_name: str, remote: bool = False):
+    db = DatabaseConfig("wcmkt")
+    print(db.alias + " " + " " + str(remote))
+    engine = db.remote_engine if remote else db.engine
+    session = Session(bind=engine)
+
+    with session.begin():
+        for index, row in df.iterrows():
+            try:
+                type_name = get_type_name(row["type_id"])
+            except Exception as e:
+                logger.error(f"Error getting type name for {row['type_id']}: {e}")
+                type_name = "Unknown"
+                continue
+
+            fit = Doctrines(fit_id=fit_id, ship_id=ship_id, ship_name=ship_name, type_id=row["type_id"], type_name=type_name, fit_qty=row["quantity"])
+            session.add(fit)
+            print(f"Added {fit.type_name} to doctrines table")
+    session.commit()
+    session.close()
+    engine.dispose()
+    print(f"Added {len(df)} rows to doctrines table")
+
+def clean_doctrines_table(remote: bool = False):
+    db = DatabaseConfig("wcmkt3")
+    engine = db.remote_engine if remote else db.engine
+    session = Session(bind=engine)
+    with session.begin():
+        session.execute(text("DROP TABLE IF EXISTS doctrines"))
+        session.commit()
+    session.close()
+    Base.metadata.create_all(engine)
+    engine.dispose()
+    print("Tables created")
+
+def add_doctrines_to_table(df: pd.DataFrame, remote: bool = False):
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    clean_doctrines_table(remote)
+    db = DatabaseConfig("wcmkt3")
+    engine = db.remote_engine if remote else db.engine
+    session = Session(bind=engine)
+    with session.begin():
+        for index, row in df.iterrows():
+            fit = Doctrines(**row)
+            session.add(fit)
+            print(f"Added {fit.type_name} to doctrines table")
+    session.commit()
+    session.close()
+    engine.dispose()
+    print(f"Added {len(df)} rows to doctrines table")
+
+def check_doctrines_table(remote: bool = False):
+    db = DatabaseConfig("wcmkt3")
+    engine = db.remote_engine if remote else db.engine
+    session = Session(bind=engine)
+    row_count = 0
+    with session.begin():
+        result = session.execute(select(Doctrines))
+        for row in result:
+            print(row)
+            row_count += 1
+    session.close()
+    engine.dispose()
+    print(f"Doctrines table checked, {row_count} rows found")
+
+def replace_doctrines_table(df: pd.DataFrame, remote: bool = False):
+    df = df.rename(columns={"quantity": "fit_qty"})
+    add_doctrines_to_table(df, remote=True)
+    check_doctrines_table(remote=True)
+
 if __name__ == "__main__":
     pass

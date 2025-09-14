@@ -27,7 +27,7 @@ db = DatabaseConfig("wcmkt")
 sde_db = DatabaseConfig("sde")
 
 
-def upsert_remote_database(table: Base, df: pd.DataFrame) -> bool:
+def upsert_database(table: Base, df: pd.DataFrame, remote: bool = False) -> bool:
     WIPE_REPLACE_TABLES = ["marketstats", "doctrines"]
     tabname = table.__tablename__
     is_wipe_replace = tabname in WIPE_REPLACE_TABLES
@@ -49,7 +49,7 @@ def upsert_remote_database(table: Base, df: pd.DataFrame) -> bool:
     db = DatabaseConfig("wcmkt")
     logger.info(f"updating: {db}")
 
-    remote_engine = db.remote_engine
+    remote_engine = db.remote_engine if remote else db.engine
     session = Session(bind=remote_engine)
 
     t = table.__table__
@@ -61,6 +61,7 @@ def upsert_remote_database(table: Base, df: pd.DataFrame) -> bool:
     try:
         logger.info(f"Upserting {len(data)} rows into {table.__tablename__}")
         with session.begin():
+            is_wipe_replace = True
             if is_wipe_replace:
                 logger.info(
                     f"Wiping and replacing {len(data)} rows into {table.__tablename__}"
@@ -112,7 +113,6 @@ def upsert_remote_database(table: Base, df: pd.DataFrame) -> bool:
                 )
 
         logger.info(f"Upsert complete: {count} rows present in {table.__tablename__}")
-        return True
 
     except SQLAlchemyError as e:
         logger.error("Failed upserting remote DB", exc_info=e)
@@ -120,18 +120,14 @@ def upsert_remote_database(table: Base, df: pd.DataFrame) -> bool:
     finally:
         session.close()
         remote_engine.dispose()
+    return True
 
-
-def get_market_history(type_id: int) -> pd.DataFrame:
-    db = DatabaseConfig("wcmkt")
-    engine = db.engine
-    with engine.connect() as conn:
-        stmt = "SELECT * FROM market_history WHERE type_id = ?"
-        result = conn.execute(stmt, (type_id,))
-        headers = [col[0] for col in result.description]
-    conn.close()
-    return pd.DataFrame(result.fetchall(), columns=headers)
-
+# def convert_datetime_column(df: pd.DataFrame, column: str) -> pd.DataFrame:
+#     if df[column].dtype == 'object':
+#         logger.info(f"Converting {column} to datetime {df[column].dtype}")
+#         df[column] = pd.to_datetime(df[column])
+#     logger.info(f"Converted {column} to datetime {df[column].dtype}")
+#     return df
 
 def update_history(history_results: list[list[dict]]):
     valid_history_columns = MarketHistory.__table__.columns.keys()
@@ -182,7 +178,7 @@ def update_history(history_results: list[list[dict]]):
     history_df.fillna(0)
 
     try:
-        upsert_remote_database(MarketHistory, history_df)
+        upsert_database(MarketHistory, history_df)
     except Exception as e:
         logger.error(f"history data update failed: {e}")
         return False
@@ -212,7 +208,7 @@ def update_market_orders(orders: list[dict]) -> bool:
     orders_df = validate_columns(orders_df, valid_columns)
 
     logger.info(f"Orders fetched:{len(orders_df)} items")
-    status = upsert_remote_database(MarketOrders, orders_df)
+    status = upsert_database(MarketOrders, orders_df)
     if status:
         logger.info(f"Orders updated:{get_table_length('marketorders')} items")
         return True
@@ -254,3 +250,6 @@ def update_region_orders(region_id: int, order_type: str = 'sell') -> pd.DataFra
     session.close()
 
     return pd.DataFrame(orders)
+
+if __name__ == "__main__":
+    pass

@@ -1,8 +1,11 @@
 import pandas as pd
 from sqlalchemy import text, insert
+from sqlalchemy.orm import session
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.db.models import Watchlist
+from mkts_backend.utils import get_type_info
+from mkts_backend.utils.utils import init_databases
 
 logger = configure_logging(__name__)
 
@@ -17,16 +20,15 @@ def add_missing_items_to_watchlist(missing_items: list[int]):
         res = conn.execute(stmt, {"missing": missing_items})
         df = pd.DataFrame(res.fetchall())
         df.columns = res.keys()
-        print(df.columns)
+        df = df.rename(columns={"typeID": "type_id", "typeName": "type_name", "groupID": "group_id", "groupName": "group_name", "categoryID": "category_id", "categoryName": "category_name"})
 
     watchlist = wcmkt_db.get_watchlist()
-    inv_cols = ['typeID', 'typeName', 'groupID', 'groupName', 'categoryID', 'categoryName']
+    inv_cols = ['type_id', 'type_name', 'group_id', 'group_name', 'category_id', 'category_name']
     df = df[inv_cols]
     watchlist_cols = ['type_id', 'type_name', 'group_id', 'group_name', 'category_id', 'category_name']
-    df = df.rename(columns=dict(zip(inv_cols, watchlist_cols)))
-    df.to_csv("data/watchlist_missing.csv", index=False)
     watchlist = pd.concat([watchlist, df], ignore_index=True)
     watchlist.to_csv("data/watchlist_updated.csv", index=False)
+    watchlist.to_sql("watchlist", wcmkt_db.engine, if_exists="append", index=False)
 
 def update_watchlist_tables(missing_items: list[int]):
     engine = sde_db.engine

@@ -6,6 +6,43 @@ from mkts_backend.db.models import RegionOrders
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.utils.get_type_info import TypeInfo
 
+def get_market_history(type_id: int) -> pd.DataFrame:
+    db = DatabaseConfig("wcmkt")
+    engine = db.engine
+    with engine.connect() as conn:
+        stmt = "SELECT * FROM market_history WHERE type_id = ?"
+        result = conn.execute(stmt, (type_id,))
+        headers = [col[0] for col in result.description]
+    conn.close()
+    return pd.DataFrame(result.fetchall(), columns=headers)
+
+def get_market_orders(type_id: int) -> pd.DataFrame:
+    db = DatabaseConfig("wcmkt")
+    engine = db.engine
+    with engine.connect() as conn:
+        stmt = "SELECT * FROM market_orders WHERE type_id = ?"
+        result = conn.execute(stmt, (type_id,))
+        headers = [col[0] for col in result.description]
+    conn.close()
+    return pd.DataFrame(result.fetchall(), columns=headers)
+
+def get_market_stats(type_id: int) -> pd.DataFrame:
+    db = DatabaseConfig("wcmkt")
+    engine = db.engine
+    with engine.connect() as conn:
+        stmt = text("SELECT * FROM marketstats WHERE type_id = :type_id")
+        df = pd.read_sql_query(stmt, conn, params={"type_id": type_id})
+    conn.close()
+    return df
+
+def get_doctrine_stats(type_id: int) -> pd.DataFrame:
+    db = DatabaseConfig("wcmkt")
+    engine = db.engine
+    with engine.connect() as conn:
+        stmt = text("SELECT * FROM doctrines WHERE type_id = :type_id")
+        df = pd.read_sql_query(stmt, conn, params={"type_id": type_id})
+    conn.close()
+    return df
 
 def get_table_length(table: str) -> int:
     db = DatabaseConfig("wcmkt")
@@ -128,13 +165,5 @@ def get_region_history() -> pd.DataFrame:
     conn.close()
     return df
 
-
 if __name__ == "__main__":
-    items = get_fit_items(494)
-    for item in items:
-        item_id = item
-        item_name = TypeInfo(type_id=item_id)
-        type_id = item_name.type_id
-        type_name = item_name.type_name
-        print(type_id, type_name)
-
+    pass

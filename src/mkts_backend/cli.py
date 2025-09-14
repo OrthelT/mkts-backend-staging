@@ -5,7 +5,7 @@ import time
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.db.db_queries import get_table_length
 from mkts_backend.db.db_handlers import (
-    upsert_remote_database,
+    upsert_database,
     update_history,
     update_market_orders,
 )
@@ -89,7 +89,6 @@ def process_history():
             logger.error("Failed to update market history")
             return False
 
-
 def process_market_stats():
     logger.info("Calculating market stats")
     try:
@@ -116,7 +115,7 @@ def process_market_stats():
         return False
     try:
         logger.info("Updating market stats in database")
-        status = upsert_remote_database(MarketStats, market_stats_df)
+        status = upsert_database(MarketStats, market_stats_df)
         if status:
             logger.info(f"Market stats updated:{get_table_length('marketstats')} items")
             return True
@@ -127,11 +126,10 @@ def process_market_stats():
         logger.error(f"Failed to update market stats: {e}")
         return False
 
-
 def process_doctrine_stats():
     doctrine_stats_df = calculate_doctrine_stats()
     doctrine_stats_df = convert_datetime_columns(doctrine_stats_df, ["timestamp"])
-    status = upsert_remote_database(Doctrines, doctrine_stats_df)
+    status = upsert_database(Doctrines, doctrine_stats_df)
     if status:
         logger.info(f"Doctrines updated:{get_table_length('doctrines')} items")
         return True
@@ -181,10 +179,32 @@ def main(history: bool = False):
         logger.info("History mode disabled. Skipping history processing")
 
     logger.info("=" * 80)
+    logger.info("Syncing database")
+    logger.info("=" * 80)
+    logger.info("Sleeping for 5 seconds")
+    time.sleep(5)
+    db.sync()
+    time.sleep(5)
+    logger.info("Validating database sync")
+    db.validate_sync()
+    logger.info("Database synced")
+    logger.info("=" * 80)
+    logger.info("*" * 80)
 
     status = process_market_stats()
     if status:
         logger.info("Market stats updated")
+        logger.info("Syncing database")
+        logger.info("=" * 80)
+        logger.info("Sleeping for 5 seconds")
+        time.sleep(5)
+        db.sync()
+        time.sleep(5)
+        logger.info("Validating database sync")
+        db.validate_sync()
+        logger.info("Database synced")
+        logger.info("=" * 80)
+        logger.info("*" * 80)
     else:
         logger.error("Failed to update market stats")
         exit()
@@ -194,6 +214,13 @@ def main(history: bool = False):
     status = process_doctrine_stats()
     if status:
         logger.info("Doctrines updated")
+        time.sleep(5)
+        db.sync()
+        time.sleep(5)
+        if not db.validate_sync():
+            logger.error("Database is not synced. Please sync the database before updating doctrines.")
+            raise Exception("Database is not synced. Please sync the database before updating doctrines.")
+            exit()
     else:
         logger.error("Failed to update doctrines")
         exit()

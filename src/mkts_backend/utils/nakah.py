@@ -16,7 +16,7 @@ from mkts_backend.utils.utils import (
     convert_datetime_columns,
 )
 from mkts_backend.db.db_handlers import (
-    upsert_remote_database,
+    upsert_database,
     get_remote_status,
     get_table_length,
 )

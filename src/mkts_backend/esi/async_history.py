@@ -57,9 +57,13 @@ async def call_one(client: httpx.AsyncClient, type_id: int, length: int) -> dict
             return r.json()
 
 
-async def async_history():
-    watchlist = DatabaseConfig("wcmkt").get_watchlist()
-    type_ids = watchlist["type_id"].unique().tolist()
+async def async_history(watchlist: list[int] = None):
+    if watchlist is None:
+        watchlist = DatabaseConfig("wcmkt").get_watchlist()
+        type_ids = watchlist["type_id"].unique().tolist()
+        print(len(type_ids))
+    else:
+        type_ids = watchlist
 
     length = len(type_ids)
     logger.info(f"Fetching history for {length} items")
@@ -71,10 +75,9 @@ async def async_history():
     return results
 
 
-def run_async_history():
-    return asyncio.run(async_history())
+def run_async_history(watchlist: list[int] = None):
+    return asyncio.run(async_history(watchlist))
 
 
 if __name__ == "__main__":
     pass
-

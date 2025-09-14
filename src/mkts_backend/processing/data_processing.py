@@ -11,7 +11,7 @@ from mkts_backend.utils.utils import (
     convert_datetime_columns,
     get_type_names_from_df,
 )
-from mkts_backend.db.db_handlers import upsert_remote_database
+from mkts_backend.db.db_handlers import upsert_database
 from mkts_backend.db.db_queries import (
     get_table_length,
     get_remote_status,
@@ -84,8 +84,8 @@ def calculate_market_stats() -> pd.DataFrame:
     GROUP BY type_id
     ) AS h ON w.type_id = h.type_id
     """
-
-    engine = wcmkt_db.engine
+    db = DatabaseConfig("wcmkt")
+    engine = db.engine
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
         logger.info(f"df: {df}")
@@ -104,6 +104,7 @@ def calculate_market_stats() -> pd.DataFrame:
 
     db_cols = MarketStats.__table__.columns.keys()
     df = df[db_cols]
+    return df
 
     df = df.infer_objects()
     df = df.fillna(0)
@@ -124,7 +125,8 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     *
     FROM marketstats
     """
-    engine = wcmkt_db.engine
+    db = DatabaseConfig("wcmkt")
+    engine = db.engine
     with engine.connect() as conn:
         doctrine_stats = pd.read_sql_query(doctrine_query, conn)
         market_stats = pd.read_sql_query(stats_query, conn)
@@ -188,7 +190,7 @@ def process_region_history(watchlist: pd.DataFrame):
     history_df.fillna(0)
 
     try:
-        upsert_remote_database(RegionHistory, history_df)
+        upsert_database(RegionHistory, history_df)
     except Exception as e:
         logger.error(f"history data update failed: {e}")
 
@@ -201,4 +203,4 @@ def process_region_history(watchlist: pd.DataFrame):
 
 
 if __name__ == "__main__":
-    pass
+    null_ids = [242, 450, 453, 484, 499, 580, 586, 590, 632, 1294, 2321, 2327, 2349, 2354, 2868, 3955, 9680, 9734, 11311, 11349, 15317, 16236, 16505, 16652, 18698, 18937, 19209, 31111, 31406, 32874]
