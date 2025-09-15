@@ -7,7 +7,7 @@ from mkts_backend.db.models import Doctrines, Base
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.processing.data_processing import calculate_doctrine_stats
 import pandas as pd
-
+from mkts_backend.utils.utils import init_databases
 logger = configure_logging(__name__)
 
 mkt_db = DatabaseConfig("wcmkt")

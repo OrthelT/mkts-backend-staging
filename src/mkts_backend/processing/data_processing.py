@@ -91,7 +91,6 @@ def calculate_market_stats() -> pd.DataFrame:
     engine = db.engine
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
-        logger.info(f"df: {df}")
         logger.info(f"Market stats queried: {df.shape[0]} items")
     engine.dispose()
 

@@ -122,13 +122,6 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
         remote_engine.dispose()
     return True
 
-# def convert_datetime_column(df: pd.DataFrame, column: str) -> pd.DataFrame:
-#     if df[column].dtype == 'object':
-#         logger.info(f"Converting {column} to datetime {df[column].dtype}")
-#         df[column] = pd.to_datetime(df[column])
-#     logger.info(f"Converted {column} to datetime {df[column].dtype}")
-#     return df
-
 def update_history(history_results: list[list[dict]]):
     valid_history_columns = MarketHistory.__table__.columns.keys()
 

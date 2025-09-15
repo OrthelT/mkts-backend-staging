@@ -27,7 +27,6 @@ from mkts_backend.esi.async_history import run_async_history
 
 logger = configure_logging(__name__)
 
-
 def check_tables():
     tables = ["doctrines", "marketstats", "marketorders", "market_history"]
     db = DatabaseConfig("wcmkt")
@@ -44,13 +43,11 @@ def check_tables():
         conn.close()
     db.engine.dispose()
 
-
 def display_cli_help():
     print("Usage: mkts-backend [--history] [--check_tables]")
     print("Options:")
     print("  --history: Include history processing")
     print("  --check_tables: Check the tables in the database")
-
 
 def process_market_orders(esi: ESIConfig, order_type: str = "all", test_mode: bool = False) -> bool:
     """Fetches market orders from ESI and updates the database"""

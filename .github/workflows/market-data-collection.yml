@@ -70,8 +70,6 @@ jobs:
       run: |
         echo "CLIENT_ID=${{ secrets.CLIENT_ID }}" >> $GITHUB_ENV
         echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> $GITHUB_ENV
-        echo "TURSO_MKT_URL=${{ secrets.TURSO_MKT_URL }}" >> $GITHUB_ENV
-        echo "TURSO_MKT_TOKEN=${{ secrets.TURSO_MKT_TOKEN }}" >> $GITHUB_ENV
         echo "TURSO_SDE_URL=${{ secrets.TURSO_SDE_URL }}" >> $GITHUB_ENV
         echo "TURSO_SDE_TOKEN=${{ secrets.TURSO_SDE_TOKEN }}" >> $GITHUB_ENV
         echo "TURSO_FITTING_URL=${{ secrets.TURSO_FITTING_URL }}" >> $GITHUB_ENV
@@ -102,12 +100,12 @@ jobs:
         echo "TURSO_WCMKT2_URL is set: $([ -n "$TURSO_WCMKT2_URL" ] && echo "YES" || echo "NO")"
         echo "TURSO_WCMKT2_TOKEN is set: $([ -n "$TURSO_WCMKT2_TOKEN" ] && echo "YES" || echo "NO")"
 
-    - name: Download watchlist data
-      run: |
-        # Create watchlist if it doesn't exist in the repo
-        if [ ! -f "databackup/all_watchlist.csv" ]; then
-          echo "type_id,type_name,group_id,group_name,category_id,category_name" > databackup/all_watchlist.csv
-        fi
+    # - name: Download watchlist data
+    #   run: |
+    #     # Create watchlist if it doesn't exist in the repo
+    #     if [ ! -f "databackup/all_watchlist.csv" ]; then
+    #       echo "type_id,type_name,group_id,group_name,category_id,category_name" > databackup/all_watchlist.csv
+    #     fi
 
     - name: Clean up any existing database files
       run: |
