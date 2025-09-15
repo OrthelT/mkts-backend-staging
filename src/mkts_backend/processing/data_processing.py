@@ -95,21 +95,20 @@ def calculate_market_stats() -> pd.DataFrame:
         logger.info(f"Market stats queried: {df.shape[0]} items")
     engine.dispose()
 
-
-
     logger.info("Calculating 5 percentile price")
     df2 = calculate_5_percentile_price()
     logger.info("Merging 5 percentile price with market stats")
     df = df.merge(df2, on="type_id", how="left")
+    df = df.rename(columns={"5_perc_price": "price"})
+
 
     df = fill_nulls_from_history(df)
 
-    logger.info("Renaming columns")
-    df.days_remaining = df.days_remaining.apply(lambda x: round(x, 1))
-    df = df.rename(columns={"5_perc_price": "price"})
+
     df["last_update"] = pd.Timestamp.now(tz="UTC")
 
     # Round numeric columns
+    df["days_remaining"] = df["days_remaining"].apply(lambda x: round(x, 1))
     df["avg_price"] = df["avg_price"].apply(lambda x: round(x, 2) if pd.notnull(x) and x > 0 else 0)
     df["avg_volume"] = df["avg_volume"].apply(lambda x: round(x, 1) if pd.notnull(x) and x > 0 else 0)
     df["total_volume_remain"] = df["total_volume_remain"].fillna(0).astype(int)
@@ -188,6 +187,8 @@ def fill_nulls_from_history(stats: pd.DataFrame) -> pd.DataFrame:
                                 stats.loc[stats.type_id == type_id, 'avg_price'] = history_df.loc[type_id, 'avg_price']
                             if pd.isnull(stats.loc[stats.type_id == type_id, 'min_price']).any():
                                 stats.loc[stats.type_id == type_id, 'min_price'] = history_df.loc[type_id, 'avg_price']
+                            if pd.isnull(stats.loc[stats.type_id == type_id, 'price']).any():
+                                stats.loc[stats.type_id == type_id, 'price'] = history_df.loc[type_id, 'avg_price']
                         except Exception as e:
                             logger.error(f"Error filling nulls for type_id {type_id}: {e}")
                         # Fill volume-related nulls
@@ -317,6 +318,4 @@ def process_region_history(watchlist: pd.DataFrame):
 
 
 if __name__ == "__main__":
-    df = calculate_market_stats()
-
-    print(df)
+    pass

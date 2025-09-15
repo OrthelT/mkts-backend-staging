@@ -159,13 +159,13 @@ def init_databases():
             db = DatabaseConfig(alias)
             logger.info(f"Database {alias} initialized")
         except Exception as e:
-            logger.error(f"Error initializing database {alias}: {e}")
+            logger.warning(f"Error initializing database {alias}: {e}")
             continue
         try:
             db.verify_db_exists()
             logger.info(f"Database {alias} verified")
         except Exception as e:
-            logger.error(f"Error initializing database {alias}: {e}")
+            logger.warning(f"Error initializing database {alias}: {e}")
 
 def insert_type_data(data: list[dict]):
     db = DatabaseConfig("sde")
