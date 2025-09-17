@@ -1,11 +1,10 @@
 import pandas as pd
-from sqlalchemy import text, insert, create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text, insert, create_engine, select
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
-from mkts_backend.db.models import Watchlist, Doctrines
-from mkts_backend.utils import get_type_info
-from mkts_backend.utils.utils import init_databases
+from mkts_backend.db.models import Watchlist, UpdateLog
+from datetime import datetime, timezone, timedelta
+from sqlalchemy.orm import Session
 
 logger = configure_logging(__name__)
 
@@ -206,10 +205,113 @@ def export_doctrines_to_csv(db_alias: str = "wcmkt", output_file: str = "doctrin
         if 'engine' in locals():
             engine.dispose()
 
-if __name__ == "__main__":
-    # Example usage:
-    # restore_doctrines_from_backup("backup_wcmkt2.db", "wcmkt")
-    # merge_doctrines_with_backup("backup_wcmkt2.db", "wcmkt")
-    # export_doctrines_to_csv("wcmkt", "doctrines_backup.csv")
+def get_most_recent_updates(table_name: str, remote: bool = False):
 
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine if remote else db.engine
+    session = Session(bind=engine)
+    with session.begin():
+        updates = select(UpdateLog.timestamp).where(UpdateLog.table_name == table_name).order_by(UpdateLog.timestamp.desc())
+        result = session.execute(updates).scalar_one()
+    session.close()
+    engine.dispose()
+    return result
+
+def check_updates(remote: bool = False):
+    update_status = {
+        "stats": {
+            "updated": None,
+            "needs_update": False,
+            "time_since": None
+        },
+        "history": {
+            "updated": None,
+            "needs_update": False,
+            "time_since": None
+        },
+        "doctrines": {
+            "updated": None,
+            "needs_update": False,
+            "time_since": None
+        },
+        "orders": {
+            "updated": None,
+            "needs_update": False,
+            "time_since": None
+        }
+    }
+    logger.info("Checking updates")
+    try:
+        statsupdate = get_most_recent_updates("marketstats",remote=remote).replace(tzinfo=timezone.utc)
+        update_status["stats"]["updated"] = statsupdate
+    except Exception as e:
+        logger.error(f"Error getting stats update: {e}")
+
+    try:
+        historyupdate = get_most_recent_updates("market_history",remote=remote).replace(tzinfo=timezone.utc)
+        update_status["history"]["updated"] = historyupdate
+    except Exception as e:
+        logger.error(f"Error getting history update: {e}")
+
+    try:
+        doctrinesupdate = get_most_recent_updates("doctrines",remote=remote).replace(tzinfo=timezone.utc)
+        update_status["doctrines"]["updated"] = doctrinesupdate
+    except Exception as e:
+        logger.error(f"Error getting doctrines update: {e}")
+
+    try:
+        ordersupdate = get_most_recent_updates("marketorders",remote=remote).replace(tzinfo=timezone.utc)
+        update_status["orders"]["updated"] = ordersupdate
+    except Exception as e:
+        logger.error(f"Error getting orders update: {e}")
+
+    now = datetime.now(timezone.utc)
+
+    time_since_stats_update = now - update_status["stats"]["updated"]
+    time_since_history_update = now - update_status["history"]["updated"]
+    time_since_doctrines_update = now - update_status["doctrines"]["updated"]
+    time_since_orders_update = now - update_status["orders"]["updated"]
+
+    update_status["stats"]["time_since"] = time_since_stats_update
+    update_status["history"]["time_since"] = time_since_history_update
+    update_status["doctrines"]["time_since"] = time_since_doctrines_update
+    update_status["orders"]["time_since"] = time_since_orders_update
+
+    logger.info(f"Time since stats update: {time_since_stats_update}")
+    logger.info(f"Time since history update: {time_since_history_update}")
+    logger.info(f"Time since doctrines update: {time_since_doctrines_update}")
+    logger.info(f"Time since orders update: {time_since_orders_update}")
+
+    update_status["stats"]["needs_update"] = False
+    update_status["history"]["needs_update"] = False
+    update_status["doctrines"]["needs_update"] = False
+    update_status["orders"]["needs_update"] = False
+
+    if update_status["stats"]["time_since"] > timedelta(hours=1):
+        logger.info("Stats update is older than 1 hour")
+        logger.info(f"Stats update timestamp: {update_status['stats']['updated']}")
+        logger.info(f"Now: {now}")
+        update_status["stats"]["needs_update"] = True
+    if update_status["history"]["time_since"] > timedelta(hours=1):
+        logger.info("History update is older than 1 hour")
+        logger.info(f"History update timestamp: {update_status['history']['updated']}")
+        logger.info(f"Now: {now}")
+        update_status["history"]["needs_update"] = True
+    if update_status["doctrines"]["time_since"] > timedelta(hours=1):
+        logger.info("Doctrines update is older than 1 hour")
+        logger.info(f"Doctrines update timestamp: {update_status['doctrines']['updated']}")
+        logger.info(f"Now: {now}")
+        update_status["doctrines"]["needs_update"] = True
+    if update_status["orders"]["time_since"] > timedelta(hours=1):
+        logger.info("Orders update is older than 1 hour")
+        logger.info(f"Orders update timestamp: {update_status['orders']['updated']}")
+        logger.info(f"Now: {now}")
+        update_status["orders"]["needs_update"] = True
+
+    return update_status
+
+def get_time_since_update(table_name: str, remote: bool = False):
+    status = check_updates(remote=remote)
+    return status.get(table_name).get("time_since")
+if __name__ == "__main__":
     pass

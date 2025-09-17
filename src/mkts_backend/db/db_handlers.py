@@ -1,10 +1,10 @@
 import pandas as pd
-from sqlalchemy import select, insert, func, or_
+from sqlalchemy import select, insert, func, or_, delete
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 
 from mkts_backend.utils.utils import (
@@ -15,7 +15,7 @@ from mkts_backend.utils.utils import (
     get_type_names_from_df,
 )
 from mkts_backend.config.logging_config import configure_logging
-from mkts_backend.db.models import Base, MarketHistory, MarketOrders, RegionOrders
+from mkts_backend.db.models import Base, MarketHistory, MarketOrders, RegionOrders, UpdateLog
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.db.db_queries import get_table_length, get_remote_status
 from mkts_backend.esi.esi_requests import fetch_region_orders
@@ -243,6 +243,20 @@ def update_region_orders(region_id: int, order_type: str = 'sell') -> pd.DataFra
     session.close()
 
     return pd.DataFrame(orders)
+
+def log_update(table_name: str, remote: bool = False):
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine if remote else db.engine
+
+    session = Session(bind=engine)
+    with session.begin():
+        session.execute(delete(UpdateLog).where(UpdateLog.table_name == table_name))
+        session.add(UpdateLog(table_name=table_name,timestamp=datetime.now(timezone.utc)))
+        session.commit()
+        session.close()
+
+    engine.dispose()
+    return True
 
 if __name__ == "__main__":
     pass

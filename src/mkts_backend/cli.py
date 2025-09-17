@@ -8,6 +8,7 @@ from mkts_backend.db.db_handlers import (
     upsert_database,
     update_history,
     update_market_orders,
+    log_update,
 )
 from mkts_backend.db.models import MarketStats, Doctrines
 from mkts_backend.utils.utils import (
@@ -24,6 +25,7 @@ from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.esi.esi_requests import fetch_market_orders
 from mkts_backend.esi.async_history import run_async_history
+from mkts_backend.utils.db_utils import check_updates
 
 logger = configure_logging(__name__)
 
@@ -59,6 +61,7 @@ def process_market_orders(esi: ESIConfig, order_type: str = "all", test_mode: bo
         logger.info(f"ESI returned {len(data)} market orders. Saved to {save_path}")
         status = update_market_orders(data)
         if status:
+            log_update("marketorders",remote=True)
             logger.info(f"Orders updated:{get_table_length('marketorders')} items")
             return True
         else:
@@ -79,6 +82,7 @@ def process_history():
             json.dump(data, f)
         status = update_history(data)
         if status:
+            log_update("market_history",remote=True)
             logger.info(f"History updated:{get_table_length('market_history')} items")
             return True
         else:
@@ -125,6 +129,7 @@ def process_market_stats():
         logger.info("Updating market stats in database")
         status = upsert_database(MarketStats, market_stats_df)
         if status:
+            log_update("marketstats",remote=True)
             logger.info(f"Market stats updated:{get_table_length('marketstats')} items")
             return True
         else:
@@ -152,6 +157,7 @@ def process_doctrine_stats():
     doctrine_stats_df = convert_datetime_columns(doctrine_stats_df, ["timestamp"])
     status = upsert_database(Doctrines, doctrine_stats_df)
     if status:
+        log_update("doctrines",remote=True)
         logger.info(f"Doctrines updated:{get_table_length('doctrines')} items")
         return True
     else:
@@ -224,6 +230,17 @@ def main(history: bool = False):
         logger.error("Failed to update doctrines")
         exit()
 
+    logger.info("=" * 80)
+    logger.info("Market job complete")
+    logger.info("=" * 80)
+
+    logger.info("Checking updates")
+    logger.info("=" * 80)
+    status_dict = check_updates(remote=True)
+    logger.info(f"Stats update: {status_dict['stats']['time_since']}")
+    logger.info(f"History update: {status_dict['history']['time_since']}")
+    logger.info(f"Doctrines update: {status_dict['doctrines']['time_since']}")
+    logger.info(f"Orders update: {status_dict['orders']['time_since']}")
     logger.info("=" * 80)
     logger.info("Market job complete")
     logger.info("=" * 80)

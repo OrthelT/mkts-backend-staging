@@ -1,7 +1,7 @@
 from locale import D_FMT
 from os import sync
 from mkts_backend.config.config import DatabaseConfig
-from sqlalchemy import text, insert, select, MetaData, inspect, delete, func
+from sqlalchemy import text, insert, select, MetaData, inspect, delete, func, update
 from sqlalchemy.orm import Session
 from mkts_backend.db.models import Doctrines, Base
 from mkts_backend.config.logging_config import configure_logging
@@ -37,6 +37,13 @@ def get_fit_items(fit_id: int, ship_id: int, ship_name: str)->list[Doctrines]:
                 fit_qty=row.total_quantity,  # This is now the aggregated sum
             )
             items.append(item)
+        items.append(Doctrines(
+            fit_id=fit_id,
+            ship_id=ship_id,
+            type_id=ship_id,
+            ship_name=ship_name,
+            fit_qty=1,
+        ))
     return items
 
 def update_items(items: list[Doctrines]):

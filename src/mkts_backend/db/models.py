@@ -259,3 +259,17 @@ def populate_region_history_type_name(mapper, connection, target):
             target.type_name = get_type_name(target.type_id)
         except Exception:
             pass
+
+class UpdateLog(Base):
+    __tablename__ = "updatelog"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    table_name: Mapped[str] = mapped_column(String)
+    timestamp: Mapped[DateTime] = mapped_column(DateTime)
+
+    def __repr__(self) -> str:
+        return f"updatelog(id={self.id!r}, table_name={self.table_name!r}, timestamp={self.timestamp!r})"
+
+
+
+if __name__ == "__main__":
+    pass

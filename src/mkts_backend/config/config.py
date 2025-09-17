@@ -89,13 +89,9 @@ class DatabaseConfig:
 
     @property
     def libsql_sync_connect(self):
-        logger.info(f"Syncing database to {self.turso_url}")
-        logger.info(f"Auth token: {self.token}")
-        logger.info(f"Path: {self.path}")
         self._libsql_sync_connect = libsql.connect(
                 f"{self.path}", sync_url=self.turso_url, auth_token=self.token
             )
-        logger.info("Sync connection established")
         return self._libsql_sync_connect
 
     @property
@@ -105,10 +101,8 @@ class DatabaseConfig:
         return self._sqlite_local_connect
 
     def sync(self):
-        logger.info("connection established")
         conn = self.libsql_sync_connect
         with conn:
-            logger.info("Syncing database...")
             conn.sync()
         conn.close()
 

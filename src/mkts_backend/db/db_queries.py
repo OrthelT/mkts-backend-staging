@@ -1,8 +1,8 @@
 from sqlalchemy import text, select
 from sqlalchemy.orm import Session
 import pandas as pd
-
-from mkts_backend.db.models import RegionOrders
+from datetime import timezone
+from mkts_backend.db.models import RegionOrders, UpdateLog
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.utils.get_type_info import TypeInfo
 
@@ -154,7 +154,6 @@ def get_system_orders_from_db(system_id: int) -> pd.DataFrame:
     session.close()
     return pd.DataFrame(orders_data)
 
-
 def get_region_history() -> pd.DataFrame:
     db = DatabaseConfig("wcmkt")
     engine = db.engine
@@ -164,6 +163,8 @@ def get_region_history() -> pd.DataFrame:
         df = pd.DataFrame(result.fetchall(), columns=result.keys())
     conn.close()
     return df
+
+
 
 if __name__ == "__main__":
     pass
