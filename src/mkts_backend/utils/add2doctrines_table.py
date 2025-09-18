@@ -1,13 +1,9 @@
-from locale import D_FMT
-from os import sync
 from mkts_backend.config.config import DatabaseConfig
-from sqlalchemy import text, insert, select, MetaData, inspect, delete, func, update
+from sqlalchemy import text, select, delete, func
 from sqlalchemy.orm import Session
-from mkts_backend.db.models import Doctrines, Base
+from mkts_backend.db.models import Doctrines
 from mkts_backend.config.logging_config import configure_logging
-from mkts_backend.processing.data_processing import calculate_doctrine_stats
 import pandas as pd
-from mkts_backend.utils.utils import init_databases
 logger = configure_logging(__name__)
 
 mkt_db = DatabaseConfig("wcmkt")

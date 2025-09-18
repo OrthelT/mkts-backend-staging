@@ -1,5 +1,4 @@
 import pandas as pd
-from pandas.core.internals.blocks import NumpyBlock
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.db.models import MarketStats, RegionHistory, MarketHistory
 from mkts_backend.config.config import DatabaseConfig
@@ -20,7 +19,7 @@ from mkts_backend.db.db_queries import (
 )
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import select, text, func
+from sqlalchemy import select, func
 
 esi = ESIConfig("primary")
 wcmkt_db = DatabaseConfig("wcmkt")

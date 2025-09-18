@@ -1,17 +1,16 @@
 import datetime
 from dataclasses import dataclass, field
 import pandas as pd
-from sqlalchemy import Engine, text, select
+from sqlalchemy import text, select
 from sqlalchemy.orm import Session
-from mkts_backend.db.models import *
-from mkts_backend.db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items
-from mkts_backend.utils.utils import get_type_name, wcmkt_db
+from mkts_backend.db.models import Doctrines, LeadShips, DoctrineFit, Base
+from mkts_backend.db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items, get_type_name
 from mkts_backend.utils.get_type_info import TypeInfo
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
 
 
-doctrines_fields = ['id', 'fit_id', 'ship_id', 'ship_name', 'hulls', 'type_id', 'type_name', 'fit_qty', 'fits_on_mkt', 'total_stock', 'price', 'avg_vol', 'days', 'group_id', 'group_name', 'category_id', 'category name', 'timestamp']
+doctrines_fields = ['id', 'fit_id', 'ship_id', 'ship_name', 'hulls', 'type_id', 'type_name', 'fit_qty', 'fits_on_mkt', 'total_stock', 'price', 'avg_vol', 'days', 'group_id', 'group_name', 'category_id', 'category_name', 'timestamp']
 logger = configure_logging(__name__)
 
 doctrine_fit_id = 494
@@ -77,7 +76,6 @@ def add_doctrine_map_from_fittings_doctrine_fittings(doctrine_id: int):
     engine.dispose()
 
 def add_hurricane_fleet_issue_to_doctrines():
-    from datetime import datetime, timezone
 
     db = DatabaseConfig("wcmkt")
     engine = db.remote_engine
@@ -138,7 +136,7 @@ def add_hurricane_fleet_issue_to_doctrines():
         'group_name': type_info.group_name,
         'category_id': int(type_info.category_id),
         'category_name': type_info.category_name,
-        'timestamp': datetime.now(timezone.utc).isoformat()
+        'timestamp': datetime.now(datetime.timezone.utc).isoformat()
     }
 
     engine = db.remote_engine
@@ -154,7 +152,6 @@ def add_hurricane_fleet_issue_to_doctrines():
 
 def add_fit_to_doctrines_table(DoctrineFit: DoctrineFit):
     db = DatabaseConfig("wcmkt")
-    columns = db.get_table_columns("doctrines")
     stmt = text("""INSERT INTO doctrines ('fit_id', 'fit_name', 'ship_id', 'ship_name', 'ship_target', 'created_at')
     VALUES (494, '2507  WC-EN Shield DPS HFI v1.0', 33157, 'Hurricane Fleet Issue', 100, '2025-07-05 00:00:00')""")
     engine = db.remote_engine
@@ -217,49 +214,6 @@ def get_fit_item_ids(doctrine_id: int) -> dict[int, list[int]]:
     engine.dispose()
     return fit_items
 
-def add_ship_target_triggers():
-    """This functions adds triggers to automatically ppopulate
-    doctrine_fits table with changes to  the ship targets table.
-    """
-
-    db = DatabaseConfig("wcmkt")
-    engine = db.remote_engine
-    with engine.connect() as conn:
-        stmt1 = text("""
-            CREATE TRIGGER update_doctrine_fits_target
-            AFTER UPDATE OF ship_target ON ship_targets
-            BEGIN
-                UPDATE doctrine_fits
-                SET target = NEW.ship_target
-                WHERE fit_id = NEW.fit_id;
-                END;""")
-        stmt2 = text("""
-            CREATE TRIGGER insert_doctrine_fits_target
-            AFTER INSERT ON ship_targets
-            BEGIN
-                UPDATE doctrine_fits
-                SET target = NEW.ship_target
-                WHERE fit_id = NEW.fit_id;
-            END;""")
-        stmt3 = text("""
-        CREATE TRIGGER delete_doctrine_fits_target
-            AFTER DELETE ON ship_targets
-        BEGIN
-            UPDATE doctrine_fits
-            SET target = 20
-            WHERE fit_id = OLD.fit_id;
-        END;
-        """)
-
-        logger.info("update trigger added")
-
-        logger.info("insert trigger added")
-        conn.execute(stmt3)
-        conn.commit()
-        print("Triggers committed")
-    conn.close()
-    engine.dispose()
-
 def add_doctrine_type_info_to_watchlist(doctrine_id: int):
     watchlist_ids = get_watchlist_ids()
     fit_ids = get_fit_ids(doctrine_id)
@@ -310,7 +264,6 @@ def add_doctrine_fits_to_wcmkt(df: pd.DataFrame, remote: bool = False):
     engine = db.remote_engine if remote else db.engine
     print(db.alias + " " + " " + str(remote))
     session = Session(engine)
-    fits_added = []
     with session.begin():
         for index, row in df.iterrows():
             fit = DoctrineFit(doctrine_name=row["doctrine_name"], fit_name=row["fit_name"], ship_type_id=row["ship_type_id"], ship_name=row["ship_name"], fit_id=row["fit_id"], doctrine_id=row["doctrine_id"], target=row["target"])

@@ -24,7 +24,6 @@ def add_missing_items_to_watchlist(missing_items: list[int]):
     watchlist = wcmkt_db.get_watchlist()
     inv_cols = ['type_id', 'type_name', 'group_id', 'group_name', 'category_id', 'category_name']
     df = df[inv_cols]
-    watchlist_cols = ['type_id', 'type_name', 'group_id', 'group_name', 'category_id', 'category_name']
     watchlist = pd.concat([watchlist, df], ignore_index=True)
     watchlist.to_csv("data/watchlist_updated.csv", index=False)
     watchlist.to_sql("watchlist", wcmkt_db.engine, if_exists="append", index=False)

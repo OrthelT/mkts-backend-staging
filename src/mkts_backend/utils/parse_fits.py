@@ -4,7 +4,7 @@ from typing import Optional, Generator
 from collections import defaultdict
 from datetime import datetime
 import pandas as pd
-from sqlalchemy import create_engine, text, insert, select, MetaData, Table
+from sqlalchemy import create_engine, text
 
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.config import DatabaseConfig

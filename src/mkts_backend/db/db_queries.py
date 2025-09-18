@@ -1,10 +1,8 @@
 from sqlalchemy import text, select
 from sqlalchemy.orm import Session
 import pandas as pd
-from datetime import timezone
-from mkts_backend.db.models import RegionOrders, UpdateLog
+from mkts_backend.db.models import RegionOrders
 from mkts_backend.config.config import DatabaseConfig
-from mkts_backend.utils.get_type_info import TypeInfo
 
 def get_market_history(type_id: int) -> pd.DataFrame:
     db = DatabaseConfig("wcmkt")
