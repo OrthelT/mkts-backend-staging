@@ -171,20 +171,32 @@ def main(history: bool = False):
     logger.info("Databases initialized")
     logger.info("Starting main function")
 
+    sde_db = DatabaseConfig("sde")
+    logger.info("Checking sdeinfo database:")
+    engine = sde_db.engine
+    with engine.connect() as conn:
+        stmt = text("SELECT COUNT(*) FROM inv_info")
+        result = conn.execute(stmt)
+        count = result.fetchone()[0]
+        logger.info(f"Number of rows in sdeinfo database: {count}")
+    engine.dispose()
+
+
     esi = ESIConfig("primary")
     db = DatabaseConfig("wcmkt")
     logger.info(f"Database: {db.alias}")
-
-    logger.info("syncing database")
-    db.sync()
-    logger.info("database synced")
-    logger.info("validating database")
     validation_test = db.validate_sync()
-    if validation_test:
-        logger.info("database validated")
-    else:
-        logger.error("database validation failed")
-        raise Exception("database validation failed in main")
+
+    if not validation_test:
+        logger.warning("wcmkt database is not up to date. Updating...")
+        db.sync()
+        logger.info("database synced")
+        validation_test = db.validate_sync()
+        if validation_test:
+            logger.info("database validated")
+        else:
+            logger.error("database validation failed")
+            raise Exception("database validation failed in main")
 
     print("=" * 80)
     print("Fetching market orders")
