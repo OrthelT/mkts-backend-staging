@@ -97,7 +97,7 @@ jobs:
         echo "TURSO_WCMKT2_URL is set: $([ -n "$TURSO_WCMKT2_URL" ] && echo "YES" || echo "NO")"
         echo "TURSO_WCMKT2_TOKEN is set: $([ -n "$TURSO_WCMKT2_TOKEN" ] && echo "YES" || echo "NO")"
         echo "TURSO_WCMKT3_URL is set: $([ -n "$TURSO_WCMKT3_URL" ] && echo "YES" || echo "NO")"
-        echo "TURSO_WCMKT3_TOKEN is set: $([ -n "$TURSO_WCMKT3_TOKEN" ] && echo "YES" || echo "NO")
+        echo "TURSO_WCMKT3_TOKEN is set: $([ -n "$TURSO_WCMKT3_TOKEN" ] && echo "YES" || echo "NO")"
 
     # - name: Download watchlist data
     #   run: |
