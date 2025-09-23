@@ -72,7 +72,7 @@ jobs:
         echo "TURSO_WCMKT2_URL=${{ secrets.TURSO_WCMKT2_URL }}" >> $GITHUB_ENV
         echo "TURSO_WCMKT2_TOKEN=${{ secrets.TURSO_WCMKT2_TOKEN }}" >> $GITHUB_ENV
         echo "TURSO_WCMKT3_URL=${{ secrets.TURSO_WCMKT3_URL }}" >> $GITHUB_ENV
-        echo "TURSO_WCMKT3_TOKEN=${{ secrets.TURSO_WCMKT3_TOKEN. }} >> $GITHUB_ENV
+        echo "TURSO_WCMKT3_TOKEN=${{ secrets.TURSO_WCMKT3_TOKEN }}" >> $GITHUB_ENV
 
     #- name: Set up Google Service Account
       #run: not currently implemented. add reference to secrets.GOOGLE_SHEET_KEY to use.
