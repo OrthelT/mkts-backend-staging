@@ -44,7 +44,9 @@ async def call_one(client: httpx.AsyncClient, type_id: int, length: int) -> dict
                 timeout=30.0,
             )
             request_count += 1
-            logger.info(f"Response: {r.status_code}, request count: {request_count}/{length}")
+            #only log every 10 requests
+            if request_count % 10 == 0:
+                logger.info(f"Response: {r.status_code}, request count: {request_count}/{length}")
             if r.status_code == 429:
                 ra = r.headers.get("Retry-After")
                 if ra:
@@ -81,3 +83,4 @@ def run_async_history(watchlist: list[int] = None):
 
 if __name__ == "__main__":
     pass
+
