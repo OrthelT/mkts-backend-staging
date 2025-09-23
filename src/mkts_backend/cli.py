@@ -46,9 +46,9 @@ def check_tables():
     db.engine.dispose()
 
 def display_cli_help():
-    print("Usage: mkts-backend [--history] [--check_tables]")
+    print("Usage: mkts-backend [--history|--include-history] [--check_tables]")
     print("Options:")
-    print("  --history: Include history processing")
+    print("  --history | --include-history: Include history processing")
     print("  --check_tables: Check the tables in the database")
 
 def process_market_orders(esi: ESIConfig, order_type: str = "all", test_mode: bool = False) -> bool:
@@ -166,21 +166,19 @@ def process_doctrine_stats():
 
 def main(history: bool = False):
     """Main function to process market orders, history, market stats, and doctrines"""
-    logger.info("Initializing databases")
+    # Accept flags when invoked via console_script entrypoint
+    if "--check_tables" in sys.argv:
+        check_tables()
+        return
+
+    if "--history" in sys.argv or "--include-history" in sys.argv:
+        history = True
+
+    logger.info(f"sys.argv: {sys.argv}")
+    logger.info(f"history: {history}")
+    logger.info("=" * 80)
     init_databases()
     logger.info("Databases initialized")
-    logger.info("Starting main function")
-
-    sde_db = DatabaseConfig("sde")
-    logger.info("Checking sdeinfo database:")
-    engine = sde_db.engine
-    with engine.connect() as conn:
-        stmt = text("SELECT COUNT(*) FROM inv_info")
-        result = conn.execute(stmt)
-        count = result.fetchone()[0]
-        logger.info(f"Number of rows in sdeinfo database: {count}")
-    engine.dispose()
-
 
     esi = ESIConfig("primary")
     db = DatabaseConfig("wcmkt")
@@ -216,7 +214,6 @@ def main(history: bool = False):
     else:
         logger.error("No watchlist found. Unable to proceed further.")
         exit()
-
 
     if history:
         logger.info("Processing history ")
