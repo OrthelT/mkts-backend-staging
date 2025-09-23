@@ -13,7 +13,7 @@ logger = configure_logging(__name__)
 
 
 class DatabaseConfig:
-    wcdbmap = "wcmkt2" #select wcmkt2 (production) or wcmkt3 (development)
+    wcdbmap = "wcmkt3" #select wcmkt2 (production) or wcmkt3 (development)
 
     _db_paths = {
         "wcmkt3": "wcmkt3.db",

@@ -1,9 +1,6 @@
 name: Market Data Collection
 
 on:
-  schedule:
-    # Run every 1 hours without flags
-    - cron: '20 */1 * * *'
 
   workflow_dispatch: # Allow manual triggering
     inputs:
@@ -74,6 +71,8 @@ jobs:
         echo "TURSO_FITTING_TOKEN=${{ secrets.TURSO_FITTING_TOKEN }}" >> $GITHUB_ENV
         echo "TURSO_WCMKT2_URL=${{ secrets.TURSO_WCMKT2_URL }}" >> $GITHUB_ENV
         echo "TURSO_WCMKT2_TOKEN=${{ secrets.TURSO_WCMKT2_TOKEN }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKT3_URL=${{ secrets.TURSO_WCMKT3_URL }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKT3_TOKEN=${{ secrets.TURSO_WCMKT3_TOKEN. }} >> $GITHUB_ENV
 
     #- name: Set up Google Service Account
       #run: not currently implemented. add reference to secrets.GOOGLE_SHEET_KEY to use.
@@ -97,6 +96,8 @@ jobs:
         echo "TURSO_FITTING_TOKEN is set: $([ -n "$TURSO_FITTING_TOKEN" ] && echo "YES" || echo "NO")"
         echo "TURSO_WCMKT2_URL is set: $([ -n "$TURSO_WCMKT2_URL" ] && echo "YES" || echo "NO")"
         echo "TURSO_WCMKT2_TOKEN is set: $([ -n "$TURSO_WCMKT2_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKT3_URL is set: $([ -n "$TURSO_WCMKT3_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKT3_TOKEN is set: $([ -n "$TURSO_WCMKT3_TOKEN" ] && echo "YES" || echo "NO")
 
     # - name: Download watchlist data
     #   run: |
