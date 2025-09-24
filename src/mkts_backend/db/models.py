@@ -50,7 +50,6 @@ class MarketOrders(Base):
             f"issued={self.issued!r}, price={self.price!r}, volume_remain={self.volume_remain!r})"
         )
 
-
 class MarketHistory(Base):
     __tablename__ = "market_history"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

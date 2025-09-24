@@ -296,7 +296,6 @@ def update_jita_history(jita_records: list[JitaHistory]) -> bool:
         logger.error(f"Jita history update failed: {e}")
         return False
 
-
 def log_update(table_name: str, remote: bool = False):
     db = DatabaseConfig("wcmkt")
     engine = db.remote_engine if remote else db.engine
