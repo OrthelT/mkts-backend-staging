@@ -15,7 +15,7 @@ from mkts_backend.utils.utils import (
     get_type_names_from_df,
 )
 from mkts_backend.config.logging_config import configure_logging
-from mkts_backend.db.models import Base, MarketHistory, MarketOrders, RegionOrders, UpdateLog
+from mkts_backend.db.models import Base, MarketHistory, MarketOrders, RegionOrders, UpdateLog, JitaHistory
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.db.db_queries import get_table_length, get_remote_status
 from mkts_backend.esi.esi_requests import fetch_region_orders
@@ -259,6 +259,42 @@ def update_region_orders(region_id: int, order_type: str = 'sell') -> pd.DataFra
     session.close()
 
     return pd.DataFrame(orders)
+
+def update_jita_history(jita_records: list[JitaHistory]) -> bool:
+    """Update JitaHistory table with Jita history data"""
+    if not jita_records:
+        logger.error("No Jita history data to process")
+        return False
+
+    # Convert JitaHistory objects to DataFrame
+    records_data = []
+    for record in jita_records:
+        records_data.append({
+            'date': record.date,
+            'type_name': record.type_name,
+            'type_id': record.type_id,
+            'average': record.average,
+            'volume': record.volume,
+            'highest': record.highest,
+            'lowest': record.lowest,
+            'order_count': record.order_count,
+            'timestamp': record.timestamp
+        })
+
+    jita_df = pd.DataFrame.from_records(records_data)
+    jita_df = add_autoincrement(jita_df)
+
+    valid_columns = JitaHistory.__table__.columns.keys()
+    jita_df = validate_columns(jita_df, valid_columns)
+
+    try:
+        upsert_database(JitaHistory, jita_df)
+        logger.info(f"Jita history updated: {len(jita_records)} records")
+        return True
+    except Exception as e:
+        logger.error(f"Jita history update failed: {e}")
+        return False
+
 
 def log_update(table_name: str, remote: bool = False):
     db = DatabaseConfig("wcmkt")

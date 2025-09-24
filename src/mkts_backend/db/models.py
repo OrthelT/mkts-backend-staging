@@ -260,6 +260,27 @@ def populate_region_history_type_name(mapper, connection, target):
         except Exception:
             pass
 
+class JitaHistory(Base):
+    __tablename__ = "jita_history"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    date: Mapped[DateTime] = mapped_column(DateTime)
+    type_name: Mapped[str] = mapped_column(String(100))
+    type_id: Mapped[str] = mapped_column(String(10))
+    average: Mapped[float] = mapped_column(Float)
+    volume: Mapped[int] = mapped_column(Integer)
+    highest: Mapped[float] = mapped_column(Float)
+    lowest: Mapped[float] = mapped_column(Float)
+    order_count: Mapped[int] = mapped_column(Integer)
+    timestamp: Mapped[DateTime] = mapped_column(DateTime)
+
+    def __repr__(self) -> str:
+        return (
+            f"jita_history(date={self.date!r}, type_name={self.type_name!r}, type_id={self.type_id!r}, "
+            f"average={self.average!r}, volume={self.volume!r}, highest={self.highest!r}, "
+            f"lowest={self.lowest!r}, order_count={self.order_count!r}, timestamp={self.timestamp!r})"
+        )
+
+
 class UpdateLog(Base):
     __tablename__ = "updatelog"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

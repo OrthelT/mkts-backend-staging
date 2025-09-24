@@ -98,18 +98,6 @@ jobs:
         echo "TURSO_WCMKT2_URL is set: $([ -n "$TURSO_WCMKT2_URL" ] && echo "YES" || echo "NO")"
         echo "TURSO_WCMKT2_TOKEN is set: $([ -n "$TURSO_WCMKT2_TOKEN" ] && echo "YES" || echo "NO")"
 
-    # - name: Download watchlist data
-    #   run: |
-    #     # Create watchlist if it doesn't exist in the repo
-    #     if [ ! -f "databackup/all_watchlist.csv" ]; then
-    #       echo "type_id,type_name,group_id,group_name,category_id,category_name" > databackup/all_watchlist.csv
-    #     fi
-
-    # - name: Clean up any existing database files
-    #   run: |
-    #     # Remove any existing database files to ensure clean initialization
-    #     rm -f wcmkt3.db wcmkt3.db-* sde_info.db sde_info.db-* wcfitting.db wcfitting.db-* wcmkt2.db wcmkt2.db-*
-
     - name: Run market data collection
       run: |
         if [ "${{ github.event.inputs.include_history }}" = "true" ]; then

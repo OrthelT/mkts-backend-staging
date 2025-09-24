@@ -8,6 +8,7 @@ from mkts_backend.db.db_handlers import (
     upsert_database,
     update_history,
     update_market_orders,
+    update_jita_history,
     log_update,
 )
 from mkts_backend.db.models import MarketStats, Doctrines
@@ -24,7 +25,7 @@ from sqlalchemy import text
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.esi.esi_requests import fetch_market_orders
-from mkts_backend.esi.async_history import run_async_history
+from mkts_backend.esi.async_history import run_async_history, run_async_jita_history
 from mkts_backend.utils.db_utils import check_updates
 
 logger = configure_logging(__name__)
@@ -88,6 +89,24 @@ def process_history():
         else:
             logger.error("Failed to update market history")
             return False
+
+def process_jita_history():
+    """Process Jita (The Forge) history data"""
+    logger.info("Processing Jita history from The Forge region")
+    jita_records = run_async_jita_history()
+    if jita_records:
+        logger.info(f"Retrieved {len(jita_records)} Jita history records")
+        status = update_jita_history(jita_records)
+        if status:
+            log_update("jita_history", remote=True)
+            logger.info(f"Jita history updated: {len(jita_records)} records")
+            return True
+        else:
+            logger.error("Failed to update Jita history")
+            return False
+    else:
+        logger.error("No Jita history data retrieved")
+        return False
 
 def process_market_stats():
     logger.info("Calculating market stats")
@@ -222,6 +241,14 @@ def main(history: bool = False):
             logger.info("History updated")
         else:
             logger.error("Failed to update history")
+
+        # Process Jita history
+        logger.info("Processing Jita history")
+        jita_status = process_jita_history()
+        if jita_status:
+            logger.info("Jita history updated")
+        else:
+            logger.error("Failed to update Jita history")
     else:
         logger.info("History mode disabled. Skipping history processing")
 
