@@ -52,10 +52,9 @@ class MarketOrders(Base):
 
 class MarketHistory(Base):
     __tablename__ = "market_history"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    date: Mapped[DateTime] = mapped_column(DateTime)
+    date: Mapped[DateTime] = mapped_column(DateTime, primary_key=True)
+    type_id: Mapped[str] = mapped_column(String(10), primary_key=True)
     type_name: Mapped[str] = mapped_column(String(100))
-    type_id: Mapped[str] = mapped_column(String(10))
     average: Mapped[float] = mapped_column(Float)
     volume: Mapped[int] = mapped_column(Integer)
     highest: Mapped[float] = mapped_column(Float)
@@ -261,10 +260,9 @@ def populate_region_history_type_name(mapper, connection, target):
 
 class JitaHistory(Base):
     __tablename__ = "jita_history"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    date: Mapped[DateTime] = mapped_column(DateTime)
+    date: Mapped[DateTime] = mapped_column(DateTime, primary_key=True)
+    type_id: Mapped[str] = mapped_column(String(10), primary_key=True)
     type_name: Mapped[str] = mapped_column(String(100))
-    type_id: Mapped[str] = mapped_column(String(10))
     average: Mapped[float] = mapped_column(Float)
     volume: Mapped[int] = mapped_column(Integer)
     highest: Mapped[float] = mapped_column(Float)
@@ -288,8 +286,6 @@ class UpdateLog(Base):
 
     def __repr__(self) -> str:
         return f"updatelog(id={self.id!r}, table_name={self.table_name!r}, timestamp={self.timestamp!r})"
-
-
 
 if __name__ == "__main__":
     pass

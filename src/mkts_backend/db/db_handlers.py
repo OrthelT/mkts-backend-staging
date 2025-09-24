@@ -54,14 +54,18 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
 
     t = table.__table__
     pk_cols = list(t.primary_key.columns)
-    if len(pk_cols) != 1:
-        raise ValueError("This helper expects a single-column primary key.")
-    pk_col = pk_cols[0]
+    # Handle both single and composite primary keys
+    if len(pk_cols) == 1:
+        pk_col = pk_cols[0]
+    elif len(pk_cols) > 1:
+        pk_col = pk_cols  # Use all primary key columns for composite keys
+    else:
+        raise ValueError("Table must have at least one primary key column.")
 
     try:
         logger.info(f"Upserting {len(data)} rows into {table.__tablename__}")
         with session.begin():
-            is_wipe_replace = True
+
             if is_wipe_replace:
                 logger.info(
                     f"Wiping and replacing {len(data)} rows into {table.__tablename__}"
@@ -92,24 +96,41 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
                     set_mapping = {c.name: excluded[c.name] for c in non_pk_cols}
                     changed_pred = or_(*[c.is_distinct_from(excluded[c.name]) for c in non_pk_cols])
 
-                    stmt = base.on_conflict_do_update(
-                        index_elements=[pk_col], set_=set_mapping, where=changed_pred
-                    )
+                    # Handle both single and composite primary keys for conflict resolution
+                    if isinstance(pk_col, list):
+                        # Composite primary key
+                        stmt = base.on_conflict_do_update(
+                            index_elements=pk_col, set_=set_mapping, where=changed_pred
+                        )
+                    else:
+                        # Single primary key
+                        stmt = base.on_conflict_do_update(
+                            index_elements=[pk_col], set_=set_mapping, where=changed_pred
+                        )
                     session.execute(stmt)
                     logger.info(
                         f"  • chunk {idx // chunk_size + 1}, {len(chunk)} rows"
                     )
 
-            distinct_incoming = len({row[pk_col.name] for row in data})
+            # Calculate distinct incoming records based on primary key type
+            if isinstance(pk_col, list):
+                # Composite primary key - create tuples of all pk column values
+                distinct_incoming = len({tuple(row[col.name] for col in pk_col) for row in data})
+                pk_desc = f"composite key ({', '.join(col.name for col in pk_col)})"
+            else:
+                # Single primary key
+                distinct_incoming = len({row[pk_col.name] for row in data})
+                pk_desc = f"{pk_col.name}"
+
             logger.info(f"distinct incoming: {distinct_incoming}")
             count = session.execute(select(func.count()).select_from(t)).scalar_one()
             logger.info(f"count: {count}")
             if count < distinct_incoming:
                 logger.error(
-                    f"Row count too low: expected at least {distinct_incoming} unique {pk_col.name}s, got {count}"
+                    f"Row count too low: expected at least {distinct_incoming} unique {pk_desc}s, got {count}"
                 )
                 raise RuntimeError(
-                    f"Row count too low: expected at least {distinct_incoming} unique {pk_col.name}s, got {count}"
+                    f"Row count too low: expected at least {distinct_incoming} unique {pk_desc}s, got {count}"
                 )
 
         logger.info(f"Upsert complete: {count} rows present in {table.__tablename__}")
@@ -175,13 +196,12 @@ def update_history(history_results: list[dict]):
     if missing_columns:
         logger.error(f"Missing required columns: {missing_columns}")
         for col in missing_columns:
-            if col in ('id', 'timestamp'):
+            if col in ('timestamp',):
                 continue
             else:
                 history_df[col] = 0
 
     history_df = add_timestamp(history_df)
-    history_df = add_autoincrement(history_df)
     history_df = validate_columns(history_df, valid_history_columns)
     history_df = convert_datetime_columns(history_df, ['date'])
     history_df.infer_objects()
@@ -283,7 +303,6 @@ def update_jita_history(jita_records: list[JitaHistory]) -> bool:
         })
 
     jita_df = pd.DataFrame.from_records(records_data)
-    jita_df = add_autoincrement(jita_df)
 
     valid_columns = JitaHistory.__table__.columns.keys()
     jita_df = validate_columns(jita_df, valid_columns)

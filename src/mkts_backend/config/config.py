@@ -49,8 +49,6 @@ class DatabaseConfig:
                 f"Unknown database alias '{alias}'. Available: {list(self._db_paths.keys())}"
             )
 
-
-
         self.alias = alias
         self.path = self._db_paths[alias]
         self.url = f"{dialect}:///{self.path}"
