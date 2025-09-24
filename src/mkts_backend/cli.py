@@ -173,7 +173,7 @@ def main(history: bool = False):
 
     if "--history" in sys.argv or "--include-history" in sys.argv:
         history = True
-
+    start_time = time.perf_counter()
     logger.info(f"sys.argv: {sys.argv}")
     logger.info(f"history: {history}")
     logger.info("=" * 80)
@@ -240,18 +240,7 @@ def main(history: bool = False):
         exit()
 
     logger.info("=" * 80)
-    logger.info("Market job complete")
-    logger.info("=" * 80)
-
-    logger.info("Checking updates")
-    logger.info("=" * 80)
-    status_dict = check_updates(remote=True)
-    logger.info(f"Stats update: {status_dict['stats']['time_since']}")
-    logger.info(f"History update: {status_dict['history']['time_since']}")
-    logger.info(f"Doctrines update: {status_dict['doctrines']['time_since']}")
-    logger.info(f"Orders update: {status_dict['orders']['time_since']}")
-    logger.info("=" * 80)
-    logger.info("Market job complete")
+    logger.info(f"Market job complete in {time.perf_counter()-start_time:.1f}s")
     logger.info("=" * 80)
 
 

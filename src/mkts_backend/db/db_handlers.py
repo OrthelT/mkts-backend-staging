@@ -151,8 +151,24 @@ def update_history(history_results: list[list[dict]]):
     logger.info(f"Available columns: {list(history_df.columns)}")
     logger.info(f"Expected columns: {list(valid_history_columns)}")
 
-    from mkts_backend.utils.utils import get_type_name
-    history_df['type_name'] = history_df['type_id'].apply(lambda x: get_type_name(int(x)))
+    # Get type names efficiently with bulk lookup
+    from mkts_backend.utils.utils import sde_db
+    import sqlalchemy as sa
+    from sqlalchemy import text
+
+    unique_type_ids = history_df['type_id'].unique()
+
+    engine = sa.create_engine(sde_db.url)
+    with engine.connect() as conn:
+        placeholders = ','.join([':type_id_' + str(i) for i in range(len(unique_type_ids))])
+        params = {'type_id_' + str(i): int(unique_type_ids[i]) for i in range(len(unique_type_ids))}
+
+        stmt = text(f"SELECT typeID, typeName FROM inv_info WHERE typeID IN ({placeholders})")
+        res = conn.execute(stmt, params)
+        type_name_map = dict(res.fetchall())
+    engine.dispose()
+
+    history_df['type_name'] = history_df['type_id'].map(lambda x: type_name_map.get(int(x), f'Unknown_{x}'))
 
     missing_columns = set(valid_history_columns) - set(history_df.columns)
     if missing_columns:
