@@ -122,19 +122,20 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
         remote_engine.dispose()
     return True
 
-def update_history(history_results: list[list[dict]]):
+def update_history(history_results: list[dict]):
     valid_history_columns = MarketHistory.__table__.columns.keys()
 
-    watchlist = DatabaseConfig("wcmkt").get_watchlist()
-    type_ids = watchlist["type_id"].unique().tolist()
-
     flattened_history = []
-    for i, type_history in enumerate(history_results):
-        if i >= len(type_ids):
-            logger.warning(f"More history results than type_ids, skipping index {i}")
+    for result in history_results:
+        # Handle new format: {"type_id": type_id, "data": [...]}
+        if isinstance(result, dict) and "type_id" in result and "data" in result:
+            type_id = result["type_id"]
+            type_history = result["data"]
+        else:
+            # Fallback for old format - this shouldn't happen anymore
+            logger.warning("Received unexpected history result format")
             continue
 
-        type_id = type_ids[i]
         if isinstance(type_history, list):
             for record in type_history:
                 record['type_id'] = str(type_id)

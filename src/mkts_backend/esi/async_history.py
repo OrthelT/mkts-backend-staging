@@ -14,9 +14,6 @@ from mkts_backend.utils.utils import get_type_name
 logger = configure_logging(__name__)
 request_count = 0
 
-limiter = AsyncLimiter(300, time_period=60.0)
-sema = asyncio.Semaphore(50)
-
 HEADERS = {"User-Agent": "TaylorDataApp/1.0"}
 
 
@@ -31,7 +28,7 @@ def _on_backoff(details):
     giveup=lambda e: isinstance(e, httpx.HTTPStatusError) and e.response.status_code in {400, 403, 404},
     on_backoff=_on_backoff,
 )
-async def call_one(client: httpx.AsyncClient, type_id: int, length: int, region_id: int) -> dict:
+async def call_one(client: httpx.AsyncClient, type_id: int, length: int, region_id: int, limiter: AsyncLimiter, sema: asyncio.Semaphore) -> dict:
     global request_count
 
     logger.info(f"Fetching history for {type_id} from region {region_id}")
@@ -74,9 +71,14 @@ async def async_history(watchlist: list[int] = None, region_id: int = None):
 
     length = len(type_ids)
     logger.info(f"Fetching history for {length} items from region {region_id}")
+
+    # Create limiter and semaphore within the async function to avoid event loop issues
+    limiter = AsyncLimiter(300, time_period=60.0)
+    sema = asyncio.Semaphore(50)
+
     t0 = time.perf_counter()
     async with httpx.AsyncClient(http2=True) as client:
-        results = await asyncio.gather(*(call_one(client, tid, length, region_id) for tid in type_ids))
+        results = await asyncio.gather(*(call_one(client, tid, length, region_id, limiter, sema) for tid in type_ids))
     logger.info(f"Got {len(results)} results in {time.perf_counter()-t0:.1f}s")
     logger.info(f"Request count: {request_count}")
     return results

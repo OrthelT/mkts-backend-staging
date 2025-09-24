@@ -11,7 +11,7 @@ from mkts_backend.db.db_handlers import (
     update_jita_history,
     log_update,
 )
-from mkts_backend.db.models import MarketStats, Doctrines
+from mkts_backend.db.models import MarketStats, Doctrines, Base
 from mkts_backend.utils.utils import (
     validate_columns,
     convert_datetime_columns,
@@ -93,6 +93,16 @@ def process_history():
 def process_jita_history():
     """Process Jita (The Forge) history data"""
     logger.info("Processing Jita history from The Forge region")
+
+    # Ensure jita_history table exists
+    try:
+        db = DatabaseConfig("wcmkt")
+        Base.metadata.create_all(db.remote_engine)
+        logger.info("Ensured jita_history table exists")
+    except Exception as e:
+        logger.error(f"Failed to create jita_history table: {e}")
+        return False
+
     jita_records = run_async_jita_history()
     if jita_records:
         logger.info(f"Retrieved {len(jita_records)} Jita history records")
