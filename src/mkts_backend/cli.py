@@ -252,13 +252,14 @@ def main(history: bool = False):
         else:
             logger.error("Failed to update history")
 
-        # Process Jita history
-        logger.info("Processing Jita history")
-        jita_status = process_jita_history()
-        if jita_status:
-            logger.info("Jita history updated")
-        else:
-            logger.error("Failed to update Jita history")
+
+        # TODO: Uncomment this when ready to use Jita history
+        # jita_status = process_jita_history()
+        # if jita_status:
+        #     logger.info("Jita history updated")
+        # else:
+        #     logger.error("Failed to update Jita history")
+
     else:
         logger.info("History mode disabled. Skipping history processing")
 

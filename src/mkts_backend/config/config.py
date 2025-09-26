@@ -2,7 +2,7 @@ import os
 from sqlalchemy import create_engine, text
 import pandas as pd
 import pathlib
-# os.environ.setdefault("RUST_LOG", "trace")
+# os.environ.setdefault("RUST_LOG", "debug")
 import libsql
 from dotenv import load_dotenv
 from mkts_backend.config.logging_config import configure_logging
