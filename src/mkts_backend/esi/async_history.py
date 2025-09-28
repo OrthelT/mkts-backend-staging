@@ -31,7 +31,7 @@ def _on_backoff(details):
 async def call_one(client: httpx.AsyncClient, type_id: int, length: int, region_id: int, limiter: AsyncLimiter, sema: asyncio.Semaphore) -> dict:
     global request_count
 
-    logger.info(f"Fetching history for {type_id} from region {region_id}")
+    total_req = length
     async with limiter:
         await asyncio.sleep(random.uniform(0, 0.05))
         async with sema:
@@ -42,9 +42,7 @@ async def call_one(client: httpx.AsyncClient, type_id: int, length: int, region_
                 timeout=30.0,
             )
             request_count += 1
-            #only log every 10 requests
-            if request_count % 10 == 0:
-                logger.info(f"Response: {r.status_code}, request count: {request_count}/{length}")
+            print(f"\r fetching history. ({round(100*(request_count/total_req),3)}%)", end="", flush=True)
             if r.status_code == 429:
                 ra = r.headers.get("Retry-After")
                 if ra:
@@ -65,12 +63,10 @@ async def async_history(watchlist: list[int] = None, region_id: int = None):
     if watchlist is None:
         watchlist = DatabaseConfig("wcmkt").get_watchlist()
         type_ids = watchlist["type_id"].unique().tolist()
-        print(len(type_ids))
     else:
         type_ids = watchlist
 
     length = len(type_ids)
-    logger.info(f"Fetching history for {length} items from region {region_id}")
 
     # Create limiter and semaphore within the async function to avoid event loop issues
     limiter = AsyncLimiter(300, time_period=60.0)
@@ -124,4 +120,3 @@ def run_async_jita_history(watchlist: list[int] = None):
 
 if __name__ == "__main__":
     pass
-

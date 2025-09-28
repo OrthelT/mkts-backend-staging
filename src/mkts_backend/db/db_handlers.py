@@ -88,13 +88,24 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
                     )
             else:
                 non_pk_cols = [c for c in t.columns if c not in pk_cols]
+                # Exclude timestamp columns from change detection to avoid unnecessary updates
+                data_cols = [c for c in non_pk_cols if c.name not in ['timestamp', 'last_update', 'created_at', 'updated_at']]
+
+                total_updated = 0
+                total_skipped = 0
 
                 for idx in range(0, len(data), chunk_size):
                     chunk = data[idx : idx + chunk_size]
                     base = sqlite_insert(t).values(chunk)
                     excluded = base.excluded
                     set_mapping = {c.name: excluded[c.name] for c in non_pk_cols}
-                    changed_pred = or_(*[c.is_distinct_from(excluded[c.name]) for c in non_pk_cols])
+
+                    # Only check for changes in data columns (exclude timestamp fields)
+                    if data_cols:
+                        changed_pred = or_(*[c.is_distinct_from(excluded[c.name]) for c in data_cols])
+                    else:
+                        # If no data columns to check, always update (shouldn't happen in practice)
+                        changed_pred = True
 
                     # Handle both single and composite primary keys for conflict resolution
                     if isinstance(pk_col, list):
@@ -107,11 +118,19 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
                         stmt = base.on_conflict_do_update(
                             index_elements=[pk_col], set_=set_mapping, where=changed_pred
                         )
-                    session.execute(stmt)
-                    logger.info(
-                        f"  • chunk {idx // chunk_size + 1}, {len(chunk)} rows"
-                    )
 
+                    result = session.execute(stmt)
+                    # Count affected rows (updated + inserted)
+                    chunk_affected = result.rowcount
+                    chunk_updated = min(chunk_affected, len(chunk))  # Approximate updates
+                    chunk_skipped = len(chunk) - chunk_updated
+
+                    total_updated += chunk_updated
+                    total_skipped += chunk_skipped
+
+                    print(f"\r upserting {table.__tablename__}. {round(100*(idx/len(data)),3)}%", end="", flush=True)
+
+                logger.info(f"Upsert summary for {table.__tablename__}: {total_updated} rows updated, {total_skipped} rows skipped (no data changes)")
             # Calculate distinct incoming records based on primary key type
             if isinstance(pk_col, list):
                 # Composite primary key - create tuples of all pk column values
