@@ -1,32 +1,40 @@
 import pandas as pd
-from sqlalchemy import text, insert, create_engine, select
+from sqlalchemy import text, insert, create_engine, select, bindparam
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.db.models import Watchlist, UpdateLog
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 
+from mkts_backend.utils.utils import update_watchlist_data
+
 logger = configure_logging(__name__)
 
 sde_db = DatabaseConfig("sde")
 wcmkt_db = DatabaseConfig("wcmkt")
 
-def add_missing_items_to_watchlist(missing_items: list[int]):
-    engine = sde_db.engine
-    with engine.connect() as conn:
-        from sqlalchemy import bindparam
-        stmt = text("SELECT * FROM inv_info WHERE typeID IN :missing").bindparams(bindparam('missing', expanding=True))
-        res = conn.execute(stmt, {"missing": missing_items})
-        df = pd.DataFrame(res.fetchall())
-        df.columns = res.keys()
-        df = df.rename(columns={"typeID": "type_id", "typeName": "type_name", "groupID": "group_id", "groupName": "group_name", "categoryID": "category_id", "categoryName": "category_name"})
+def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = False):
+    df = get_type_info(missing_items, remote=remote)
 
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine if remote else db.engine
     watchlist = wcmkt_db.get_watchlist()
     inv_cols = ['type_id', 'type_name', 'group_id', 'group_name', 'category_id', 'category_name']
     df = df[inv_cols]
     watchlist = pd.concat([watchlist, df], ignore_index=True)
     watchlist.to_csv("data/watchlist_updated.csv", index=False)
-    watchlist.to_sql("watchlist", wcmkt_db.engine, if_exists="append", index=False)
+    watchlist.to_sql("watchlist", engine, if_exists="append", index=False)
+    return f"Added {len(df)} items to watchlist: {df['type_name'].tolist()}"
+
+def get_type_info(type_ids: list[int], remote: bool = False):
+    engine = sde_db.engine if remote else sde_db.remote_engine
+    with engine.connect() as conn:
+        stmt = text("SELECT * FROM inv_info WHERE typeID IN :type_ids").bindparams(bindparam('type_ids', expanding=True))
+        res = conn.execute(stmt, {"type_ids": type_ids})
+        df = pd.DataFrame(res.fetchall())
+        df.columns = res.keys()
+        df = df.rename(columns={"typeID": "type_id", "typeName": "type_name", "groupID": "group_id", "groupName": "group_name", "categoryID": "category_id", "categoryName": "category_name"})
+    return df
 
 def update_watchlist_tables(missing_items: list[int]):
     engine = sde_db.engine
