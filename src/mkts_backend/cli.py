@@ -26,7 +26,7 @@ from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.esi.esi_requests import fetch_market_orders
 from mkts_backend.esi.async_history import run_async_history, run_async_jita_history
-from mkts_backend.utils.db_utils import check_updates
+from mkts_backend.utils.db_utils import check_updates, add_missing_items_to_watchlist
 
 logger = configure_logging(__name__)
 
@@ -47,10 +47,52 @@ def check_tables():
     db.engine.dispose()
 
 def display_cli_help():
-    print("Usage: mkts-backend [--history|--include-history] [--check_tables]")
+    print("Usage: mkts-backend [--history|--include-history] [--check_tables] [add_watchlist --type_id=<list[int]>]")
     print("Options:")
     print("  --history | --include-history: Include history processing")
     print("  --check_tables: Check the tables in the database")
+    print("  add_watchlist --type_id=<list[int]>: Add items to watchlist by type IDs (comma-separated)")
+    print("    --local: Use local database instead of remote (default: remote)")
+
+def process_add_watchlist(type_ids_str: str, remote: bool = False):
+    """
+    Process the add_watchlist command to add items to the watchlist.
+
+    Args:
+        type_ids_str: Comma-separated string of type IDs
+        remote: Whether to use remote database
+    """
+    try:
+        # Parse comma-separated type IDs
+        type_ids = [int(tid.strip()) for tid in type_ids_str.split(',') if tid.strip()]
+
+        if not type_ids:
+            logger.error("No valid type IDs provided")
+            print("Error: No valid type IDs provided")
+            return False
+
+        logger.info(f"Adding {len(type_ids)} items to watchlist: {type_ids}")
+        print(f"Adding {len(type_ids)} items to watchlist: {type_ids}")
+
+        # Initialize databases
+        init_databases()
+
+        # Add items to watchlist
+        result = add_missing_items_to_watchlist(type_ids, remote=remote)
+
+        print(result)
+        logger.info(f"Add watchlist result: {result}")
+
+        return True
+
+    except ValueError as e:
+        logger.error(f"Invalid type ID format: {e}")
+        print(f"Error: Invalid type ID format. Please provide comma-separated integers. {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Error adding items to watchlist: {e}")
+        print(f"Error: {e}")
+        return False
 
 def process_market_orders(esi: ESIConfig, order_type: str = "all", test_mode: bool = False) -> bool:
     """Fetches market orders from ESI and updates the database"""
@@ -200,6 +242,31 @@ def main(history: bool = False):
         check_tables()
         return
 
+    # Handle add_watchlist command
+    if "add_watchlist" in sys.argv:
+        # Find the --type_id parameter
+        type_ids_str = None
+        for i, arg in enumerate(sys.argv):
+            if arg.startswith("--type_id="):
+                type_ids_str = arg.split("=", 1)[1]
+                break
+
+        if not type_ids_str:
+            print("Error: --type_id parameter is required for add_watchlist command")
+            print("Usage: mkts-backend add_watchlist --type_id=12345,67890,11111")
+            print("       mkts-backend add_watchlist --type_id=12345,67890,11111 --local")
+            return
+
+        # Default to remote database, use --local flag for local database
+        remote = "--local" not in sys.argv
+
+        success = process_add_watchlist(type_ids_str, remote=remote)
+        if success:
+            print("Add watchlist command completed successfully")
+        else:
+            print("Add watchlist command failed")
+        return
+
     if "--history" in sys.argv or "--include-history" in sys.argv:
         history = True
     start_time = time.perf_counter()
@@ -292,6 +359,28 @@ if __name__ == "__main__":
             include_history = True
         elif "--check_tables" in sys.argv:
             check_tables()
+            exit()
+        elif "add_watchlist" in sys.argv:
+            # Handle add_watchlist command in __main__ section too
+            type_ids_str = None
+            for i, arg in enumerate(sys.argv):
+                if arg.startswith("--type_id="):
+                    type_ids_str = arg.split("=", 1)[1]
+                    break
+
+            if not type_ids_str:
+                print("Error: --type_id parameter is required for add_watchlist command")
+                print("Usage: mkts-backend add_watchlist --type_id=12345,67890,11111")
+                print("       mkts-backend add_watchlist --type_id=12345,67890,11111 --local")
+                exit()
+
+            # Default to remote database, use --local flag for local database
+            remote = "--local" not in sys.argv
+            success = process_add_watchlist(type_ids_str, remote=remote)
+            if success:
+                print("Add watchlist command completed successfully")
+            else:
+                print("Add watchlist command failed")
             exit()
         else:
             display_cli_help()

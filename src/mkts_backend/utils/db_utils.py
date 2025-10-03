@@ -14,17 +14,69 @@ sde_db = DatabaseConfig("sde")
 wcmkt_db = DatabaseConfig("wcmkt")
 
 def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = False):
+    """
+    Add missing items to the watchlist by fetching type information from SDE database.
+
+    Args:
+        missing_items: List of type IDs to add to watchlist
+        remote: Whether to use remote database (default: False for local)
+
+    Returns:
+        String message indicating success and items added
+    """
+    if not missing_items:
+        logger.warning("No items provided to add to watchlist")
+        return "No items provided to add to watchlist"
+
+    logger.info(f"Adding {len(missing_items)} items to watchlist: {missing_items}")
+
+    # Get type information from SDE database
     df = get_type_info(missing_items, remote=remote)
 
+    if df.empty:
+        logger.error("No type information found for provided type IDs")
+        return "No type information found for provided type IDs"
+
+    # Get current watchlist to check for duplicates
     db = DatabaseConfig("wcmkt")
     engine = db.remote_engine if remote else db.engine
-    watchlist = wcmkt_db.get_watchlist()
+    watchlist = db.get_watchlist()
+
+    # Filter out items that already exist in watchlist
+    existing_type_ids = set(watchlist['type_id'].tolist()) if not watchlist.empty else set()
+    new_items = df[~df['type_id'].isin(existing_type_ids)]
+
+    if new_items.empty:
+        logger.info("All provided items already exist in watchlist")
+        return f"All {len(missing_items)} items already exist in watchlist"
+
+    # Prepare data for insertion
     inv_cols = ['type_id', 'type_name', 'group_id', 'group_name', 'category_id', 'category_name']
-    df = df[inv_cols]
-    watchlist = pd.concat([watchlist, df], ignore_index=True)
-    watchlist.to_csv("data/watchlist_updated.csv", index=False)
-    watchlist.to_sql("watchlist", engine, if_exists="append", index=False)
-    return f"Added {len(df)} items to watchlist: {df['type_name'].tolist()}"
+    new_items = new_items[inv_cols]
+
+    # Save updated watchlist to CSV for backup
+    updated_watchlist = pd.concat([watchlist, new_items], ignore_index=True)
+    updated_watchlist.to_csv("data/watchlist_updated.csv", index=False)
+    logger.info(f"Saved updated watchlist to data/watchlist_updated.csv")
+
+    # Insert new items into database using proper upsert to avoid duplicates
+    try:
+        from mkts_backend.db.db_handlers import upsert_database
+        from mkts_backend.db.models import Watchlist
+
+        # Use the existing upsert_database function to handle conflicts properly
+        success = upsert_database(Watchlist, new_items)
+
+        if success:
+            logger.info(f"Successfully added {len(new_items)} new items to watchlist")
+            return f"Added {len(new_items)} items to watchlist: {new_items['type_name'].tolist()}"
+        else:
+            logger.error("Failed to add items to watchlist")
+            return "Failed to add items to watchlist"
+
+    except Exception as e:
+        logger.error(f"Error adding items to watchlist: {e}")
+        return f"Error adding items to watchlist: {e}"
 
 def get_type_info(type_ids: list[int], remote: bool = False):
     engine = sde_db.engine if remote else sde_db.remote_engine
@@ -41,9 +93,7 @@ def update_watchlist_tables(missing_items: list[int]):
     with engine.connect() as conn:
         from sqlalchemy import bindparam
         stmt = text("SELECT * FROM inv_info WHERE typeID IN :missing").bindparams(bindparam('missing', expanding=True))
-        res = conn.execute(stmt, {"missing": missing_items})
-        df = pd.DataFrame(res.fetchall())
-        df.columns = res.keys()
+        df = pd.read_sql_query(stmt, conn)
 
     inv_cols = ['typeID', 'typeName', 'groupID', 'groupName', 'categoryID', 'categoryName']
     watchlist_cols = ['type_id', 'type_name', 'group_id', 'group_name', 'category_id', 'category_name']
