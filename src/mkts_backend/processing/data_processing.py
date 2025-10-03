@@ -178,7 +178,6 @@ def fill_nulls_from_history(stats: pd.DataFrame) -> pd.DataFrame:
                 # Fill null values using merge for safer indexing
                 for type_id in nulls_type_ids:
                     if type_id in history_df.index:
-                        logger.info(f"Filling nulls for type_id {type_id}, type_id is {type(type_id)}")
                         # Fill price-related nulls with historical average price
                         try:
                             if pd.isnull(stats.loc[stats.type_id == type_id, 'avg_price']).any():
@@ -196,7 +195,6 @@ def fill_nulls_from_history(stats: pd.DataFrame) -> pd.DataFrame:
                         except Exception as e:
                             logger.error(f"Error filling nulls for type_id {type_id}: {e}")
 
-                        logger.info(f"Filled nulls for type_id {type_id}")
                     else:
                         logger.info(f"No history data found for type_id {type_id}")
             else:
