@@ -61,6 +61,7 @@ def calculate_market_stats() -> pd.DataFrame:
     h.avg_volume,
     ROUND(CASE
     WHEN h.avg_volume > 0 THEN o.total_volume_remain / h.avg_volume
+    WHEN h.avg_volume IS NULL OR h.avg_volume = 0 THEN 30
     ELSE 0
     END, 2) as days_remaining
 
