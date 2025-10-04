@@ -42,3 +42,4 @@ coalition_analytics_output/
 reports/
 sdeupdate.py
 src/mkts_backend/utils/debughistory.py
+items.txt
