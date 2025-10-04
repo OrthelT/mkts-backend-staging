@@ -27,6 +27,7 @@ from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.esi.esi_requests import fetch_market_orders
 from mkts_backend.esi.async_history import run_async_history, run_async_jita_history
 from mkts_backend.utils.db_utils import check_updates, add_missing_items_to_watchlist
+from mkts_backend.utils.parse_items import parse_items
 
 logger = configure_logging(__name__)
 
@@ -47,12 +48,13 @@ def check_tables():
     db.engine.dispose()
 
 def display_cli_help():
-    print("Usage: mkts-backend [--history|--include-history] [--check_tables] [add_watchlist --type_id=<list[int]>]")
+    print("Usage: mkts-backend [--history|--include-history] [--check_tables] [add_watchlist --type_id=<list[int]>] [parse-items --input=<file> --output=<file>]")
     print("Options:")
     print("  --history | --include-history: Include history processing")
     print("  --check_tables: Check the tables in the database")
     print("  add_watchlist --type_id=<list[int]>: Add items to watchlist by type IDs (comma-separated)")
     print("    --local: Use local database instead of remote (default: remote)")
+    print("  parse-items --input=<file> --output=<file>: Parse Eve structure data and create CSV with pricing from database")
 
 def process_add_watchlist(type_ids_str: str, remote: bool = False):
     """
@@ -242,6 +244,29 @@ def main(history: bool = False):
         check_tables()
         return
 
+    # Handle parse-items command
+    if "parse-items" in sys.argv:
+        input_file = None
+        output_file = None
+
+        for arg in sys.argv:
+            if arg.startswith("--input="):
+                input_file = arg.split("=", 1)[1]
+            elif arg.startswith("--output="):
+                output_file = arg.split("=", 1)[1]
+
+        if not input_file or not output_file:
+            print("Error: Both --input and --output parameters are required for parse-items command")
+            print("Usage: mkts-backend parse-items --input=structure_data.txt --output=market_prices.csv")
+            return
+
+        success = parse_items(input_file, output_file)
+        if success:
+            print("Parse items command completed successfully")
+        else:
+            print("Parse items command failed")
+        return
+
     # Handle add_watchlist command
     if "add_watchlist" in sys.argv:
         # Find the --type_id parameter
@@ -359,6 +384,28 @@ if __name__ == "__main__":
             include_history = True
         elif "--check_tables" in sys.argv:
             check_tables()
+            exit()
+        elif "parse-items" in sys.argv:
+            # Handle parse-items command in __main__ section
+            input_file = None
+            output_file = None
+
+            for arg in sys.argv:
+                if arg.startswith("--input="):
+                    input_file = arg.split("=", 1)[1]
+                elif arg.startswith("--output="):
+                    output_file = arg.split("=", 1)[1]
+
+            if not input_file or not output_file:
+                print("Error: Both --input and --output parameters are required for parse-items command")
+                print("Usage: mkts-backend parse-items --input=structure_data.txt --output=market_prices.csv")
+                exit()
+
+            success = parse_items(input_file, output_file)
+            if success:
+                print("Parse items command completed successfully")
+            else:
+                print("Parse items command failed")
             exit()
         elif "add_watchlist" in sys.argv:
             # Handle add_watchlist command in __main__ section too
