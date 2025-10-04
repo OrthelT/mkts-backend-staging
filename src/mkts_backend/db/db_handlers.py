@@ -87,12 +87,34 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
                         f"Row count mismatch: expected {len(data)}, got {count}"
                     )
             else:
+                # Delete records not present in incoming data (stale records)
+                deleted_count = 0
+                if isinstance(pk_col, list):
+                    # Composite primary key - build list of tuples
+                    incoming_pks = [tuple(row[col.name] for col in pk_col) for row in data]
+                    # For composite keys, build a condition for each tuple
+                    delete_conditions = []
+                    for pk_tuple in incoming_pks:
+                        tuple_conditions = [pk_cols[i] == pk_tuple[i] for i in range(len(pk_cols))]
+                        delete_conditions.append(tuple_conditions)
+                    # Delete where NOT IN incoming PKs (complex for composite, skip for now)
+                    logger.warning(f"Stale record deletion not yet implemented for composite primary keys in {tabname}")
+                else:
+                    # Single primary key - delete records not in incoming data
+                    incoming_pks = [row[pk_col.name] for row in data]
+                    delete_stmt = delete(t).where(pk_col.notin_(incoming_pks))
+                    delete_result = session.execute(delete_stmt)
+                    deleted_count = delete_result.rowcount
+                    if deleted_count > 0:
+                        logger.info(f"Deleted {deleted_count} stale records from {tabname}")
+
                 non_pk_cols = [c for c in t.columns if c not in pk_cols]
                 # Exclude timestamp columns from change detection to avoid unnecessary updates
                 data_cols = [c for c in non_pk_cols if c.name not in ['timestamp', 'last_update', 'created_at', 'updated_at']]
 
                 total_updated = 0
                 total_skipped = 0
+                total_inserted = 0
 
                 for idx in range(0, len(data), chunk_size):
                     chunk = data[idx : idx + chunk_size]
@@ -130,7 +152,15 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
 
                     print(f"\r upserting {table.__tablename__}. {round(100*(idx/len(data)),3)}%", end="", flush=True)
 
-                logger.info(f"Upsert summary for {table.__tablename__}: {total_updated} rows updated, {total_skipped} rows skipped (no data changes)")
+                # Calculate insertions: total incoming minus those that already existed
+                count_after = session.execute(select(func.count()).select_from(t)).scalar_one()
+                count_before = count_after - (deleted_count if not isinstance(pk_col, list) else 0)
+                total_inserted = max(0, len(data) - (count_before - (deleted_count if not isinstance(pk_col, list) else 0)))
+
+                if deleted_count > 0:
+                    logger.info(f"Upsert summary for {table.__tablename__}: {deleted_count} rows deleted, {total_inserted} rows inserted, {total_updated} rows updated, {total_skipped} rows skipped (no data changes)")
+                else:
+                    logger.info(f"Upsert summary for {table.__tablename__}: {total_inserted} rows inserted, {total_updated} rows updated, {total_skipped} rows skipped (no data changes)")
             # Calculate distinct incoming records based on primary key type
             if isinstance(pk_col, list):
                 # Composite primary key - create tuples of all pk column values
@@ -213,7 +243,7 @@ def update_history(history_results: list[dict]):
 
     missing_columns = set(valid_history_columns) - set(history_df.columns)
     if missing_columns:
-        logger.error(f"Missing required columns: {missing_columns}")
+        logger.warning(f"Missing required columns: {missing_columns}")
         for col in missing_columns:
             if col in ('timestamp',):
                 continue
