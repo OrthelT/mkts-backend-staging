@@ -1,0 +1,226 @@
+[
+    {
+        "current_time": "2025-10-15 23:54:14",
+        "pre_info": {
+            "hash": 1151656640,
+            "version": 0,
+            "durable_frame_num": 99,
+            "generation": 2780
+        },
+        "post_info": {
+            "hash": 1151656640,
+            "version": 0,
+            "durable_frame_num": 99,
+            "generation": 2780
+        },
+        "start_time": 13050.427300239,
+        "end_time": 13051.427824221,
+        "elapsed_time": 1000.52,
+        "frames_change": 0,
+        "generation_change": 0
+    },
+    {
+        "current_time": "2025-10-16 00:04:37",
+        "pre_info": {
+            "hash": 1151656640,
+            "version": 0,
+            "durable_frame_num": 99,
+            "generation": 2780
+        },
+        "post_info": {
+            "hash": 4229465509,
+            "version": 0,
+            "durable_frame_num": 99,
+            "generation": 2781
+        },
+        "start_time": 13673.652085001,
+        "end_time": 13674.657537428,
+        "elapsed_time": 1005.45,
+        "frames_change": 0,
+        "generation_change": 1
+    },
+    {
+        "current_time": "2025-10-16 00:04:56",
+        "pre_info": {
+            "hash": 4229465509,
+            "version": 0,
+            "durable_frame_num": 99,
+            "generation": 2781
+        },
+        "post_info": {
+            "hash": 2398235906,
+            "version": 0,
+            "durable_frame_num": 248,
+            "generation": 2781
+        },
+        "start_time": 13692.538301471,
+        "end_time": 13693.063614907,
+        "elapsed_time": 525.31,
+        "frames_change": 149,
+        "generation_change": 0
+    },
+    {
+        "current_time": "2025-10-16 00:04:59",
+        "pre_info": {
+            "hash": 2398235906,
+            "version": 0,
+            "durable_frame_num": 248,
+            "generation": 2781
+        },
+        "post_info": {
+            "hash": 2086899085,
+            "version": 0,
+            "durable_frame_num": 1,
+            "generation": 2782
+        },
+        "start_time": 13696.003959156,
+        "end_time": 13696.648664022,
+        "elapsed_time": 644.7,
+        "frames_change": -247,
+        "generation_change": 1
+    },
+    {
+        "current_time": "2025-10-16 00:32:53",
+        "pre_info": {
+            "hash": 2336519767,
+            "version": 0,
+            "durable_frame_num": 170,
+            "generation": 2782
+        },
+        "post_info": {
+            "hash": 3303009000,
+            "version": 0,
+            "durable_frame_num": 1,
+            "generation": 2783
+        },
+        "start_time": 15369.256407547,
+        "end_time": 15370.063833239,
+        "elapsed_time": 807.43,
+        "frames_change": -169,
+        "generation_change": 1
+    },
+    {
+        "current_time": "2025-10-16 00:33:10",
+        "pre_info": {
+            "hash": 3303009000,
+            "version": 0,
+            "durable_frame_num": 1,
+            "generation": 2783
+        },
+        "post_info": {
+            "hash": 2114703940,
+            "version": 0,
+            "durable_frame_num": 23,
+            "generation": 2783
+        },
+        "start_time": 15387.304776618,
+        "end_time": 15387.653740845,
+        "elapsed_time": 348.96,
+        "frames_change": 22,
+        "generation_change": 0
+    },
+    {
+        "current_time": "2025-10-16 00:33:12",
+        "pre_info": {
+            "hash": 2114703940,
+            "version": 0,
+            "durable_frame_num": 23,
+            "generation": 2783
+        },
+        "post_info": {
+            "hash": 1272426636,
+            "version": 0,
+            "durable_frame_num": 54,
+            "generation": 2783
+        },
+        "start_time": 15389.357225374,
+        "end_time": 15389.713698434,
+        "elapsed_time": 356.47,
+        "frames_change": 31,
+        "generation_change": 0
+    },
+    {
+        "current_time": "2025-10-16 00:39:27",
+        "pre_info": {
+            "hash": 1272426636,
+            "version": 0,
+            "durable_frame_num": 54,
+            "generation": 2783
+        },
+        "post_info": {
+            "hash": 3081904072,
+            "version": 0,
+            "durable_frame_num": 174,
+            "generation": 2783
+        },
+        "start_time": 15763.663842973,
+        "end_time": 15764.134310198,
+        "elapsed_time": 470.47,
+        "frames_change": 120,
+        "generation_change": 0,
+        "function_name": "process_market_stats w mkt_orders and/or history"
+    },
+    {
+        "current_time": "2025-10-16 00:39:29",
+        "pre_info": {
+            "hash": 3081904072,
+            "version": 0,
+            "durable_frame_num": 174,
+            "generation": 2783
+        },
+        "post_info": {
+            "hash": 3923163280,
+            "version": 0,
+            "durable_frame_num": 205,
+            "generation": 2783
+        },
+        "start_time": 15765.825537448,
+        "end_time": 15766.226806287,
+        "elapsed_time": 401.27,
+        "frames_change": 31,
+        "generation_change": 0,
+        "function_name": "process_doctrine_stats"
+    },
+    {
+        "current_time": "2025-10-16 00:42:32",
+        "pre_info": {
+            "hash": 3923163280,
+            "version": 0,
+            "durable_frame_num": 205,
+            "generation": 2783
+        },
+        "post_info": {
+            "hash": 3793225212,
+            "version": 0,
+            "durable_frame_num": 2,
+            "generation": 2784
+        },
+        "start_time": 15948.342645042,
+        "end_time": 15949.047289198,
+        "elapsed_time": 704.64,
+        "frames_change": -203,
+        "generation_change": 1,
+        "function_name": "process_market_stats w mkt_orders and/or history"
+    },
+    {
+        "current_time": "2025-10-16 00:42:33",
+        "pre_info": {
+            "hash": 3793225212,
+            "version": 0,
+            "durable_frame_num": 2,
+            "generation": 2784
+        },
+        "post_info": {
+            "hash": 2514575433,
+            "version": 0,
+            "durable_frame_num": 33,
+            "generation": 2784
+        },
+        "start_time": 15949.843618375,
+        "end_time": 15950.220509629,
+        "elapsed_time": 376.89,
+        "frames_change": 31,
+        "generation_change": 0,
+        "function_name": "process_doctrine_stats"
+    }
+]

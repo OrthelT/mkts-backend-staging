@@ -1,8 +1,40 @@
-import os
+import os, sys
 from sqlalchemy import create_engine, text
 import pandas as pd
 import pathlib
-# os.environ.setdefault("RUST_LOG", "debug")
+from datetime import datetime
+
+# Rotate debug logs - keep last 5 runs
+def rotate_debug_logs(log_file="libsql_debug.log", max_backups=5):
+    """Rotate log files, keeping the last N backups."""
+    if not os.path.exists(log_file):
+        return
+
+    # Shift existing backups
+    for i in range(max_backups - 1, 0, -1):
+        old_backup = f"{log_file}.{i}"
+        new_backup = f"{log_file}.{i + 1}"
+        if os.path.exists(old_backup):
+            if i == max_backups - 1:
+                os.remove(old_backup)  # Remove oldest
+            else:
+                os.rename(old_backup, new_backup)
+
+    # Move current log to .1
+    if os.path.exists(log_file) and os.path.getsize(log_file) > 0:
+        os.rename(log_file, f"{log_file}.1")
+
+rotate_debug_logs()
+
+os.environ["RUST_LOG"] = "debug"
+# Open in append mode and add run separator
+stderr_log = open("libsql_debug.log", "a")
+stderr_log.write(f"\n{'='*80}\n")
+stderr_log.write(f"Run started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+stderr_log.write(f"{'='*80}\n\n")
+stderr_log.flush()
+sys.stderr = stderr_log
+
 import libsql
 from dotenv import load_dotenv
 from mkts_backend.config.logging_config import configure_logging
