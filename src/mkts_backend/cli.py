@@ -28,7 +28,6 @@ from mkts_backend.esi.esi_requests import fetch_market_orders
 from mkts_backend.esi.async_history import run_async_history, run_async_jita_history
 from mkts_backend.utils.db_utils import check_updates, add_missing_items_to_watchlist
 from mkts_backend.utils.parse_items import parse_items
-from mkts_backend.debugsync import record_pre_sync, record_post_sync, record_results
 
 logger = configure_logging(__name__)
 
@@ -167,12 +166,7 @@ def process_market_stats():
     logger.info("Calculating market stats")
     logger.info("syncing database")
     db = DatabaseConfig("wcmkt")
-    record_pre_sync()
-    p0 = time.perf_counter()
     db.sync()
-    p1 = time.perf_counter()
-    record_post_sync()
-    record_results(p0, p1, "process_market_stats w mkt_orders and/or history")
     logger.info("database synced")
     logger.info("validating database")
     validation_test = db.validate_sync()
@@ -222,12 +216,7 @@ def process_doctrine_stats():
     logger.info("Calculating doctrines stats")
     logger.info("syncing database")
     db = DatabaseConfig("wcmkt")
-    record_pre_sync()
-    p0 = time.perf_counter()
     db.sync()
-    p1 = time.perf_counter()
-    record_post_sync()
-    record_results(p0, p1, "process_doctrine_stats")
     logger.info("database synced")
     logger.info("validating database")
     validation_test = db.validate_sync()
@@ -247,7 +236,6 @@ def process_doctrine_stats():
     else:
         logger.error("Failed to update doctrines")
         return False
-
 
 def main(history: bool = False):
     """Main function to process market orders, history, market stats, and doctrines"""
@@ -320,14 +308,7 @@ def main(history: bool = False):
 
     if not validation_test:
         logger.warning("wcmkt database is not up to date. Updating...")
-        record_pre_sync()
-
-        p0 = time.perf_counter()
         db.sync()
-        p1 = time.perf_counter()
-        record_post_sync()
-        record_results(p0, p1, "main")
-
         logger.info("database synced")
         validation_test = db.validate_sync()
         if validation_test:
@@ -398,6 +379,11 @@ if __name__ == "__main__":
     logger.info("Starting mkts-backend")
     logger.info("=" * 80 + "\n")
     include_history = False
+    
+    print(len(sys.argv))
+    print(sys.argv)
+    quit()
+
     if len(sys.argv) > 1:
         if "--history" in sys.argv:
             include_history = True
@@ -448,6 +434,10 @@ if __name__ == "__main__":
             else:
                 print("Add watchlist command failed")
             exit()
+        elif "--help" in sys.argv:
+            display_cli_help()
+            exit()
+
         else:
             display_cli_help()
             exit()

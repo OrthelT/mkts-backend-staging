@@ -116,10 +116,7 @@ jobs:
       if: always()
       with:
         name: market-data-logs-${{ github.run_number }}
-        path: |
-          logs/
-          libsql_debug.log
-          sync_debug.log
+        path: logs/
         retention-days: 7
 
     - name: Clean up sensitive files
