@@ -267,12 +267,23 @@ def calculate_doctrine_stats() -> pd.DataFrame:
         doctrine_stats[col] = doctrine_stats[col].replace([float('inf'), float('-inf')], float('nan'))
         doctrine_stats[col] = doctrine_stats[col].fillna(0)
 
-    # Convert integer columns to int with explicit type safety
-    int_cols = ['hulls', 'total_stock', 'group_id', 'category_id']
+    # Convert ALL integer columns to int with explicit type safety
+    # Include both nullable and non-nullable Integer columns from the model
+    int_cols = ['id', 'fit_id', 'ship_id', 'hulls', 'type_id', 'fit_qty',
+                'total_stock', 'group_id', 'category_id']
     for col in int_cols:
         if col in doctrine_stats.columns:
-            # Ensure clean conversion: replace any remaining inf/nan, then convert
+            # Ensure clean conversion: coerce any non-numeric, replace NaN, convert to int
             doctrine_stats[col] = pd.to_numeric(doctrine_stats[col], errors='coerce').fillna(0).astype(int)
+
+    # Final safety check: ensure no NaN values remain in ANY column
+    if doctrine_stats.isnull().any().any():
+        logger.error(f"WARNING: NaN values still present after cleaning: {doctrine_stats.isnull().sum()}")
+        # Replace any remaining NaN with appropriate defaults
+        doctrine_stats = doctrine_stats.fillna({'ship_name': '', 'type_name': '',
+                                                  'group_name': '', 'category_name': ''})
+        # Fill any remaining numeric NaN with 0
+        doctrine_stats = doctrine_stats.fillna(0)
 
     doctrine_stats = doctrine_stats.reset_index(drop=True)
     return doctrine_stats
