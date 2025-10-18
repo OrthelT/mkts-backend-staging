@@ -88,7 +88,7 @@ def add_autoincrement(df):
 def convert_datetime_columns(df, datetime_columns):
     for col in datetime_columns:
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col], utc=True).dt.tz_convert(None)
+            df[col] = pd.to_datetime(df[col], utc=True, errors='coerce').dt.tz_convert(None)
     return df
 
 def standby(seconds: int):

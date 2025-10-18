@@ -256,7 +256,9 @@ def calculate_doctrine_stats() -> pd.DataFrame:
         doctrine_stats["total_stock"] / doctrine_stats["fit_qty"], 1
     )
     doctrine_stats = doctrine_stats.infer_objects()
-    doctrine_stats = doctrine_stats.fillna(0)
+    # Fill numeric columns with 0, but exclude timestamp to avoid datetime conversion issues
+    numeric_cols = doctrine_stats.select_dtypes(include=['number']).columns
+    doctrine_stats[numeric_cols] = doctrine_stats[numeric_cols].fillna(0)
 
     doctrine_stats["fits_on_mkt"] = doctrine_stats["fits_on_mkt"].astype(int)
     doctrine_stats["avg_vol"] = doctrine_stats["avg_vol"].astype(int)
