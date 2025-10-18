@@ -260,8 +260,15 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     numeric_cols = doctrine_stats.select_dtypes(include=['number']).columns
     doctrine_stats[numeric_cols] = doctrine_stats[numeric_cols].fillna(0)
 
-    doctrine_stats["fits_on_mkt"] = doctrine_stats["fits_on_mkt"].astype(int)
-    doctrine_stats["avg_vol"] = doctrine_stats["avg_vol"].astype(int)
+    # Replace inf values with 0 (can occur from division by zero)
+    doctrine_stats[numeric_cols] = doctrine_stats[numeric_cols].replace([float('inf'), float('-inf')], 0)
+
+    # Convert integer columns to int, handling any remaining edge cases
+    int_cols = ['hulls', 'total_stock', 'group_id', 'category_id']
+    for col in int_cols:
+        if col in doctrine_stats.columns:
+            doctrine_stats[col] = doctrine_stats[col].fillna(0).replace([float('inf'), float('-inf')], 0).astype(int)
+
     doctrine_stats = doctrine_stats.reset_index(drop=True)
     return doctrine_stats
 
