@@ -54,10 +54,27 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
         string_cols = df.select_dtypes(include=['object']).columns
         df[string_cols] = df[string_cols].fillna('')
 
+        # Fill NaN in datetime columns with None (NULL)
+        # Must convert datetime columns to object type first to allow None values
+        datetime_cols = df.select_dtypes(include=['datetime', 'datetime64']).columns.tolist()
+        for col in datetime_cols:
+            # Replace NaT with None - convert column to object type first
+            df[col] = df[col].astype('object')
+            df.loc[df[col].isna(), col] = None
+
         # Final check
         if df.isnull().any().any():
             logger.error(f"NaN values STILL present after cleaning: {df.isnull().sum()}")
-            df = df.fillna(0)  # Last resort: fill everything with 0
+            # Check for non-datetime NaN
+            remaining_nan_cols = df.columns[df.isnull().any()].tolist()
+            logger.error(f"Remaining NaN in columns: {remaining_nan_cols}")
+            # Last resort: fill non-datetime with 0, datetime with None
+            for col in remaining_nan_cols:
+                if col not in datetime_cols:
+                    df[col] = df[col].fillna(0)
+                else:
+                    df[col] = df[col].astype('object')
+                    df.loc[df[col].isna(), col] = None
 
     data = df.to_dict(orient="records")
 
