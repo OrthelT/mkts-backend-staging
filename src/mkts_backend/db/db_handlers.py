@@ -33,6 +33,32 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
     is_wipe_replace = tabname in WIPE_REPLACE_TABLES
     logger.info(f"Processing table: {tabname}, wipe_replace: {is_wipe_replace}")
     logger.info(f"Upserting {len(df)} rows into {table.__tablename__}")
+
+    # CRITICAL SAFETY CHECK: Clean all NaN/inf values before conversion to dict
+    # This is a final safety net to prevent SQLAlchemy errors
+    import numpy as np
+
+    # Check for NaN values
+    if df.isnull().any().any():
+        logger.warning(f"NaN values detected in {tabname} before upsert. Cleaning...")
+        logger.warning(f"NaN columns: {df.columns[df.isnull().any()].tolist()}")
+
+        # Replace inf with NaN, then fill all NaN with appropriate defaults
+        df = df.replace([np.inf, -np.inf], np.nan)
+
+        # Fill NaN in numeric columns with 0
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        df[numeric_cols] = df[numeric_cols].fillna(0)
+
+        # Fill NaN in string columns with empty string
+        string_cols = df.select_dtypes(include=['object']).columns
+        df[string_cols] = df[string_cols].fillna('')
+
+        # Final check
+        if df.isnull().any().any():
+            logger.error(f"NaN values STILL present after cleaning: {df.isnull().sum()}")
+            df = df.fillna(0)  # Last resort: fill everything with 0
+
     data = df.to_dict(orient="records")
 
     MAX_PARAMETER_BYTES = 256 * 1024
