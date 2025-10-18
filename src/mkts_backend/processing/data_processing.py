@@ -252,22 +252,27 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     doctrine_stats["timestamp"] = doctrine_stats["type_id"].map(
         market_stats.set_index("type_id")["last_update"]
     )
-    doctrine_stats["fits_on_mkt"] = round(
-        doctrine_stats["total_stock"] / doctrine_stats["fit_qty"], 1
+    # Calculate fits_on_mkt with safe division
+    doctrine_stats["fits_on_mkt"] = doctrine_stats.apply(
+        lambda row: round(row["total_stock"] / row["fit_qty"], 1) if row["fit_qty"] > 0 else 0,
+        axis=1
     )
+
     doctrine_stats = doctrine_stats.infer_objects()
-    # Fill numeric columns with 0, but exclude timestamp to avoid datetime conversion issues
-    numeric_cols = doctrine_stats.select_dtypes(include=['number']).columns
-    doctrine_stats[numeric_cols] = doctrine_stats[numeric_cols].fillna(0)
 
-    # Replace inf values with 0 (can occur from division by zero)
-    doctrine_stats[numeric_cols] = doctrine_stats[numeric_cols].replace([float('inf'), float('-inf')], 0)
+    # Aggressive NaN and inf cleaning for all numeric columns
+    numeric_cols = doctrine_stats.select_dtypes(include=['number']).columns.tolist()
+    for col in numeric_cols:
+        # Replace inf first, then NaN
+        doctrine_stats[col] = doctrine_stats[col].replace([float('inf'), float('-inf')], float('nan'))
+        doctrine_stats[col] = doctrine_stats[col].fillna(0)
 
-    # Convert integer columns to int, handling any remaining edge cases
+    # Convert integer columns to int with explicit type safety
     int_cols = ['hulls', 'total_stock', 'group_id', 'category_id']
     for col in int_cols:
         if col in doctrine_stats.columns:
-            doctrine_stats[col] = doctrine_stats[col].fillna(0).replace([float('inf'), float('-inf')], 0).astype(int)
+            # Ensure clean conversion: replace any remaining inf/nan, then convert
+            doctrine_stats[col] = pd.to_numeric(doctrine_stats[col], errors='coerce').fillna(0).astype(int)
 
     doctrine_stats = doctrine_stats.reset_index(drop=True)
     return doctrine_stats
