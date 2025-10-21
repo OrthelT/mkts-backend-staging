@@ -28,7 +28,19 @@ sde_db = DatabaseConfig("sde")
 
 
 def upsert_database(table: Base, df: pd.DataFrame) -> bool:
-    WIPE_REPLACE_TABLES = ["marketstats", "doctrines"]
+    """Upsert data into the database
+    
+    Args:
+        table: The table model to update
+        df: The DataFrame containing the data to update
+
+    Note: WIPE_REPLACE_TABLES is a list of tables that will be wiped and replaced with the new data rather than upserted.Due to issues
+    with upsert creating excessive WAL frames, we are simply wiping and replacing most tables to avoid exessive sync overhead.
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    WIPE_REPLACE_TABLES = ["marketstats", "doctrines", "marketorders", "market_history"]
     tabname = table.__tablename__
     is_wipe_replace = tabname in WIPE_REPLACE_TABLES
     logger.info(f"Processing table: {tabname}, wipe_replace: {is_wipe_replace}")
@@ -75,6 +87,7 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
                 else:
                     df[col] = df[col].astype('object')
                     df.loc[df[col].isna(), col] = None
+            
 
     data = df.to_dict(orient="records")
 
@@ -106,7 +119,7 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
         raise ValueError("Table must have at least one primary key column.")
 
     try:
-        logger.info(f"Upserting {len(data)} rows into {table.__tablename__}")
+        logger.info(f"Updating {len(data)} rows into {table.__tablename__}")
         with session.begin():
 
             if is_wipe_replace:
@@ -236,6 +249,15 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
     return True
 
 def update_history(history_results: list[dict]):
+    """Prepares data for update to the market_history table, then calls upsert_database to update the table
+    
+    Args:
+        history_results: List of dicts, each containing history data from the ESI
+    
+    Returns:
+        True if successful, False otherwise
+    """
+
     valid_history_columns = MarketHistory.__table__.columns.keys()
 
     flattened_history = []
@@ -272,7 +294,7 @@ def update_history(history_results: list[dict]):
 
     unique_type_ids = history_df['type_id'].unique()
 
-    engine = sa.create_engine(sde_db.url)
+    engine = sde_db.engine
     with engine.connect() as conn:
         placeholders = ','.join([':type_id_' + str(i) for i in range(len(unique_type_ids))])
         params = {'type_id_' + str(i): int(unique_type_ids[i]) for i in range(len(unique_type_ids))}
@@ -316,6 +338,15 @@ def update_history(history_results: list[dict]):
 
 
 def update_market_orders(orders: list[dict]) -> bool:
+    """Prepares data for update to the marketorders table, then calls upsert_database to update the table
+    
+    Args:
+        orders: List of dicts, each containing order data from the ESI
+
+    Returns:
+        True if successful, False otherwise
+    """
+
     orders_df = pd.DataFrame.from_records(orders)
     type_names = get_type_names_from_df(orders_df)
     orders_df = orders_df.merge(type_names, on="type_id", how="left")
