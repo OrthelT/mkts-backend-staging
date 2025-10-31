@@ -2,7 +2,7 @@ import os
 from sqlalchemy import create_engine, text
 import pandas as pd
 import pathlib
-# os.environ.setdefault("RUST_LOG", "debug")
+os.environ.setdefault("RUST_LOG", "debug")
 import libsql
 from dotenv import load_dotenv
 from mkts_backend.config.logging_config import configure_logging
@@ -19,21 +19,21 @@ class DatabaseConfig:
         "wcmkt3": "wcmkt3.db",
         "sde": "sde_info.db",
         "fittings": "wcfitting.db",
-        "wcmkt2": "wcmkt2.db",
+        "wcmkt2": "wcmkt4.db",
     }
 
     _db_turso_urls = {
         "wcmkt3_turso": os.getenv("TURSO_WCMKT3_URL"),
         "sde_turso": os.getenv("TURSO_SDE_URL"),
         "fittings_turso": os.getenv("TURSO_FITTING_URL"),
-        "wcmkt2_turso": os.getenv("TURSO_WCMKT2_URL"),
+        "wcmkt2_turso": os.getenv("TURSO_WCMKT4_URL"),
     }
 
     _db_turso_auth_tokens = {
         "wcmkt3_turso": os.getenv("TURSO_WCMKT3_TOKEN"),
         "sde_turso": os.getenv("TURSO_SDE_TOKEN"),
         "fittings_turso": os.getenv("TURSO_FITTING_TOKEN"),
-        "wcmkt2_turso": os.getenv("TURSO_WCMKT2_TOKEN"),
+        "wcmkt2_turso": os.getenv("TURSO_WCMKT4_TOKEN"),
     }
 
     def __init__(self, alias: str, dialect: str = "sqlite+libsql"):
