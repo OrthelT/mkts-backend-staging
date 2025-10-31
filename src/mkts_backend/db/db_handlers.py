@@ -454,3 +454,4 @@ def log_update(table_name: str, remote: bool = False):
 
 if __name__ == "__main__":
     pass
+
