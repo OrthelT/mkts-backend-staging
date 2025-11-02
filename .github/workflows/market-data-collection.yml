@@ -9,7 +9,7 @@ on:
     inputs:
       include_history:
         description: 'Include historical data processing'
-        required: false'
+        required: 'false'
         default: 'false'
         type: boolean
 
