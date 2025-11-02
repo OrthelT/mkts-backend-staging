@@ -1,11 +1,13 @@
 import pandas as pd
-from sqlalchemy import select, insert, func, or_, delete
+from sqlalchemy import select, insert, func, or_, delete, text
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+import sqlalchemy as sa
 from dotenv import load_dotenv
 from datetime import datetime, timezone
 import time
+import numpy as np
 
 from mkts_backend.utils.utils import (
     add_timestamp,
@@ -19,6 +21,8 @@ from mkts_backend.db.models import Base, MarketHistory, MarketOrders, RegionOrde
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.db.db_queries import get_table_length, get_remote_status
 from mkts_backend.esi.esi_requests import fetch_region_orders
+
+from mkts_backend.utils.utils import sde_db
 
 load_dotenv()
 logger = configure_logging(__name__)
@@ -48,7 +52,6 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
 
     # CRITICAL SAFETY CHECK: Clean all NaN/inf values before conversion to dict
     # This is a final safety net to prevent SQLAlchemy errors
-    import numpy as np
 
     # Check for NaN values
     if df.isnull().any().any():
@@ -87,7 +90,6 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
                 else:
                     df[col] = df[col].astype('object')
                     df.loc[df[col].isna(), col] = None
-            
 
     data = df.to_dict(orient="records")
 
@@ -250,10 +252,8 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
 
 def update_history(history_results: list[dict]):
     """Prepares data for update to the market_history table, then calls upsert_database to update the table
-    
     Args:
         history_results: List of dicts, each containing history data from the ESI
-    
     Returns:
         True if successful, False otherwise
     """
