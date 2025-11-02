@@ -9,8 +9,8 @@ on:
     inputs:
       include_history:
         description: 'Include historical data processing'
-        required: 'false'
-        default: 'false'
+        required: false
+        default: false
         type: boolean
 
 jobs:
