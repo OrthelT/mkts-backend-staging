@@ -4,10 +4,11 @@ import pandas as pd
 from sqlalchemy import text, select
 from sqlalchemy.orm import Session
 from mkts_backend.db.models import Doctrines, LeadShips, DoctrineFit, Base
-from mkts_backend.db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items, get_type_name
+from mkts_backend.db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items
 from mkts_backend.utils.get_type_info import TypeInfo
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
+from mkts_backend.utils.utils import get_type_name
 
 
 doctrines_fields = ['id', 'fit_id', 'ship_id', 'ship_name', 'hulls', 'type_id', 'type_name', 'fit_qty', 'fits_on_mkt', 'total_stock', 'price', 'avg_vol', 'days', 'group_id', 'group_name', 'category_id', 'category_name', 'timestamp']
@@ -371,24 +372,26 @@ def check_doctrines_table(remote: bool = False):
     engine.dispose()
     print(f"Doctrines table checked, {row_count} rows found")
 
+def get_doctrines_table(remote: bool = False) -> pd.DataFrame:
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine if remote else db.engine
+    with engine.connect() as conn:
+        stmt = text("SELECT * FROM doctrines")
+        df = pd.read_sql_query(stmt, conn)
+    return df
+
+def get_fit_by_id(fit_id: int, remote: bool = False) -> pd.DataFrame:
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine if remote else db.engine
+    with engine.connect() as conn:
+        stmt = text("SELECT * FROM doctrines WHERE fit_id = :fit_id")
+        df = pd.read_sql_query(stmt, conn, params={"fit_id": fit_id})
+    return df
+
 def replace_doctrines_table(df: pd.DataFrame, remote: bool = False):
     df = df.rename(columns={"quantity": "fit_qty"})
     add_doctrines_to_table(df, remote=True)
     check_doctrines_table(remote=True)
 
 if __name__ == "__main__":
-    db = DatabaseConfig('wcmkt3')
-    engine = db.remote_engine
-    session = Session(bind=engine)
-    rows = []
-    with session.begin():
-        stmt = select(Doctrines).where(Doctrines.fit_id == 494)
-        result = session.scalars(stmt)
-        for row in result:
-            rowdict = row.__dict__
-            rowdict.pop('_sa_instance_state')
-            rows.append(rowdict)
-    df = pd.DataFrame(rows)
-    print(df)
-    session.close()
-    engine.dispose()
+    pass

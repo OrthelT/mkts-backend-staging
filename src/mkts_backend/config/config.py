@@ -2,10 +2,16 @@ import os
 from sqlalchemy import create_engine, text
 import pandas as pd
 import pathlib
-# os.environ.setdefault("RUST_LOG", "debug")
+
+os.environ.setdefault("RUST_LOG", "debug")
+
 import libsql
 from dotenv import load_dotenv
 from mkts_backend.config.logging_config import configure_logging
+from datetime import datetime, timezone
+from time import perf_counter
+import json
+from pathlib import Path
 
 load_dotenv()
 
@@ -100,9 +106,28 @@ class DatabaseConfig:
 
     def sync(self):
         conn = self.libsql_sync_connect
+        start_info = json.loads(self.read_db_info())
+        if start_info is not None:
+            logger.info(f"Start info: {start_info}")
+        else:
+            logger.info("No start info found")
+        sync_start_time = datetime.now()
+        logger.info(f"Sync start time: {sync_start_time}")
+        start_time = perf_counter()
         with conn:
             conn.sync()
         conn.close()
+        end_time = perf_counter()
+        logger.info(f"Sync time: {end_time - start_time:.1f} seconds")
+        logger.info(f"Sync time: {(end_time - start_time)/60:.1f} minutes")
+        logger.info(f"Sync end time: {datetime.now()}")
+        end_info = json.loads(self.read_db_info())
+        generation_change = end_info["generation"] - start_info["generation"]
+        frames_synced = end_info["durable_frame_num"] - start_info["durable_frame_num"]
+        logger.info(f"Generation change: {generation_change}")
+        logger.info(f"Frames synced: {frames_synced}")
+        logger.info("Sync complete")
+        logger.info("=" * 80)
 
     def validate_sync(self) -> bool:
         with self.remote_engine.connect() as conn:
@@ -194,6 +219,15 @@ class DatabaseConfig:
             logger.info(f"Database file exists: {self.path}")
 
         return True
+
+    def read_db_info(self) -> str:
+        info_path = f"{self.path}-info"
+        info_path = Path(info_path)
+        if not info_path.exists():
+            return None
+        with open(info_path, "r") as f:
+            db_info = f.read()
+        return db_info
 
 if __name__ == "__main__":
     pass

@@ -38,13 +38,10 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
         table: The table model to update
         df: The DataFrame containing the data to update
 
-    Note: WIPE_REPLACE_TABLES is a list of tables that will be wiped and replaced with the new data rather than upserted.Due to issues
-    with upsert creating excessive WAL frames, we are simply wiping and replacing most tables to avoid exessive sync overhead.
-    
     Returns:
         True if successful, False otherwise
     """
-    WIPE_REPLACE_TABLES = ["marketstats", "doctrines", "marketorders", "market_history"]
+    WIPE_REPLACE_TABLES = ["marketstats", "doctrines"]
     tabname = table.__tablename__
     is_wipe_replace = tabname in WIPE_REPLACE_TABLES
     logger.info(f"Processing table: {tabname}, wipe_replace: {is_wipe_replace}")

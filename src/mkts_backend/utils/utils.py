@@ -7,7 +7,10 @@ import requests
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.config.logging_config import configure_logging
-
+from mkts_backend.db.models import ShipTargets
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 logger = configure_logging(__name__)
 
 sde_db = DatabaseConfig("sde")
@@ -236,5 +239,20 @@ def check_ship_target(fit_id: int):
     conn.close()
     engine.dispose()
     return target
+
+def add_new_ship_target(fit_id: int, fit_name: str, ship_id: int, ship_name: str, ship_target: int):
+    created_at = datetime.now(timezone.utc)
+    ship_target = ShipTargets(fit_id=fit_id, fit_name=fit_name, ship_id=ship_id, ship_name=ship_name, ship_target=ship_target, created_at=created_at)
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine
+    session = Session(bind=engine)
+    with session.begin():
+        session.add(ship_target)
+        session.commit()
+        print(f"Ship target {fit_name} added")
+    session.close()
+    engine.dispose()
+    return True
+
 if __name__ == "__main__":
     pass
