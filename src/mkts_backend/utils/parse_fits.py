@@ -325,31 +325,7 @@ def insert_fit_items_to_db(fit_items: list, fit_id: int, clear_existing: bool = 
 
 
 if __name__ == "__main__":
-    doctrine_id = 85
-    fit_id = 496
-    target = 100
-    fit_name = "WC Armor DPS NAPOC v1.0"
-    ship_id = 17726
-    ship_name = "Apocalypse Navy Issue"
-
-    navy_apoc_fit = 'data/napoc.txt'
-
-    logger.info(f"Processing fit file: {navy_apoc_fit}")
-    fit_items, parsed_ship_name, parsed_fit_name = process_fit(navy_apoc_fit, fit_id)
-
-    logger.info(f"Parsed fit: {parsed_fit_name}")
-    logger.info(f"Ship: {parsed_ship_name}")
-    logger.info(f"Total items: {len(fit_items)}")
-
-    # # Insert fit items into database
-    insert_fit_items_to_db(fit_items, fit_id, clear_existing=True, remote=True)
-
-    logger.info("Fit successfully loaded into remote database!")
-
-    # Add doctrine to watch_doctrines
-    logger.info(f"\nAdding doctrine {doctrine_id} to watch_doctrines...")
-    add_doctrine_to_watch(doctrine_id, remote=True)
-    logger.info("Done!")
+    pass
 
 
 
