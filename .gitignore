@@ -35,7 +35,6 @@ data/
 *.db
 .env
 .vscode/
-AGENTS.md
 REFACTORING_PLAN.md
 advanced_intel_output/
 coalition_analytics_output/
