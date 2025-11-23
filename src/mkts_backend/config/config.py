@@ -23,21 +23,21 @@ class DatabaseConfig:
 
     _db_paths = {
         "wcmkt3": "wcmkt3.db",
-        "sde": "sde_info.db",
+        "sde": "sdeinfo2.db",
         "fittings": "wcfitting.db",
         "wcmkt2": "wcmkt2.db",
     }
 
     _db_turso_urls = {
         "wcmkt3_turso": os.getenv("TURSO_WCMKT3_URL"),
-        "sde_turso": os.getenv("TURSO_SDE_URL"),
+        "sde_turso": os.getenv("TURSO_SDE2_URL"),
         "fittings_turso": os.getenv("TURSO_FITTING_URL"),
         "wcmkt2_turso": os.getenv("TURSO_WCMKT2_URL"),
     }
 
     _db_turso_auth_tokens = {
         "wcmkt3_turso": os.getenv("TURSO_WCMKT3_TOKEN"),
-        "sde_turso": os.getenv("TURSO_SDE_TOKEN"),
+        "sde_turso": os.getenv("TURSO_SDE2_TOKEN"),
         "fittings_turso": os.getenv("TURSO_FITTING_TOKEN"),
         "wcmkt2_turso": os.getenv("TURSO_WCMKT2_TOKEN"),
     }
