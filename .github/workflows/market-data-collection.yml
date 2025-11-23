@@ -72,8 +72,8 @@ jobs:
         echo "TURSO_SDE_TOKEN=${{ secrets.TURSO_SDE_TOKEN }}" >> $GITHUB_ENV
         echo "TURSO_FITTING_URL=${{ secrets.TURSO_FITTING_URL }}" >> $GITHUB_ENV
         echo "TURSO_FITTING_TOKEN=${{ secrets.TURSO_FITTING_TOKEN }}" >> $GITHUB_ENV
-        echo "TURSO_WCMKT2_URL=${{ secrets.TURSO_WCMKT2_URL }}" >> $GITHUB_ENV
-        echo "TURSO_WCMKT2_TOKEN=${{ secrets.TURSO_WCMKT2_TOKEN }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKT4_URL=${{ secrets.TURSO_WCMKT4_URL }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKT4_TOKEN=${{ secrets.TURSO_WCMKT4_TOKEN }}" >> $GITHUB_ENV
 
     #- name: Set up Google Service Account
       #run: not currently implemented. add reference to secrets.GOOGLE_SHEET_KEY to use.
@@ -95,8 +95,8 @@ jobs:
         echo "TURSO_SDE_TOKEN is set: $([ -n "$TURSO_SDE_TOKEN" ] && echo "YES" || echo "NO")"
         echo "TURSO_FITTING_URL is set: $([ -n "$TURSO_FITTING_URL" ] && echo "YES" || echo "NO")"
         echo "TURSO_FITTING_TOKEN is set: $([ -n "$TURSO_FITTING_TOKEN" ] && echo "YES" || echo "NO")"
-        echo "TURSO_WCMKT2_URL is set: $([ -n "$TURSO_WCMKT2_URL" ] && echo "YES" || echo "NO")"
-        echo "TURSO_WCMKT2_TOKEN is set: $([ -n "$TURSO_WCMKT2_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKT4_URL is set: $([ -n "$TURSO_WCMKT4_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKT4_TOKEN is set: $([ -n "$TURSO_WCMKT4_TOKEN" ] && echo "YES" || echo "NO")"
 
     - name: Run market data collection
       run: |
