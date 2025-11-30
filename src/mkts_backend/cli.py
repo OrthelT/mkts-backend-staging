@@ -134,33 +134,33 @@ def process_history():
             logger.error("Failed to update market history")
             return False
 
-def process_jita_history():
-    """Process Jita (The Forge) history data"""
-    logger.info("Processing Jita history from The Forge region")
+# def process_jita_history():
+#     """Process Jita (The Forge) history data"""
+#     logger.info("Processing Jita history from The Forge region")
 
-    # Ensure jita_history table exists
-    try:
-        db = DatabaseConfig("wcmkt")
-        Base.metadata.create_all(db.remote_engine)
-        logger.info("Ensured jita_history table exists")
-    except Exception as e:
-        logger.error(f"Failed to create jita_history table: {e}")
-        return False
+#     # Ensure jita_history table exists
+#     try:
+#         db = DatabaseConfig("wcmkt")
+#         Base.metadata.create_all(db.remote_engine)
+#         logger.info("Ensured jita_history table exists")
+#     except Exception as e:
+#         logger.error(f"Failed to create jita_history table: {e}")
+#         return False
 
-    jita_records = run_async_jita_history()
-    if jita_records:
-        logger.info(f"Retrieved {len(jita_records)} Jita history records")
-        status = update_jita_history(jita_records)
-        if status:
-            log_update("jita_history", remote=True)
-            logger.info(f"Jita history updated: {len(jita_records)} records")
-            return True
-        else:
-            logger.error("Failed to update Jita history")
-            return False
-    else:
-        logger.error("No Jita history data retrieved")
-        return False
+#     jita_records = run_async_jita_history()
+#     if jita_records:
+#         logger.info(f"Retrieved {len(jita_records)} Jita history records")
+#         status = update_jita_history(jita_records)
+#         if status:
+#             log_update("jita_history", remote=True)
+#             logger.info(f"Jita history updated: {len(jita_records)} records")
+#             return True
+#         else:
+#             logger.error("Failed to update Jita history")
+#             return False
+#     else:
+#         logger.error("No Jita history data retrieved")
+#         return False
 
 def process_market_stats():
     logger.info("Calculating market stats")
@@ -242,9 +242,7 @@ def main(history: bool = False):
     # Accept flags when invoked via console_script entrypoint
 
     start_time = time.perf_counter()
-
     init_databases()
-
 
     logger.info("Databases initialized")
     if "--check_tables" in sys.argv:

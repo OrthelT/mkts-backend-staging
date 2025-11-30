@@ -1,3 +1,5 @@
+# Not fully implemented yet. Please use with caution and veryify.
+
 [esi]
 user_agent = "wcmkts_backend/2.1dev, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)" #change this to reflect your app please.
 
@@ -13,8 +15,9 @@ environment = "production"  # or "development"
 log_level = "info"
 
 [db]
-active_database = "file:wcmkt4.db"
-testing_database = "file:wcmkt3.db"
+active_database_alias = "wcmkt4"
+active_database_file = "wcmkt4.db"
+testing_database = "wcmkt3.db"
 
 [market_data]
 primary_market_region_id = 10000003
@@ -27,3 +30,4 @@ secondary_market_structure_id = 'None'
 [google_sheets]
 enabled = 'False'
 sheet_url = 'https://docs.google.com/spreadsheets/d/1RmNJB9Yz4lG6kKKitGQ0zDuPbOiSe0ywn4SbSKabdwc/edit?gid=0#gid=0'
+# private_key_file should be in .env or github secrets

@@ -57,6 +57,8 @@ TURSO_FITTING_URL=turso fitting db url
 TURSO_FITTING_TOKEN=turso fitting db token
 TURSO_SDE2_URL=turso sde db url
 TURSO_SDE2_TOKEN=turso sde db url
+
+GOOGLE_SHEETS_PRIVATE_KEY = <filename.json>
 ```
 
 ### Configure setting for your app:
@@ -105,7 +107,7 @@ These settings are the default. You can override them to customize.
 - **Structure ID**: `1035466617946` (4-HWWF Keepstar)
 - **Region ID**: `10000003` (The Vale of Silent)
 - **Database**: Local SQLite (`wcmkt4.db`) with Turso sync
-- **Watchlist**: DB table with items to track. Default are ~850 common items and all WinterCo Doctrine ships and fittings. 
+- **Watchlist**: DB table with items to track. Default are ~850 common items and all WinterCo Doctrine ships and fittings.
 
 ### Google Sheets Integration (optional)
 

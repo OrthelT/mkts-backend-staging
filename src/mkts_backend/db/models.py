@@ -69,7 +69,6 @@ class MarketHistory(Base):
             f"lowest={self.lowest!r}, order_count={self.order_count!r}, timestamp={self.timestamp!r})"
         )
 
-
 class Doctrines(Base):
     __tablename__ = "doctrines"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -116,7 +115,6 @@ class ShipTargets(Base):
             f"ship_name={self.ship_name!r}, ship_target={self.ship_target!r}, created_at={self.created_at!r})"
         )
 
-
 class DoctrineMap(Base):
     __tablename__ = "doctrine_map"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -137,7 +135,6 @@ class LeadShips(Base):
     def __repr__(self) -> str:
         return f"lead_ships(doctrine_name={self.doctrine_name!r}, doctrine_id={self.doctrine_id!r}, lead_ship={self.lead_ship!r}, fit_id={self.fit_id!r})"
 
-
 class Watchlist(Base):
     __tablename__ = "watchlist"
     type_id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -152,7 +149,6 @@ class Watchlist(Base):
             f"watchlist(type_id={self.type_id!r}, group_id={self.group_id!r}, type_name={self.type_name!r}, "
             f"group_name={self.group_name!r}, category_id={self.category_id!r}, category_name={self.category_name!r})"
         )
-
 
 class NakahWatchlist(Base):
     __tablename__ = "nakah_watchlist"
@@ -169,13 +165,11 @@ class NakahWatchlist(Base):
             f"group_name={self.group_name!r}, category_id={self.category_id!r}, category_name={self.category_name!r})"
         )
 
-
 class DoctrineInfo(Base):
     __tablename__ = "doctrine_info"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     doctrine_id: Mapped[int] = mapped_column(Integer)
     doctrine_name: Mapped[str] = mapped_column(String)
-
 
 class DoctrineFit(Base):
     __tablename__ = "doctrine_fits"

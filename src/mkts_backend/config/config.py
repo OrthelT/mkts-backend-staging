@@ -25,15 +25,16 @@ def load_settings(file_path: str = settings_file):
         logger.info(f"Settings loaded from {file_path}")
     return settings
 
-
 class DatabaseConfig:
-    wcdbmap = "wcmkt4" #select wcmkt4 (production) or wcmkt3 (development)
+    settings = load_settings()
+    _default_db_alias = settings["db"]["active_database_alias"]
+    _default_db_file = settings["db"]["active_database_file"]
 
     _db_paths = {
         "wcmkt3": "wcmkt3.db",
         "sde": "sdeinfo2.db",
         "fittings": "wcfitting.db",
-        "wcmkt4": "wcmkt4.db",
+        _default_db_alias: _default_db_file,
     }
 
     _db_turso_urls = {
@@ -52,7 +53,7 @@ class DatabaseConfig:
 
     def __init__(self, alias: str, dialect: str = "sqlite+libsql"):
         if alias == "wcmkt":
-            alias = self.wcdbmap
+            alias = self._default_db_alias
         elif alias == "wcmkt3" or alias == "wcmkt2":
             logger.warning(
                 f"Database alias '{alias}' is deprecated. Configure wcdbmap in config.py to select wcmkt2 or wcmkt3 instead."

@@ -6,21 +6,26 @@ import pandas as pd
 import re
 from typing import Optional, List
 from mkts_backend.config.logging_config import configure_logging
+from mkts_backend.config.config import load_settings
+from dotenv import load_dotenv
 
+load_dotenv()
 logger = configure_logging(__name__)
+
+settings = load_settings()
 
 """
 This module configures the Google Sheets API and updates a spreadsheet with market data.
 """
 
-
 class GoogleSheetConfig:
-    _google_private_key_file = "wcupdates-6909ae0dfa86.json"
-    _google_sheet_url = "https://docs.google.com/spreadsheets/d/1RmNJB9Yz4lG6kKKitGQ0zDuPbOiSe0ywn4SbSKabdwc/edit?gid=0#gid=0"
+    _google_private_key_file = os.getenv("GOOGLE_SHEETS_PRIVATE_KEY")
+    _google_sheet_url = settings["google_sheets"]["sheet_url"]
     _default_sheet_name = "market_data"
     _default_clear_range = "A2:Z10000"
     _default_worksheet_rows = 1000
     _default_worksheet_cols = 20
+    _enabled = settings["google_sheets"]["enabled"]
 
     _scopes = [
         'https://www.googleapis.com/auth/spreadsheets',
@@ -33,6 +38,9 @@ class GoogleSheetConfig:
         sheet_url: Optional[str] = None,
         sheet_name: Optional[str] = None,
     ):
+        if not self._enabled:
+            logger.info("Google Sheets integration is disabled in settings")
+            return
         self.google_private_key_file = private_key_file or self._google_private_key_file
         self.google_sheet_url = sheet_url or self._google_sheet_url
         self.sheet_name = sheet_name or self._default_sheet_name
@@ -155,20 +163,3 @@ class GoogleSheetConfig:
         except Exception as e:
             logger.error(f"Failed to update Google Sheet: {e}")
             return False
-
-    def update_sheet_with_system_orders(self, system_id: int, sheet_name: Optional[str] = None) -> bool:
-        try:
-            from mkts_backend.utils.nakah import process_system_orders
-
-            data = process_system_orders(system_id)
-
-            if data is not None and not data.empty:
-                success = self.update_sheet(data, sheet_name)
-                return success
-            else:
-                logger.warning("No data returned from process_system_orders")
-                return False
-        except Exception as e:
-            logger.error(f"Failed to update sheet with system orders: {e}")
-            return False
-

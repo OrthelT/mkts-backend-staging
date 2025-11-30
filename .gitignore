@@ -46,3 +46,5 @@ items.txt
 mkts-backend.log
 archive/
 dev.py
+/home/taylor/workspace/github/mkts_backend/src/mkts_backend/utils/local_dev/
+src/mkts_backend/utils/local_dev/
