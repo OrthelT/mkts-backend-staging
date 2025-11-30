@@ -1,6 +1,7 @@
 import sys
 import json
 import time
+import os
 
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.db.db_queries import get_table_length
@@ -243,8 +244,10 @@ def main(history: bool = False):
 
     start_time = time.perf_counter()
     init_databases()
-
     logger.info("Databases initialized")
+    os.makedirs("data", exist_ok=True)
+    logger.info(f"Data directory created: {os.path.abspath('data')}")
+
     if "--check_tables" in sys.argv:
         check_tables()
         return
@@ -385,66 +388,66 @@ if __name__ == "__main__":
 
     print(len(sys.argv))
     print(sys.argv)
-    quit()
 
-    if len(sys.argv) > 1:
-        if "--history" in sys.argv:
-            include_history = True
-        elif "--check_tables" in sys.argv:
-            check_tables()
-            exit()
-        elif "parse-items" in sys.argv:
-            # Handle parse-items command in __main__ section
-            input_file = None
-            output_file = None
 
-            for arg in sys.argv:
-                if arg.startswith("--input="):
-                    input_file = arg.split("=", 1)[1]
-                elif arg.startswith("--output="):
-                    output_file = arg.split("=", 1)[1]
+    # if len(sys.argv) > 1:
+    #     if "--history" in sys.argv:
+    #         include_history = True
+    #     elif "--check_tables" in sys.argv:
+    #         check_tables()
+    #         exit()
+    #     elif "parse-items" in sys.argv:
+    #         # Handle parse-items command in __main__ section
+    #         input_file = None
+    #         output_file = None
 
-            if not input_file or not output_file:
-                print("Error: Both --input and --output parameters are required for parse-items command")
-                print("Usage: mkts-backend parse-items --input=structure_data.txt --output=market_prices.csv")
-                exit()
+    #         for arg in sys.argv:
+    #             if arg.startswith("--input="):
+    #                 input_file = arg.split("=", 1)[1]
+    #             elif arg.startswith("--output="):
+    #                 output_file = arg.split("=", 1)[1]
 
-            success = parse_items(input_file, output_file)
-            if success:
-                print("Parse items command completed successfully")
-            else:
-                print("Parse items command failed")
-            exit()
-        elif "add_watchlist" in sys.argv:
-            # Handle add_watchlist command in __main__ section too
-            type_ids_str = None
-            for i, arg in enumerate(sys.argv):
-                if arg.startswith("--type_id="):
-                    type_ids_str = arg.split("=", 1)[1]
-                    break
+    #         if not input_file or not output_file:
+    #             print("Error: Both --input and --output parameters are required for parse-items command")
+    #             print("Usage: mkts-backend parse-items --input=structure_data.txt --output=market_prices.csv")
+    #             exit()
 
-            if not type_ids_str:
-                print("Error: --type_id parameter is required for add_watchlist command")
-                print("Usage: mkts-backend add_watchlist --type_id=12345,67890,11111")
-                print("       mkts-backend add_watchlist --type_id=12345,67890,11111 --local")
-                exit()
+    #         success = parse_items(input_file, output_file)
+    #         if success:
+    #             print("Parse items command completed successfully")
+    #         else:
+    #             print("Parse items command failed")
+    #         exit()
+    #     elif "add_watchlist" in sys.argv:
+    #         # Handle add_watchlist command in __main__ section too
+    #         type_ids_str = None
+    #         for i, arg in enumerate(sys.argv):
+    #             if arg.startswith("--type_id="):
+    #                 type_ids_str = arg.split("=", 1)[1]
+    #                 break
 
-            # Default to remote database, use --local flag for local database
-            remote = "--local" not in sys.argv
-            success = process_add_watchlist(type_ids_str, remote=remote)
-            if success:
-                print("Add watchlist command completed successfully")
-            else:
-                print("Add watchlist command failed")
-            exit()
-        elif "--help" in sys.argv:
-            display_cli_help()
-            exit()
+    #         if not type_ids_str:
+    #             print("Error: --type_id parameter is required for add_watchlist command")
+    #             print("Usage: mkts-backend add_watchlist --type_id=12345,67890,11111")
+    #             print("       mkts-backend add_watchlist --type_id=12345,67890,11111 --local")
+    #             exit()
 
-        else:
-            display_cli_help()
-            exit()
+    #         # Default to remote database, use --local flag for local database
+    #         remote = "--local" not in sys.argv
+    #         success = process_add_watchlist(type_ids_str, remote=remote)
+    #         if success:
+    #             print("Add watchlist command completed successfully")
+    #         else:
+    #             print("Add watchlist command failed")
+    #         exit()
+    #     elif "--help" in sys.argv:
+    #         display_cli_help()
+    #         exit()
 
-    t0 = time.perf_counter()
-    main(history=include_history)
-    logger.info(f"Main function completed in {time.perf_counter()-t0:.1f}s")
+    #     else:
+    #         display_cli_help()
+    #         exit()
+
+    # t0 = time.perf_counter()
+    # main(history=include_history)
+    # logger.info(f"Main function completed in {time.perf_counter()-t0:.1f}s")
