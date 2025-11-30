@@ -128,7 +128,7 @@ def get_region_orders_from_db(region_id: int, system_id: int, db: DatabaseConfig
 
 def get_system_orders_from_db(system_id: int) -> pd.DataFrame:
     stmt = select(RegionOrders).where(RegionOrders.system_id == system_id)
-    engine = DatabaseConfig("wcmkt2").engine
+    engine = DatabaseConfig("wcmkt").engine
     session = Session(bind=engine)
     result = session.scalars(stmt)
 

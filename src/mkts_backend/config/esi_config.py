@@ -10,7 +10,7 @@ class ESIConfig:
     _region_ids = {"primary_region_id": 10000003, "secondary_region_id": None}
     _system_ids = {"primary_system_id": 30000240, "secondary_system_id": None}
     _structure_ids = {"primary_structure_id": 1035466617946, "secondary_structure_id": None}
-    _valid_aliases = ["primary", "secondary"]
+    _valid_aliases = ["primary", "secondary"] #primary is the default market, secondary is the secondary market, and is currently unused.
     _shortcut_aliases = {"4h": "primary", "nakah": "secondary"}
     _names = {"primary": "4-HWWF Keepstar", "secondary": "Nakah I - Moon 1 - Thukker Mix Factory"}
 
@@ -68,4 +68,3 @@ class ESIConfig:
             }
         else:
             raise ValueError(f"Invalid alias: {self.alias}. Valid aliases are: {self._valid_aliases}")
-

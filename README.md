@@ -45,16 +45,18 @@ cp .env.example .env
 Create a `.env` file with the following variables:
 
 ```env
-CLIENT_ID=<eve_sso_client_id>
-SECRET_KEY=<eve_sso_client_secret>
-TURSO_WCMKT2_URL=turso db url (production)
-TURSO_WCMKT2_TOKEN=turso db auth token (production)
-TURSO_WCMKT3_URL=turso db url (development)
-TURSO_WCMKT3_TOKEN=turso db token (development)
+CLIENT_ID=<eve_client_id>
+SECRET_KEY=<eve_client_secret>
+REFRESH_TOKEN=<eve_sso_token[refresh_token]>
+
+TURSO_WCMKT4_URL=turso db url (production)
+TURSO_WCMKT4_TOKEN=turso db auth token (production)
+TURSO_WCMKT3_URL=turso db url (development/optional)
+TURSO_WCMKT3_TOKEN=turso db token (development/optional)
 TURSO_FITTING_URL=turso fitting db url
 TURSO_FITTING_TOKEN=turso fitting db token
-TURSO_SDE_URL=turso sde db url
-TURSO_SDE_TOKEN=turso sde db url
+TURSO_SDE2_URL=turso sde db url
+TURSO_SDE2_TOKEN=turso sde db url
 ```
 
 ### Running the Application
@@ -75,7 +77,7 @@ uv run mkts-backend --history
 - **`mkts_backend/db/`**: ORM models, handlers, and query utilities
 - **`mkts_backend/esi/`**: ESI auth, requests, and async history clients
 - **`mkts_backend/processing/`**: Market stats and doctrine analysis pipelines
-- **`mkts_backend/utils/`**: Utility modules (names, parsing, Jita helpers)
+- **`mkts_backend/utils/`**: Utility modules (names, parsing, db helpers, various legacy functions)
 - **`mkts_backend/config/`**: DB, ESI, Google Sheets, and logging config
 
 ### Data Flow
@@ -94,14 +96,13 @@ uv run mkts-backend --history
 
 ### Key Settings
 
+These settings are the default. You can override them to customize.
 - **Structure ID**: `1035466617946` (4-HWWF Keepstar)
 - **Region ID**: `10000003` (The Vale of Silent)
-- **Deployment Region**: `10000001` (The Forge)
-- **Deployment System**: `30000072` (Nakah)
-- **Database**: Local SQLite (`wcmkt2.db`) with optional Turso sync
-- **Watchlist**: CSV-based item tracking in `databackup/all_watchlist.csv`
+- **Database**: Local SQLite (`wcmkt4.db`) with Turso sync
+- **Watchlist**: DB table with items to track. Default are ~850 common items and all WinterCo Doctrine ships and fittings. 
 
-### Google Sheets Integration
+### Google Sheets Integration (optional)
 
 1. Create a Google Service Account
 2. Download the service account key file
