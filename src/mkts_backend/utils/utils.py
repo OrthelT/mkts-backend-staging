@@ -93,53 +93,26 @@ def convert_datetime_columns(df, datetime_columns):
             df[col] = pd.to_datetime(df[col], utc=True, errors='coerce').dt.tz_convert(None)
     return df
 
-def standby(seconds: int):
-    for i in range(seconds):
-        message = f"\rWaiting for {seconds - i} seconds"
-        print(message, end="", flush=True)
-        time.sleep(1)
-    print()
-
-def get_status():
-    engine = sa.create_engine(wcmkt_db.url)
-    with engine.connect() as conn:
-        dcount = conn.execute(text("SELECT COUNT(id) FROM doctrines"))
-        doctrine_count = dcount.fetchone()[0]
-        order_count = conn.execute(text("SELECT COUNT(order_id) FROM marketorders"))
-        order_count = order_count.fetchone()[0]
-        history_count = conn.execute(text("SELECT COUNT(id) FROM market_history"))
-        history_count = history_count.fetchone()[0]
-        stats_count = conn.execute(text("SELECT COUNT(type_id) FROM marketstats"))
-        stats_count = stats_count.fetchone()[0]
-        region_orders_count = conn.execute(text("SELECT COUNT(order_id) FROM region_orders"))
-        region_orders_count = region_orders_count.fetchone()[0]
-    engine.dispose()
-    print(f"Doctrines: {doctrine_count}")
-    print(f"Market Orders: {order_count}")
-    print(f"Market History: {history_count}")
-    print(f"Market Stats: {stats_count}")
-    print(f"Region Orders: {region_orders_count}")
-
 def get_fit_items(fit_id: int) -> pd.DataFrame:
     table_list_stmt = "SELECT type_id, quantity FROM fittings_fittingitem WHERE fit_id = (:fit_id)"
     engine = create_engine(fittings_db.url)
-    raptor_fit = []
+    fit_items = []
     with engine.connect() as conn:
         result = conn.execute(text(table_list_stmt), {"fit_id": fit_id})
         table_info = result.fetchall()
         for row in table_info:
             type_id = row.type_id
             fit_qty = row.quantity
-            raptor_fit.append({"type_id": type_id, "fit_qty": fit_qty})
+            fit_items.append({"type_id": type_id, "fit_qty": fit_qty})
         conn.close
-    engine.dispose
+    engine.dispose()
 
-    for row in raptor_fit:
+    for row in fit_items:
         type_id = row["type_id"]
         type_name = get_type_name(type_id)
         row["type_name"] = type_name
 
-    df = pd.DataFrame(raptor_fit)
+    df = pd.DataFrame(fit_items)
     return df
 
 def update_watchlist_data(esi: ESIConfig, watchlist_csv: str = "data/watchlist.csv") -> bool:

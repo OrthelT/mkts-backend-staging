@@ -12,10 +12,18 @@ from datetime import datetime, timezone
 from time import perf_counter
 import json
 from pathlib import Path
+import tomllib
 
 load_dotenv()
+settings_file = "src/mkts_backend/config/settings.toml"
 
 logger = configure_logging(__name__)
+
+def load_settings(file_path: str = settings_file):
+    with open(file_path, "rb") as f:
+        settings = tomllib.load(f)
+        logger.info(f"Settings loaded from {file_path}")
+    return settings
 
 
 class DatabaseConfig:

@@ -240,6 +240,13 @@ def process_doctrine_stats():
 def main(history: bool = False):
     """Main function to process market orders, history, market stats, and doctrines"""
     # Accept flags when invoked via console_script entrypoint
+
+    start_time = time.perf_counter()
+
+    init_databases()
+
+
+    logger.info("Databases initialized")
     if "--check_tables" in sys.argv:
         check_tables()
         return
@@ -294,12 +301,10 @@ def main(history: bool = False):
 
     if "--history" in sys.argv or "--include-history" in sys.argv:
         history = True
-    start_time = time.perf_counter()
+
     logger.info(f"sys.argv: {sys.argv}")
     logger.info(f"history: {history}")
     logger.info("=" * 80)
-    init_databases()
-    logger.info("Databases initialized")
 
     esi = ESIConfig("primary")
     db = DatabaseConfig("wcmkt")
@@ -379,7 +384,7 @@ if __name__ == "__main__":
     logger.info("Starting mkts-backend")
     logger.info("=" * 80 + "\n")
     include_history = False
-    
+
     print(len(sys.argv))
     print(sys.argv)
     quit()

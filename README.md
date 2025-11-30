@@ -59,6 +59,11 @@ TURSO_SDE2_URL=turso sde db url
 TURSO_SDE2_TOKEN=turso sde db url
 ```
 
+### Configure setting for your app:
+Please update these settings for your application here. Settings for the ESI, market data, etc.
+
+**location:** 'src/mkts_backend/config/settings.toml'
+
 ### Running the Application
 
 ```bash
@@ -104,10 +109,11 @@ These settings are the default. You can override them to customize.
 
 ### Google Sheets Integration (optional)
 
-1. Create a Google Service Account
-2. Download the service account key file
-3. Place the key file as `wcdoctrines-1f629d861c2f.json` in the project root
-4. Configure the spreadsheet URL in `proj_config.py`
+1. Enable/Disable in 'settings.toml'.
+2. Create a Google Service Account
+3. Download the service account key file
+4. Place the key file as `<filename>.json` in the project root
+5. Configure the spreadsheet URL in 'settings.toml'
 
 ## Database Schema
 
