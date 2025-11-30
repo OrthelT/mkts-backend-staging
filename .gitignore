@@ -45,3 +45,5 @@ items.txt
 .tmp*
 mkts-backend.log
 archive/
+dev.py
+src/mkts_backend/utils/local_dev/
