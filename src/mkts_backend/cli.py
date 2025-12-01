@@ -30,6 +30,7 @@ from mkts_backend.esi.async_history import run_async_history, run_async_jita_his
 from mkts_backend.utils.db_utils import check_updates, add_missing_items_to_watchlist
 from mkts_backend.utils.parse_items import parse_items
 from mkts_backend.utils.utils import get_type_name
+from mkts_backend.utils.validation import validate_all
 logger = configure_logging(__name__)
 
 def check_tables():
@@ -50,12 +51,16 @@ def check_tables():
 
 def display_cli_help():
     print("Usage: mkts-backend [--history|--include-history] [--check_tables] [add_watchlist --type_id=<list[int]>] [parse-items --input=<file> --output=<file>]")
-    print("Options:")
-    print("  --history | --include-history: Include history processing")
-    print("  --check_tables: Check the tables in the database")
-    print("  add_watchlist --type_id=<list[int]>: Add items to watchlist by type IDs (comma-separated)")
-    print("    --local: Use local database instead of remote (default: remote)")
-    print("  parse-items --input=<file> --output=<file>: Parse Eve structure data and create CSV with pricing from database")
+    print("""Options:
+  [--history | --include-history]: Include history processing
+  [--check_tables]: Check the tables in the database
+  [add_watchlist --type_id=<list[int]>]: Add items to watchlist by type IDs (comma-separated)
+  [--local]: Use local database instead of remote (default: remote)
+  [parse-items --input=<file> --output=<file>]: Parse Eve structure data and create CSV with pricing from database
+  [sync]: Sync the database
+  [validate]: Validate the database
+  [--validate-env]: Validate environment credentials and exit
+""")
 
 def process_add_watchlist(type_ids_str: str, remote: bool = False):
     """
@@ -135,34 +140,6 @@ def process_history():
             logger.error("Failed to update market history")
             return False
 
-# def process_jita_history():
-#     """Process Jita (The Forge) history data"""
-#     logger.info("Processing Jita history from The Forge region")
-
-#     # Ensure jita_history table exists
-#     try:
-#         db = DatabaseConfig("wcmkt")
-#         Base.metadata.create_all(db.remote_engine)
-#         logger.info("Ensured jita_history table exists")
-#     except Exception as e:
-#         logger.error(f"Failed to create jita_history table: {e}")
-#         return False
-
-#     jita_records = run_async_jita_history()
-#     if jita_records:
-#         logger.info(f"Retrieved {len(jita_records)} Jita history records")
-#         status = update_jita_history(jita_records)
-#         if status:
-#             log_update("jita_history", remote=True)
-#             logger.info(f"Jita history updated: {len(jita_records)} records")
-#             return True
-#         else:
-#             logger.error("Failed to update Jita history")
-#             return False
-#     else:
-#         logger.error("No Jita history data retrieved")
-#         return False
-
 def process_market_stats():
     logger.info("Calculating market stats")
     logger.info("syncing database")
@@ -240,16 +217,17 @@ def process_doctrine_stats():
 
 def parse_args(args: list[str])->dict | None:
     return_args = {}
+
     if len(args) == 0:
         return None
 
     if "--help" in args:
         display_cli_help()
-        return None
+        exit()
 
     if "--check_tables" in args:
         check_tables()
-        return None
+        exit()
 
     # Handle parse-items command
     if "parse-items" in args:
@@ -273,21 +251,36 @@ def parse_args(args: list[str])->dict | None:
             print("Parse items command completed successfully")
         else:
             print("Parse items command failed")
-        return None
+        exit()
 
-    if "sync_db" in args:
+    if "sync" in args:
         db = DatabaseConfig("wcmkt")
         db.sync()
+        logger.info("Database synced")
+        exit()
         return None
 
-    if "validate_db" in args:
+    if "validate" in args:
         db = DatabaseConfig("wcmkt")
         validation_test = db.validate_sync()
         if validation_test:
             print("Database validated")
         else:
             print("Database is out of date. Run --sync_db to sync the database.")
-        return None
+        exit()
+
+    if "--validate-env" in args:
+        result = validate_all()
+        if result["is_valid"]:
+            print(result["message"])
+            print(f"Required credentials present: {', '.join(result['present_required'])}")
+            if result["present_optional"]:
+                print(f"Optional credentials present: {', '.join(result['present_optional'])}")
+        else:
+            print(result["message"])
+            if result["missing_required"]:
+                print(f"Missing required: {', '.join(result['missing_required'])}")
+        exit(0 if result["is_valid"] else 1)
 
     # Handle add_watchlist command
     if "add_watchlist" in args:
@@ -312,7 +305,7 @@ def parse_args(args: list[str])->dict | None:
             print(f"Added {type_ids_str} to watchlist")
         else:
             print(f"Failed to add {type_ids_str} to watchlist")
-        return None
+        exit()
 
     if "--history" in args or "--include-history" in args:
         history = True
@@ -320,13 +313,25 @@ def parse_args(args: list[str])->dict | None:
         return return_args
 
     display_cli_help()
-    return None
+    exit()
 
 def main(history: bool = False):
     """Main function to process market orders, history, market stats, and doctrines"""
     # Accept flags when invoked via console_script entrypoint
 
     start_time = time.perf_counter()
+
+    # Validate environment credentials before proceeding
+    validation_result = validate_all()
+    if not validation_result["is_valid"]:
+        logger.error(validation_result["message"])
+        print(validation_result["message"])
+        if validation_result["missing_required"]:
+            print(f"Missing required credentials: {', '.join(validation_result['missing_required'])}")
+            print("Please check your .env file or environment variables.")
+        sys.exit(1)
+    logger.info("Environment validation passed")
+
     init_databases()
     logger.info("Databases initialized")
     os.makedirs("data", exist_ok=True)
@@ -419,70 +424,5 @@ if __name__ == "__main__":
     logger.info("=" * 80)
     logger.info("Starting mkts-backend")
     logger.info("=" * 80 + "\n")
-    include_history = False
 
-    print(len(sys.argv))
-    print(sys.argv)
-
-
-    # if len(sys.argv) > 1:
-    #     if "--history" in sys.argv:
-    #         include_history = True
-    #     elif "--check_tables" in sys.argv:
-    #         check_tables()
-    #         exit()
-    #     elif "parse-items" in sys.argv:
-    #         # Handle parse-items command in __main__ section
-    #         input_file = None
-    #         output_file = None
-
-    #         for arg in sys.argv:
-    #             if arg.startswith("--input="):
-    #                 input_file = arg.split("=", 1)[1]
-    #             elif arg.startswith("--output="):
-    #                 output_file = arg.split("=", 1)[1]
-
-    #         if not input_file or not output_file:
-    #             print("Error: Both --input and --output parameters are required for parse-items command")
-    #             print("Usage: mkts-backend parse-items --input=structure_data.txt --output=market_prices.csv")
-    #             exit()
-
-    #         success = parse_items(input_file, output_file)
-    #         if success:
-    #             print("Parse items command completed successfully")
-    #         else:
-    #             print("Parse items command failed")
-    #         exit()
-    #     elif "add_watchlist" in sys.argv:
-    #         # Handle add_watchlist command in __main__ section too
-    #         type_ids_str = None
-    #         for i, arg in enumerate(sys.argv):
-    #             if arg.startswith("--type_id="):
-    #                 type_ids_str = arg.split("=", 1)[1]
-    #                 break
-
-    #         if not type_ids_str:
-    #             print("Error: --type_id parameter is required for add_watchlist command")
-    #             print("Usage: mkts-backend add_watchlist --type_id=12345,67890,11111")
-    #             print("       mkts-backend add_watchlist --type_id=12345,67890,11111 --local")
-    #             exit()
-
-    #         # Default to remote database, use --local flag for local database
-    #         remote = "--local" not in sys.argv
-    #         success = process_add_watchlist(type_ids_str, remote=remote)
-    #         if success:
-    #             print("Add watchlist command completed successfully")
-    #         else:
-    #             print("Add watchlist command failed")
-    #         exit()
-    #     elif "--help" in sys.argv:
-    #         display_cli_help()
-    #         exit()
-
-    #     else:
-    #         display_cli_help()
-    #         exit()
-
-    # t0 = time.perf_counter()
-    # main(history=include_history)
-    # logger.info(f"Main function completed in {time.perf_counter()-t0:.1f}s")
+    main()

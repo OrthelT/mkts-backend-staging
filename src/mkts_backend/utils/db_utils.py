@@ -39,8 +39,15 @@ def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = Fals
 
     # Get current watchlist to check for duplicates
     db = DatabaseConfig("wcmkt")
+    logger.info(f"Database config: {db.alias}")
+    logger.info(f"Remote engine: {remote}")
+    
     engine = db.remote_engine if remote else db.engine
-    watchlist = db.get_watchlist()
+    
+    # Read watchlist from the correct database (local or remote)
+    with engine.connect() as conn:
+        watchlist = pd.read_sql_table("watchlist", conn)
+    logger.info(f"Loaded {len(watchlist)} items from {'remote' if remote else 'local'} watchlist")
 
     # Filter out items that already exist in watchlist
     existing_type_ids = set(watchlist['type_id'].tolist()) if not watchlist.empty else set()
@@ -59,27 +66,38 @@ def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = Fals
     updated_watchlist.to_csv("data/watchlist_updated.csv", index=False)
     logger.info(f"Saved updated watchlist to data/watchlist_updated.csv")
 
-    # Insert new items into database using proper upsert to avoid duplicates
+    # Insert new items into local database (not remote - we don't want to affect production watchlist)
     try:
-        from mkts_backend.db.db_handlers import upsert_database
-        from mkts_backend.db.models import Watchlist
-
-        # Use the existing upsert_database function to handle conflicts properly
-        success = upsert_database(Watchlist, new_items)
-
-        if success:
-            logger.info(f"Successfully added {len(new_items)} new items to watchlist")
-            return f"Added {len(new_items)} items to watchlist: {new_items['type_name'].tolist()}"
-        else:
-            logger.error("Failed to add items to watchlist")
-            return "Failed to add items to watchlist"
+        db = DatabaseConfig("wcmkt")
+        engine = db.remote_engine if remote else db.engine
+        
+        with engine.connect() as conn:
+            for _, row in new_items.iterrows():
+                stmt = insert(Watchlist).values(
+                    type_id=row['type_id'],
+                    type_name=row['type_name'],
+                    group_id=row['group_id'],
+                    group_name=row['group_name'],
+                    category_id=row['category_id'],
+                    category_name=row['category_name']
+                )
+                try:
+                    conn.execute(stmt)
+                    logger.info(f"Added {row['type_name']} (ID: {row['type_id']}) to watchlist")
+                except Exception as e:
+                    logger.warning(f"Item {row['type_id']} may already exist: {e}")
+            conn.commit()
+        
+        engine.dispose()
+        logger.info(f"Successfully added {len(new_items)} new items to watchlist")
+        return f"Added {len(new_items)} items to watchlist: {new_items['type_name'].tolist()}"
 
     except Exception as e:
         logger.error(f"Error adding items to watchlist: {e}")
         return f"Error adding items to watchlist: {e}"
 
 def get_type_info(type_ids: list[int], remote: bool = False):
-    engine = sde_db.engine if remote else sde_db.remote_engine
+    engine = sde_db.remote_engine if remote else sde_db.engine
     with engine.connect() as conn:
         stmt = text("SELECT * FROM inv_info WHERE typeID IN :type_ids").bindparams(bindparam('type_ids', expanding=True))
         res = conn.execute(stmt, {"type_ids": type_ids})

@@ -8,7 +8,8 @@ from dotenv import load_dotenv
 from datetime import datetime, timezone
 import time
 import numpy as np
-
+import os
+import json
 from mkts_backend.utils.utils import (
     add_timestamp,
     add_autoincrement,
@@ -30,6 +31,73 @@ logger = configure_logging(__name__)
 db = DatabaseConfig("wcmkt")
 sde_db = DatabaseConfig("sde")
 
+def handle_nulls(df: pd.DataFrame, tabname: str) -> pd.DataFrame:
+    # CRITICAL SAFETY CHECK: Clean all NaN/inf values before conversion to dict
+    # This is a final safety net to prevent SQLAlchemy errors
+
+    # Check for NaN values
+    if df.isnull().any().any():
+        logger.warning(f"NaN values detected in {tabname} before upsert. Cleaning...")
+        logger.warning(f"NaN columns: {df.columns[df.isnull().any()].tolist()}")
+        logger.info(df.dtypes)
+
+        # Replace inf with NaN, then fill all NaN with appropriate defaults
+        df = df.replace([np.inf, -np.inf], np.nan)
+
+        # Fill NaN in numeric columns with 0
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        df[numeric_cols] = df[numeric_cols].fillna(0)
+
+        # Fill NaN in string columns with empty string
+        string_cols = df.select_dtypes(include=['object']).columns
+        df[string_cols] = df[string_cols].fillna('')
+
+
+        # Fill NaN in datetime columns with current timestamp
+        # SQLite DateTime type requires Python datetime objects, not None or strings
+        datetime_cols = df.select_dtypes(include=['datetime', 'datetime64']).columns.tolist()
+
+        for col in datetime_cols:
+            null_mask = df[col].isna()
+            if null_mask.any():
+                null_count = null_mask.sum()
+                logger.warning(f"Null {col} found in {tabname}: {null_count} rows")
+                
+                # Log details of rows with null timestamps (for debugging)
+                if col == 'timestamp' and null_count <= 10:
+                    null_rows = df[null_mask]
+                    null_info = []
+                    for idx, row in null_rows.iterrows():
+                        info = {"type_id": row.get("type_id"), "type_name": row.get("type_name")}
+                        if "fit_id" in row:
+                            info["fit_id"] = row.get("fit_id")
+                        null_info.append(info)
+                        logger.info(f"Null timestamp row: {info}")
+                    
+                    os.makedirs("data", exist_ok=True)
+                    with open("data/null_timestamps.json", "w") as f:
+                        json.dump(null_info, f, indent=4)
+                
+                # Fill NaT with current datetime (SQLite requires datetime objects, not None)
+                # Use timezone-naive datetime to match pandas datetime64[ns] dtype
+                current_time = pd.Timestamp.now('UTC').tz_localize(None)
+                df.loc[null_mask, col] = current_time
+                logger.info(f"Filled {null_count} null {col} values with current timestamp")
+
+        # Final check
+        if df.isnull().any().any():
+            logger.error(f"NaN values STILL present after cleaning: {df.isnull().sum()}")
+            remaining_nan_cols = df.columns[df.isnull().any()].tolist()
+            logger.error(f"Remaining NaN in columns: {remaining_nan_cols}")
+            # Last resort: fill remaining NaN values
+            for col in remaining_nan_cols:
+                if col in datetime_cols:
+                    # Fill datetime columns with current timestamp (timezone-naive)
+                    current_time = pd.Timestamp.now('UTC').tz_localize(None)
+                    df.loc[df[col].isna(), col] = current_time
+                else:
+                    df[col] = df[col].fillna(0)
+    return df
 
 def upsert_database(table: Base, df: pd.DataFrame) -> bool:
     """Upsert data into the database
@@ -47,48 +115,13 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
     logger.info(f"Processing table: {tabname}, wipe_replace: {is_wipe_replace}")
     logger.info(f"Upserting {len(df)} rows into {table.__tablename__}")
 
-    # CRITICAL SAFETY CHECK: Clean all NaN/inf values before conversion to dict
-    # This is a final safety net to prevent SQLAlchemy errors
+    df = handle_nulls(df, tabname)
 
-    # Check for NaN values
-    if df.isnull().any().any():
-        logger.warning(f"NaN values detected in {tabname} before upsert. Cleaning...")
-        logger.warning(f"NaN columns: {df.columns[df.isnull().any()].tolist()}")
-
-        # Replace inf with NaN, then fill all NaN with appropriate defaults
-        df = df.replace([np.inf, -np.inf], np.nan)
-
-        # Fill NaN in numeric columns with 0
-        numeric_cols = df.select_dtypes(include=['number']).columns
-        df[numeric_cols] = df[numeric_cols].fillna(0)
-
-        # Fill NaN in string columns with empty string
-        string_cols = df.select_dtypes(include=['object']).columns
-        df[string_cols] = df[string_cols].fillna('')
-
-        # Fill NaN in datetime columns with None (NULL)
-        # Must convert datetime columns to object type first to allow None values
-        datetime_cols = df.select_dtypes(include=['datetime', 'datetime64']).columns.tolist()
-        for col in datetime_cols:
-            # Replace NaT with None - convert column to object type first
-            df[col] = df[col].astype('object')
-            df.loc[df[col].isna(), col] = None
-
-        # Final check
-        if df.isnull().any().any():
-            logger.error(f"NaN values STILL present after cleaning: {df.isnull().sum()}")
-            # Check for non-datetime NaN
-            remaining_nan_cols = df.columns[df.isnull().any()].tolist()
-            logger.error(f"Remaining NaN in columns: {remaining_nan_cols}")
-            # Last resort: fill non-datetime with 0, datetime with None
-            for col in remaining_nan_cols:
-                if col not in datetime_cols:
-                    df[col] = df[col].fillna(0)
-                else:
-                    df[col] = df[col].astype('object')
-                    df.loc[df[col].isna(), col] = None
-
-    data = df.to_dict(orient="records")
+    if df is not None and len(df) > 0:
+        data = df.to_dict(orient="records")
+    else:
+        logger.error(f"No data to upsert into {tabname}")
+        return False
 
     MAX_PARAMETER_BYTES = 256 * 1024
     BYTES_PER_PARAMETER = 8

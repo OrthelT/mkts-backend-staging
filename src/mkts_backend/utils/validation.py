@@ -55,7 +55,16 @@ def validate_required_credentials() -> Tuple[bool, List[str], List[str]]:
     Returns:
         Tuple[bool, List[str], List[str]]: (is_valid, missing_credentials, present_credentials)
     """
-    required_credentials = ["CLIENT_ID", "SECRET_KEY", "REFRESH_TOKEN"]
+    required_credentials = [
+        "CLIENT_ID", 
+        "SECRET_KEY", 
+        "REFRESH_TOKEN", 
+        "TURSO_WCMKTPROD_URL", 
+        "TURSO_WCMKTPROD_TOKEN", 
+        "TURSO_SDE_URL", 
+        "TURSO_SDE_TOKEN", 
+        "TURSO_FITTING_URL", 
+        "TURSO_FITTING_TOKEN"]
     missing = []
     present = []
 
@@ -90,14 +99,8 @@ def validate_optional_credentials() -> Tuple[List[str], List[str]]:
         Tuple[List[str], List[str]]: (present_optional, missing_optional)
     """
     optional_credentials = [
-        "TURSO_WCMKT3_URL",
-        "TURSO_WCMKT3_TOKEN",
-        "TURSO_WCMKT4_URL",
-        "TURSO_WCMKT4_TOKEN",
-        "TURSO_SDE2_URL",
-        "TURSO_SDE2_TOKEN",
-        "TURSO_FITTING_URL",
-        "TURSO_FITTING_TOKEN",
+        "TURSO_WCMKTTEST_URL", 
+        "TURSO_WCMKTTEST_TOKEN", 
         "GOOGLE_SHEET_KEY",
         "GOOGLE_SHEETS_PRIVATE_KEY",
     ]
@@ -189,3 +192,6 @@ def validate_db_credentials():
     db = DatabaseConfig("wcmkt")
     credentials = db.get_db_credentials_dicts()
     return credentials
+
+if __name__ == "__main__":
+    pass
