@@ -1,13 +1,11 @@
 import pandas as pd
 import json
-import time
 import sqlalchemy as sa
 from sqlalchemy import text, create_engine
 import requests
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.config.logging_config import configure_logging
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 logger = configure_logging(__name__)
@@ -27,7 +25,8 @@ def get_type_names_from_df(df: pd.DataFrame) -> pd.DataFrame:
     return df[["type_id", "type_name", "group_name", "category_name", "category_id"]]
 
 def get_type_name(type_id: int) -> str:
-    engine = sa.create_engine(sde_db.url)
+    db = DatabaseConfig("sde")
+    engine = db.engine
     with engine.connect() as conn:
         stmt = text("SELECT typeName FROM inv_info WHERE typeID = :type_id")
         res = conn.execute(stmt, {"type_id": type_id})

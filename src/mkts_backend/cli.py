@@ -29,7 +29,7 @@ from mkts_backend.esi.esi_requests import fetch_market_orders
 from mkts_backend.esi.async_history import run_async_history, run_async_jita_history
 from mkts_backend.utils.db_utils import check_updates, add_missing_items_to_watchlist
 from mkts_backend.utils.parse_items import parse_items
-
+from mkts_backend.utils.utils import get_type_name
 logger = configure_logging(__name__)
 
 def check_tables():
@@ -77,14 +77,14 @@ def process_add_watchlist(type_ids_str: str, remote: bool = False):
         logger.info(f"Adding {len(type_ids)} items to watchlist: {type_ids}")
         print(f"Adding {len(type_ids)} items to watchlist: {type_ids}")
 
-        # Initialize databases
-        init_databases()
-
-        # Add items to watchlist
-        result = add_missing_items_to_watchlist(type_ids, remote=remote)
-
-        print(result)
-        logger.info(f"Add watchlist result: {result}")
+        for id in type_ids:
+            print(f"Adding {id} to watchlist")
+            success = process_add_watchlist(str(id), remote=remote)
+            if success:
+                print(f"Added {id} to watchlist")
+            else:
+                print(f"Failed to add {id} to watchlist")
+                return False
 
         return True
 
@@ -238,6 +238,90 @@ def process_doctrine_stats():
         logger.error("Failed to update doctrines")
         return False
 
+def parse_args(args: list[str])->dict | None:
+    return_args = {}
+    if len(args) == 0:
+        return None
+
+    if "--help" in args:
+        display_cli_help()
+        return None
+
+    if "--check_tables" in args:
+        check_tables()
+        return None
+
+    # Handle parse-items command
+    if "parse-items" in args:
+        input_file = None
+        output_file = None
+
+        for arg in args:
+            if arg.startswith("--input="):
+                input_file = arg.split("=", 1)[1]
+            elif arg.startswith("--output="):
+                output_file = arg.split("=", 1)[1]
+
+        if not input_file or not output_file:
+            print("Error: Both --input and --output parameters are required for parse-items command")
+            print("Usage: mkts-backend parse-items --input=structure_data.txt --output=market_prices.csv")
+            return None
+
+        success = parse_items(input_file, output_file)
+
+        if success:
+            print("Parse items command completed successfully")
+        else:
+            print("Parse items command failed")
+        return None
+
+    if "sync_db" in args:
+        db = DatabaseConfig("wcmkt")
+        db.sync()
+        return None
+
+    if "validate_db" in args:
+        db = DatabaseConfig("wcmkt")
+        validation_test = db.validate_sync()
+        if validation_test:
+            print("Database validated")
+        else:
+            print("Database is out of date. Run --sync_db to sync the database.")
+        return None
+
+    # Handle add_watchlist command
+    if "add_watchlist" in args:
+        # Find the --type_id parameter
+        type_ids_str = None
+        for i, arg in enumerate(args):
+            if arg.startswith("--type_id="):
+                type_ids_str = arg.split("=", 1)[1]
+                break
+
+        if not type_ids_str:
+            print("Error: --type_id parameter is required for add_watchlist command")
+            print("Usage: mkts-backend add_watchlist --type_id=12345,67890,11111")
+            print("       mkts-backend add_watchlist --type_id=12345,67890,11111 --local")
+            return None
+
+        # Default to remote database, use --local flag for local database
+        remote = "--local" not in args
+
+        success = process_add_watchlist(type_ids_str, remote=remote)
+        if success:
+            print(f"Added {type_ids_str} to watchlist")
+        else:
+            print(f"Failed to add {type_ids_str} to watchlist")
+        return None
+
+    if "--history" in args or "--include-history" in args:
+        history = True
+        return_args["history"] = history
+        return return_args
+
+    display_cli_help()
+    return None
+
 def main(history: bool = False):
     """Main function to process market orders, history, market stats, and doctrines"""
     # Accept flags when invoked via console_script entrypoint
@@ -247,65 +331,15 @@ def main(history: bool = False):
     logger.info("Databases initialized")
     os.makedirs("data", exist_ok=True)
     logger.info(f"Data directory created: {os.path.abspath('data')}")
-
-    if "--check_tables" in sys.argv:
-        check_tables()
-        return
-
-    # Handle parse-items command
-    if "parse-items" in sys.argv:
-        input_file = None
-        output_file = None
-
-        for arg in sys.argv:
-            if arg.startswith("--input="):
-                input_file = arg.split("=", 1)[1]
-            elif arg.startswith("--output="):
-                output_file = arg.split("=", 1)[1]
-
-        if not input_file or not output_file:
-            print("Error: Both --input and --output parameters are required for parse-items command")
-            print("Usage: mkts-backend parse-items --input=structure_data.txt --output=market_prices.csv")
-            return
-
-        success = parse_items(input_file, output_file)
-        if success:
-            print("Parse items command completed successfully")
-        else:
-            print("Parse items command failed")
-        return
-
-    # Handle add_watchlist command
-    if "add_watchlist" in sys.argv:
-        # Find the --type_id parameter
-        type_ids_str = None
-        for i, arg in enumerate(sys.argv):
-            if arg.startswith("--type_id="):
-                type_ids_str = arg.split("=", 1)[1]
-                break
-
-        if not type_ids_str:
-            print("Error: --type_id parameter is required for add_watchlist command")
-            print("Usage: mkts-backend add_watchlist --type_id=12345,67890,11111")
-            print("       mkts-backend add_watchlist --type_id=12345,67890,11111 --local")
-            return
-
-        # Default to remote database, use --local flag for local database
-        remote = "--local" not in sys.argv
-
-        success = process_add_watchlist(type_ids_str, remote=remote)
-        if success:
-            print("Add watchlist command completed successfully")
-        else:
-            print("Add watchlist command failed")
-        return
-
-    if "--history" in sys.argv or "--include-history" in sys.argv:
-        history = True
-
-    logger.info(f"sys.argv: {sys.argv}")
-    logger.info(f"history: {history}")
     logger.info("=" * 80)
+
+    if len(sys.argv) > 1:
+        args = parse_args(sys.argv)
+
+        if args is not None and "history" in args:
+            history = args["history"]
+        else:
+            return
 
     esi = ESIConfig("primary")
     db = DatabaseConfig("wcmkt")
@@ -326,6 +360,7 @@ def main(history: bool = False):
     print("=" * 80)
     print("Fetching market orders")
     print("=" * 80)
+
     status = process_market_orders(esi, order_type="all", test_mode=False)
     if status:
         logger.info("Market orders updated")

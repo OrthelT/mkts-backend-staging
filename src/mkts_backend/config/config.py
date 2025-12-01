@@ -238,5 +238,11 @@ class DatabaseConfig:
             db_info = f.read()
         return db_info
 
+    def get_db_credentials_dicts(self):
+        return {
+            "turso_urls": self._db_turso_urls,
+            "turso_tokens": self._db_turso_auth_tokens,
+        }
+
 if __name__ == "__main__":
     pass

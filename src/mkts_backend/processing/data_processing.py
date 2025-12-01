@@ -1,5 +1,6 @@
 import pandas as pd
 from mkts_backend.config.logging_config import configure_logging
+from mkts_backend.utils.db_utils import fix_null_doctrine_stats_timestamps
 from mkts_backend.db.models import MarketStats, RegionHistory, MarketHistory
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.esi_config import ESIConfig
@@ -278,14 +279,24 @@ def calculate_doctrine_stats() -> pd.DataFrame:
 
     # Final safety check: ensure no NaN values remain in ANY column
     if doctrine_stats.isnull().any().any():
-        logger.error(f"WARNING: NaN values still present after cleaning: {doctrine_stats.isnull().sum()}")
+        logger.warning(f"WARNING: NaN values still present after cleaning: {doctrine_stats.isnull().sum()}")
         # Replace any remaining NaN with appropriate defaults
         doctrine_stats = doctrine_stats.fillna({'ship_name': '', 'type_name': '',
                                                   'group_name': '', 'category_name': ''})
         # Fill any remaining numeric NaN with 0
         doctrine_stats = doctrine_stats.fillna(0)
 
+        if doctrine_stats.timestamp.isnull().any():
+            doctrine_stats = fix_null_doctrine_stats_timestamps(doctrine_stats, pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S"))
+
     doctrine_stats = doctrine_stats.reset_index(drop=True)
+    final_check = doctrine_stats.isnull().any().any()
+
+    if final_check:
+        logger.error("WARNING: NaN values still present after cleaning:")
+        logger.error(f"NaN columns: {doctrine_stats.columns[doctrine_stats.isnull().any()].tolist()}")
+        return doctrine_stats
+
     return doctrine_stats
 
 # def process_system_orders(system_id: int) -> pd.DataFrame:

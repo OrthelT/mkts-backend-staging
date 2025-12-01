@@ -11,8 +11,11 @@ from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.utils.utils import get_type_name
 
 
-doctrines_fields = ['id', 'fit_id', 'ship_id', 'ship_name', 'hulls', 'type_id', 'type_name', 'fit_qty', 'fits_on_mkt', 'total_stock', 'price', 'avg_vol', 'days', 'group_id', 'group_name', 'category_id', 'category_name', 'timestamp']
+
 logger = configure_logging(__name__)
+
+
+doctrines_fields = ['id', 'fit_id', 'ship_id', 'ship_name', 'hulls', 'type_id', 'type_name', 'fit_qty', 'fits_on_mkt', 'total_stock', 'price', 'avg_vol', 'days', 'group_id', 'group_name', 'category_id', 'category_name', 'timestamp']
 
 doctrine_fit_id = 494
 ship_id = 33157

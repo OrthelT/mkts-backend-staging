@@ -255,5 +255,21 @@ def check_updates(remote: bool = False):
 def get_time_since_update(table_name: str, remote: bool = False):
     status = check_updates(remote=remote)
     return status.get(table_name).get("time_since")
+
+def fix_null_doctrine_stats_timestamps (doctrine_stats: pd.DataFrame, timestamp: str) -> pd.DataFrame:
+    null_timestamp = doctrine_stats[doctrine_stats.timestamp.isnull()].reset_index(drop=True)
+    null_timestamp["timestamp"] = timestamp
+    doctrine_stats = pd.concat([doctrine_stats, null_timestamp])
+    return doctrine_stats
+
+def restore_watchlist_from_csv(csv_file: str = "data/watchlist_updated.csv", remote: bool = False):
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine if remote else db.engine
+    with engine.connect() as conn:
+        df = pd.read_csv(csv_file)
+        df.to_sql("watchlist", conn, if_exists="replace", index=False)
+    conn.close()
+    engine.dispose()
+    logger.info(f"Restored watchlist from {csv_file} to {db.alias}")
 if __name__ == "__main__":
     pass
