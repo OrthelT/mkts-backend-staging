@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Not fully implemented yet. Please use with caution and veryify.
 
 [esi]
@@ -12,10 +11,7 @@ token_file = "file:token.json"
 [app]
 name = "WinterCo Markets"
 market_name = "4-HWWF"
-=======
-[esi]
-user_agent = "wcmkts_backend/2.1dev, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)"
-name = "WinterCo Markets"
+environment = "production"  # or "development"
 log_level = "info"
 
 [db]
@@ -35,26 +31,3 @@ secondary_market_structure_id = 'None'
 enabled = 'False'
 sheet_url = 'https://docs.google.com/spreadsheets/d/1RmNJB9Yz4lG6kKKitGQ0zDuPbOiSe0ywn4SbSKabdwc/edit?gid=0#gid=0'
 # private_key_file should be in .env or github secrets
-=======
-active_database = "file:wcmkt4.db"
-
-[market_data]
-primary_market_region_id = 10000003
-secondary_market_region_id = None
-
-primary_market_system_id = 30000240
-secondary_market_system_id =
-
-primary_market_structure_id = 1035466617946
-secondary_market_structure_id = None
-
-[google_sheets]
-enabled = False
-sheet_url = 'https://docs.google.com/spreadsheets/d/1RmNJB9Yz4lG6kKKitGQ0zDuPbOiSe0ywn4SbSKabdwc/edit?gid=0#gid=0'
-
-
-[auth]
-esi_client_id = "123456"
-esi_secret_key = "1a2b3c"
-callback_url = "http://localhost:8000/callback"
-token_storage = "turso"  # or "cookie"
