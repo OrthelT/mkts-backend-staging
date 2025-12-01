@@ -144,29 +144,21 @@ def validate_all() -> Dict:
     env_exists, env_message = validate_env_file_exists()
     env_path = str(_get_env_file_path())
 
-    # Validate required credentials (only if .env exists)
+    # Load .env if it exists (for local development)
     if env_exists:
-        # Reload environment variables from .env file
         from dotenv import load_dotenv
         load_dotenv()
 
-        required_valid, missing_required, present_required = validate_required_credentials()
-        present_optional, missing_optional = validate_optional_credentials()
-    else:
-        required_valid = False
-        missing_required = ["CLIENT_ID", "SECRET_KEY", "REFRESH_TOKEN"]
-        present_required = []
-        present_optional = []
-        missing_optional = []
+    # Always validate credentials - they may be set via .env OR environment variables (GitHub Actions)
+    required_valid, missing_required, present_required = validate_required_credentials()
+    present_optional, missing_optional = validate_optional_credentials()
 
-    # Overall validation result
-    is_valid = env_exists and required_valid
+    # Overall validation result - credentials are what matter, not .env file existence
+    is_valid = required_valid
 
     # Generate summary message
     if is_valid:
-        message = "✓ Validation passed: .env file exists and all required credentials are present"
-    elif not env_exists:
-        message = f"✗ Validation failed: {env_message}"
+        message = "✓ Validation passed: All required credentials are present"
     else:
         message = f"✗ Validation failed: Missing required credentials: {', '.join(missing_required)}"
 
