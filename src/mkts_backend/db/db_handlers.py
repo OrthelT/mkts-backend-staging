@@ -109,7 +109,7 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
     Returns:
         True if successful, False otherwise
     """
-    WIPE_REPLACE_TABLES = ["marketstats", "doctrines", "marketorders", 'market_history']
+    WIPE_REPLACE_TABLES = ["marketstats", "doctrines"]
     tabname = table.__tablename__
     is_wipe_replace = tabname in WIPE_REPLACE_TABLES
     logger.info(f"Processing table: {tabname}, wipe_replace: {is_wipe_replace}")
@@ -128,7 +128,7 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
     MAX_PARAMETERS = MAX_PARAMETER_BYTES // BYTES_PER_PARAMETER
 
     column_count = len(df.columns)
-    chunk_size = min(1000, MAX_PARAMETERS // column_count)
+    chunk_size = min(2000, MAX_PARAMETERS // column_count)
 
     logger.info(
         f"Table {table.__tablename__} has {column_count} columns, using chunk size {chunk_size}"
