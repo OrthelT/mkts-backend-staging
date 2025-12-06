@@ -50,16 +50,16 @@ def check_tables():
     db.engine.dispose()
 
 def display_cli_help():
-    print("Usage: mkts-backend [--history|--include-history] [--check_tables] [add_watchlist --type_id=<list[int]>] [parse-items --input=<file> --output=<file>]")
-    print("""Options:
-  [--history | --include-history]: Include history processing
-  [--check_tables]: Check the tables in the database
-  [add_watchlist --type_id=<list[int]>]: Add items to watchlist by type IDs (comma-separated)
-  [--local]: Use local database instead of remote (default: remote)
-  [parse-items --input=<file> --output=<file>]: Parse Eve structure data and create CSV with pricing from database
-  [sync]: Sync the database
-  [validate]: Validate the database
-  [--validate-env]: Validate environment credentials and exit
+    print("\nUsage: mkts-backend [--history|--include-history] [--check_tables] [add_watchlist --type_id=<list[int]>] [parse-items --input=<file> --output=<file>]\n")
+    print("""Options:\n
+  [--history | --include-history]: Include history processing\n
+  [--check_tables]:  Check the tables in the database\n
+  [add_watchlist]: --type_id=<list>: Add items to watchlist by type IDs (comma-separated --type_id=81144,88001,89240)\n
+  [--local]: Use local database instead of remote (default: remote)\n
+  [parse-items --input=<file> --output=<file>]: Parse Eve structure data and create CSV with pricing from database\n
+  [sync]: Sync the database\n
+  [validate]: Validate the database\n
+  [--validate-env]: Validate environment credentials and exit\n\n
 """)
 
 def process_add_watchlist(type_ids_str: str, remote: bool = False):
@@ -82,16 +82,18 @@ def process_add_watchlist(type_ids_str: str, remote: bool = False):
         logger.info(f"Adding {len(type_ids)} items to watchlist: {type_ids}")
         print(f"Adding {len(type_ids)} items to watchlist: {type_ids}")
 
-        for id in type_ids:
-            print(f"Adding {id} to watchlist")
-            success = process_add_watchlist(str(id), remote=remote)
-            if success:
-                print(f"Added {id} to watchlist")
-            else:
-                print(f"Failed to add {id} to watchlist")
-                return False
+        # Call add_missing_items_to_watchlist with all type IDs at once
+        result = add_missing_items_to_watchlist(type_ids, remote=remote)
 
-        return True
+        # Check if the operation was successful
+        if result.startswith("Error"):
+            logger.error(f"Failed to add items to watchlist: {result}")
+            print(f"Error: {result}")
+            return False
+        else:
+            logger.info(f"Successfully processed watchlist addition: {result}")
+            print(result)
+            return True
 
     except ValueError as e:
         logger.error(f"Invalid type ID format: {e}")

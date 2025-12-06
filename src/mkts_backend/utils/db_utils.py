@@ -41,9 +41,9 @@ def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = Fals
     db = DatabaseConfig("wcmkt")
     logger.info(f"Database config: {db.alias}")
     logger.info(f"Remote engine: {remote}")
-    
+
     engine = db.remote_engine if remote else db.engine
-    
+
     # Read watchlist from the correct database (local or remote)
     with engine.connect() as conn:
         watchlist = pd.read_sql_table("watchlist", conn)
@@ -70,7 +70,7 @@ def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = Fals
     try:
         db = DatabaseConfig("wcmkt")
         engine = db.remote_engine if remote else db.engine
-        
+
         with engine.connect() as conn:
             for _, row in new_items.iterrows():
                 stmt = insert(Watchlist).values(
@@ -87,7 +87,7 @@ def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = Fals
                 except Exception as e:
                     logger.warning(f"Item {row['type_id']} may already exist: {e}")
             conn.commit()
-        
+
         engine.dispose()
         logger.info(f"Successfully added {len(new_items)} new items to watchlist")
         return f"Added {len(new_items)} items to watchlist: {new_items['type_name'].tolist()}"
@@ -277,7 +277,9 @@ def get_time_since_update(table_name: str, remote: bool = False):
 def fix_null_doctrine_stats_timestamps (doctrine_stats: pd.DataFrame, timestamp: str) -> pd.DataFrame:
     null_timestamp = doctrine_stats[doctrine_stats.timestamp.isnull()].reset_index(drop=True)
     null_timestamp["timestamp"] = timestamp
-    doctrine_stats = pd.concat([doctrine_stats, null_timestamp])
+    # Filter out rows with null timestamps from original dataframe before concatenating
+    doctrine_stats = doctrine_stats[doctrine_stats.timestamp.notnull()]
+    doctrine_stats = pd.concat([doctrine_stats, null_timestamp], ignore_index=True)
     return doctrine_stats
 
 def restore_watchlist_from_csv(csv_file: str = "data/watchlist_updated.csv", remote: bool = False):
