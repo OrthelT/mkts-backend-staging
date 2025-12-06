@@ -1,29 +1,35 @@
+# Not fully implemented yet. Please use with caution and veryify.
+
 [esi]
-user_agent = "wcmkts_backend/2.1dev, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)"
+user_agent = "wcmkts_backend/2.1dev, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)" #change this to reflect your app please.
+
+[auth]
+# esi_client_id, esi_secret_key, and refresh token should be set in .env file for local development. Use secure credential storage (github secrets) in production.
+callback_url = "http://localhost:8000/callback"
+token_file = "file:token.json"
+
+[app]
 name = "WinterCo Markets"
-environment = "production"  # or "development"
+market_name = "4-HWWF"
+environment = "production"  # "production" or "development"
 log_level = "info"
 
-[db]
-active_database = "file:wcmkt4.db"
+[db] # change this to reflect your database. You will need to also edit the database aliases in the .env file and in the .github/workflows/market-data-collection.yml file.
+production_database_alias = "wcmktprod"
+production_database_file = "wcmktprod.db"
+
+testing_database_alias = "wcmkttest"
+testing_database_file = "wcmkttest.db"
 
 [market_data]
 primary_market_region_id = 10000003
-secondary_market_region_id = None
-
+secondary_market_region_id = 'None'
 primary_market_system_id = 30000240
-secondary_market_system_id =
-
+secondary_market_system_id = 'None'
 primary_market_structure_id = 1035466617946
-secondary_market_structure_id = None
+secondary_market_structure_id = 'None'
 
 [google_sheets]
-enabled = False
+enabled = false
 sheet_url = 'https://docs.google.com/spreadsheets/d/1RmNJB9Yz4lG6kKKitGQ0zDuPbOiSe0ywn4SbSKabdwc/edit?gid=0#gid=0'
-
-
-[auth]
-esi_client_id = "123456"
-esi_secret_key = "1a2b3c"
-callback_url = "http://localhost:8000/callback"
-token_storage = "turso"  # or "cookie"
+# private_key_file should be in .env or github secrets

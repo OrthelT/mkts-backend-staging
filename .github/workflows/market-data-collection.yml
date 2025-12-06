@@ -68,12 +68,12 @@ jobs:
       run: |
         echo "CLIENT_ID=${{ secrets.CLIENT_ID }}" >> $GITHUB_ENV
         echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> $GITHUB_ENV
-        echo "TURSO_SDE2_URL=${{ secrets.TURSO_SDE2_URL }}" >> $GITHUB_ENV
-        echo "TURSO_SDE2_TOKEN=${{ secrets.TURSO_SDE2_TOKEN }}" >> $GITHUB_ENV
+        echo "TURSO_SDE_URL=${{ secrets.TURSO_SDE_URL }}" >> $GITHUB_ENV
+        echo "TURSO_SDE_TOKEN=${{ secrets.TURSO_SDE_TOKEN }}" >> $GITHUB_ENV
         echo "TURSO_FITTING_URL=${{ secrets.TURSO_FITTING_URL }}" >> $GITHUB_ENV
         echo "TURSO_FITTING_TOKEN=${{ secrets.TURSO_FITTING_TOKEN }}" >> $GITHUB_ENV
-        echo "TURSO_WCMKT4_URL=${{ secrets.TURSO_WCMKT4_URL }}" >> $GITHUB_ENV
-        echo "TURSO_WCMKT4_TOKEN=${{ secrets.TURSO_WCMKT4_TOKEN }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKTPROD_URL=${{ secrets.TURSO_WCMKTPROD_URL }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKTPROD_TOKEN=${{ secrets.TURSO_WCMKTPROD_TOKEN }}" >> $GITHUB_ENV
 
     #- name: Set up Google Service Account
       #run: not currently implemented. add reference to secrets.GOOGLE_SHEET_KEY to use.
@@ -89,14 +89,12 @@ jobs:
         echo "SECRET_KEY is set: $([ -n "$SECRET_KEY" ] && echo "YES" || echo "NO")"
         echo "REFRESH_TOKEN is set: $([ -n "$REFRESH_TOKEN" ] && echo "YES" || echo "NO")"
         echo "REFRESH_TOKEN length: ${#REFRESH_TOKEN}"
-        echo "TURSO_MKT_URL is set: $([ -n "$TURSO_MKT_URL" ] && echo "YES" || echo "NO")"
-        echo "TURSO_MKT_TOKEN is set: $([ -n "$TURSO_MKT_TOKEN" ] && echo "YES" || echo "NO")"
-        echo "TURSO_SDE2_URL is set: $([ -n "$TURSO_SDE2_URL" ] && echo "YES" || echo "NO")"
-        echo "TURSO_SDE2_TOKEN is set: $([ -n "$TURSO_SDE2_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_SDE_URL is set: $([ -n "$TURSO_SDE_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_SDE_TOKEN is set: $([ -n "$TURSO_SDE_TOKEN" ] && echo "YES" || echo "NO")"
         echo "TURSO_FITTING_URL is set: $([ -n "$TURSO_FITTING_URL" ] && echo "YES" || echo "NO")"
         echo "TURSO_FITTING_TOKEN is set: $([ -n "$TURSO_FITTING_TOKEN" ] && echo "YES" || echo "NO")"
-        echo "TURSO_WCMKT4_URL is set: $([ -n "$TURSO_WCMKT4_URL" ] && echo "YES" || echo "NO")"
-        echo "TURSO_WCMKT4_TOKEN is set: $([ -n "$TURSO_WCMKT4_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKTPROD_URL is set: $([ -n "$TURSO_WCMKTPROD_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKTPROD_TOKEN is set: $([ -n "$TURSO_WCMKTPROD_TOKEN" ] && echo "YES" || echo "NO")"
 
     - name: Run market data collection
       run: |

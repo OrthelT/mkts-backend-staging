@@ -11,8 +11,11 @@ from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.utils.utils import get_type_name
 
 
-doctrines_fields = ['id', 'fit_id', 'ship_id', 'ship_name', 'hulls', 'type_id', 'type_name', 'fit_qty', 'fits_on_mkt', 'total_stock', 'price', 'avg_vol', 'days', 'group_id', 'group_name', 'category_id', 'category_name', 'timestamp']
+
 logger = configure_logging(__name__)
+
+
+doctrines_fields = ['id', 'fit_id', 'ship_id', 'ship_name', 'hulls', 'type_id', 'type_name', 'fit_qty', 'fits_on_mkt', 'total_stock', 'price', 'avg_vol', 'days', 'group_id', 'group_name', 'category_id', 'category_name', 'timestamp']
 
 doctrine_fit_id = 494
 ship_id = 33157
@@ -282,30 +285,6 @@ def check_doctrine_fits_in_wcmkt(doctrine_id: int, remote: bool = False)->pd.Dat
         stmt = text("SELECT * FROM doctrine_fits WHERE doctrine_id = :doctrine_id")
         df = pd.read_sql_query(stmt, conn, params={"doctrine_id": doctrine_id})
     return df
-
-def reset_doctrines_table(remote: bool = False):
-    wcmkt3 = DatabaseConfig("wcmkt")
-    engine1 = wcmkt3.remote_engine if remote else wcmkt3.engine
-    session = Session(bind=engine1)
-    with session.begin():
-        session.execute(text("DROP TABLE IF EXISTS doctrines"))
-        session.commit()
-    session.close()
-    Base.metadata.create_all(engine1)
-    print("Tables created")
-    wcmkt2 = DatabaseConfig("wcmkt")
-    engine2 = wcmkt2.remote_engine if remote else wcmkt2.engine
-    stmt = "SELECT * FROM doctrines"
-    with engine2.connect() as conn:
-        df = pd.read_sql_query(stmt, conn)
-    conn.close()
-    engine2.dispose()
-    with engine1.connect() as conn:
-        df.to_sql("doctrines", conn, if_exists="replace", index=False)
-        conn.commit()
-    print(f"Added {len(df)} rows to doctrines table")
-    conn.close()
-    engine1.dispose()
 
 def add_doctrine_fit_to_doctrines_table(df: pd.DataFrame, fit_id: int, ship_id: int, ship_name: str, remote: bool = False):
     db = DatabaseConfig("wcmkt")

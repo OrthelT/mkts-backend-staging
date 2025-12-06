@@ -1,5 +1,6 @@
 import pandas as pd
 from mkts_backend.config.logging_config import configure_logging
+from mkts_backend.utils.db_utils import fix_null_doctrine_stats_timestamps
 from mkts_backend.db.models import MarketStats, RegionHistory, MarketHistory
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.esi_config import ESIConfig
@@ -278,65 +279,75 @@ def calculate_doctrine_stats() -> pd.DataFrame:
 
     # Final safety check: ensure no NaN values remain in ANY column
     if doctrine_stats.isnull().any().any():
-        logger.error(f"WARNING: NaN values still present after cleaning: {doctrine_stats.isnull().sum()}")
+        logger.warning(f"WARNING: NaN values still present after cleaning: {doctrine_stats.isnull().sum()}")
         # Replace any remaining NaN with appropriate defaults
         doctrine_stats = doctrine_stats.fillna({'ship_name': '', 'type_name': '',
                                                   'group_name': '', 'category_name': ''})
         # Fill any remaining numeric NaN with 0
         doctrine_stats = doctrine_stats.fillna(0)
 
+        if doctrine_stats.timestamp.isnull().any():
+            doctrine_stats = fix_null_doctrine_stats_timestamps(doctrine_stats, pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d %H:%M:%S"))
+
     doctrine_stats = doctrine_stats.reset_index(drop=True)
+    final_check = doctrine_stats.isnull().any().any()
+
+    if final_check:
+        logger.error("WARNING: NaN values still present after cleaning:")
+        logger.error(f"NaN columns: {doctrine_stats.columns[doctrine_stats.isnull().any()].tolist()}")
+        return doctrine_stats
+
     return doctrine_stats
 
-def process_system_orders(system_id: int) -> pd.DataFrame:
-    df = get_system_orders_from_db(system_id)
-    df = not df['is_buy_order']
-    nakah_mkt = 60014068
-    nakah_df = df[df.location_id == nakah_mkt].reset_index(drop=True)
-    nakah_df = nakah_df[["price", "type_id", "volume_remain"]]
-    nakah_df = (
-        nakah_df.groupby("type_id").agg({"price": lambda x: x.quantile(0.05), "volume_remain": "sum"}).reset_index()
-    )
-    nakah_ids = nakah_df["type_id"].unique().tolist()
-    type_names = get_type_names_from_df(nakah_ids)
-    nakah_df = nakah_df.merge(type_names, on="type_id", how="left")
-    nakah_df = nakah_df[["type_id", "type_name", "group_name", "category_name", "price", "volume_remain"]]
-    nakah_df['timestamp'] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    nakah_df.to_csv("nakah_stats.csv", index=False)
-    return nakah_df
+# def process_system_orders(system_id: int) -> pd.DataFrame:
+#     df = get_system_orders_from_db(system_id)
+#     df = not df['is_buy_order']
+#     nakah_mkt = 60014068
+#     nakah_df = df[df.location_id == nakah_mkt].reset_index(drop=True)
+#     nakah_df = nakah_df[["price", "type_id", "volume_remain"]]
+#     nakah_df = (
+#         nakah_df.groupby("type_id").agg({"price": lambda x: x.quantile(0.05), "volume_remain": "sum"}).reset_index()
+#     )
+#     nakah_ids = nakah_df["type_id"].unique().tolist()
+#     type_names = get_type_names_from_df(nakah_ids)
+#     nakah_df = nakah_df.merge(type_names, on="type_id", how="left")
+#     nakah_df = nakah_df[["type_id", "type_name", "group_name", "category_name", "price", "volume_remain"]]
+#     nakah_df['timestamp'] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+#     nakah_df.to_csv("nakah_stats.csv", index=False)
+#     return nakah_df
 
-def process_region_history(watchlist: pd.DataFrame):
-    region_history = fetch_region_history(watchlist)
-    valid_history_columns = RegionHistory.__table__.columns.keys()
+# def process_region_history(watchlist: pd.DataFrame):
+#     region_history = fetch_region_history(watchlist)
+#     valid_history_columns = RegionHistory.__table__.columns.keys()
 
-    # Check if region_history is in the right format
-    if isinstance(region_history, list) and len(region_history) > 0:
-        if isinstance(region_history[0], dict):
-            history_df = pd.DataFrame(region_history)
-        else:
-            # Convert to list of dicts if needed
-            history_df = pd.DataFrame.from_records(region_history)
-    else:
-        # Create empty DataFrame with correct columns
-        history_df = pd.DataFrame(columns=valid_history_columns)
-    history_df = add_timestamp(history_df)
-    history_df = add_autoincrement(history_df)
-    history_df = validate_columns(history_df, valid_history_columns)
-    history_df = convert_datetime_columns(history_df, ['date'])
-    history_df.infer_objects()
-    history_df.fillna(0)
+#     # Check if region_history is in the right format
+#     if isinstance(region_history, list) and len(region_history) > 0:
+#         if isinstance(region_history[0], dict):
+#             history_df = pd.DataFrame(region_history)
+#         else:
+#             # Convert to list of dicts if needed
+#             history_df = pd.DataFrame.from_records(region_history)
+#     else:
+#         # Create empty DataFrame with correct columns
+#         history_df = pd.DataFrame(columns=valid_history_columns)
+#     history_df = add_timestamp(history_df)
+#     history_df = add_autoincrement(history_df)
+#     history_df = validate_columns(history_df, valid_history_columns)
+#     history_df = convert_datetime_columns(history_df, ['date'])
+#     history_df.infer_objects()
+#     history_df.fillna(0)
 
-    try:
-        upsert_database(RegionHistory, history_df)
-    except Exception as e:
-        logger.error(f"history data update failed: {e}")
+#     try:
+#         upsert_database(RegionHistory, history_df)
+#     except Exception as e:
+#         logger.error(f"history data update failed: {e}")
 
-    status = get_remote_status()['market_history']
-    if status > 0:
-        logger.info(f"History updated:{get_table_length('market_history')} items")
-        print(f"History updated:{get_table_length('market_history')} items")
-    else:
-        logger.error("Failed to update market history")
+#     status = get_remote_status()['market_history']
+#     if status > 0:
+#         logger.info(f"History updated:{get_table_length('market_history')} items")
+#         print(f"History updated:{get_table_length('market_history')} items")
+#     else:
+#         logger.error("Failed to update market history")
 
 
 if __name__ == "__main__":

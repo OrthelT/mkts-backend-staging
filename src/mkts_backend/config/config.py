@@ -12,43 +12,54 @@ from datetime import datetime, timezone
 from time import perf_counter
 import json
 from pathlib import Path
+import tomllib
 
 load_dotenv()
+settings_file = "src/mkts_backend/config/settings.toml"
 
 logger = configure_logging(__name__)
 
+def load_settings(file_path: str = settings_file):
+    with open(file_path, "rb") as f:
+        settings = tomllib.load(f)
+        logger.info(f"Settings loaded from {file_path}")
+    return settings
 
 class DatabaseConfig:
-    wcdbmap = "wcmkt4" #select wcmkt4 (production) or wcmkt3 (development)
+    settings = load_settings()
+    _production_db_alias = settings["db"]["production_database_alias"]
+    _production_db_file = settings["db"]["production_database_file"]
+    _testing_db_alias = settings["db"]["testing_database_alias"]
+    _testing_db_file = settings["db"]["testing_database_file"]
+
 
     _db_paths = {
-        "wcmkt3": "wcmkt3.db",
-        "sde": "sdeinfo2.db",
+        _testing_db_alias: _testing_db_file,
+        "sde": "sde.db",
         "fittings": "wcfitting.db",
-        "wcmkt4": "wcmkt4.db",
+        _production_db_alias: _production_db_file,
     }
 
     _db_turso_urls = {
-        "wcmkt3_turso": os.getenv("TURSO_WCMKT3_URL"),
-        "sde_turso": os.getenv("TURSO_SDE2_URL"),
+        _production_db_alias + "_turso": os.getenv("TURSO_WCMKTPROD_URL"),
+        _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_URL"),
+        "sde_turso": os.getenv("TURSO_SDE_URL"),
         "fittings_turso": os.getenv("TURSO_FITTING_URL"),
-        "wcmkt4_turso": os.getenv("TURSO_WCMKT4_URL"),
     }
 
     _db_turso_auth_tokens = {
-        "wcmkt3_turso": os.getenv("TURSO_WCMKT3_TOKEN"),
-        "sde_turso": os.getenv("TURSO_SDE2_TOKEN"),
+        _production_db_alias + "_turso": os.getenv("TURSO_WCMKTPROD_TOKEN"),
+        _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_TOKEN"),
+        "sde_turso": os.getenv("TURSO_SDE_TOKEN"),
         "fittings_turso": os.getenv("TURSO_FITTING_TOKEN"),
-        "wcmkt4_turso": os.getenv("TURSO_WCMKT4_TOKEN"),
     }
 
     def __init__(self, alias: str, dialect: str = "sqlite+libsql"):
         if alias == "wcmkt":
-            alias = self.wcdbmap
-        elif alias == "wcmkt3" or alias == "wcmkt2":
-            logger.warning(
-                f"Database alias '{alias}' is deprecated. Configure wcdbmap in config.py to select wcmkt2 or wcmkt3 instead."
-            )
+            if self.settings["app"]["environment"] == "development":
+                alias = self._testing_db_alias
+            else:
+                alias = self._production_db_alias
 
         if alias not in self._db_paths:
             raise ValueError(
@@ -130,6 +141,7 @@ class DatabaseConfig:
         logger.info("=" * 80)
 
     def validate_sync(self) -> bool:
+        logger.info(f"Validating sync for {self.alias}, url: {self.turso_url}, self.path: {self.path}")
         with self.remote_engine.connect() as conn:
             result = conn.execute(text("SELECT MAX(last_update) FROM marketstats")).fetchone()
             remote_last_update = result[0]
@@ -213,7 +225,7 @@ class DatabaseConfig:
     def verify_db_exists(self):
         path = pathlib.Path(self.path)
         if not path.exists():
-            logger.error(f"Database file does not exist: {self.path}")
+            logger.warn(f"Database file does not exist: {self.path}")
             self.sync()
         else:
             logger.info(f"Database file exists: {self.path}")
@@ -228,6 +240,12 @@ class DatabaseConfig:
         with open(info_path, "r") as f:
             db_info = f.read()
         return db_info
+
+    def get_db_credentials_dicts(self):
+        return {
+            "turso_urls": self._db_turso_urls,
+            "turso_tokens": self._db_turso_auth_tokens,
+        }
 
 if __name__ == "__main__":
     pass

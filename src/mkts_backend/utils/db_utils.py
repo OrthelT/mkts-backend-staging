@@ -39,8 +39,15 @@ def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = Fals
 
     # Get current watchlist to check for duplicates
     db = DatabaseConfig("wcmkt")
+    logger.info(f"Database config: {db.alias}")
+    logger.info(f"Remote engine: {remote}")
+
     engine = db.remote_engine if remote else db.engine
-    watchlist = db.get_watchlist()
+
+    # Read watchlist from the correct database (local or remote)
+    with engine.connect() as conn:
+        watchlist = pd.read_sql_table("watchlist", conn)
+    logger.info(f"Loaded {len(watchlist)} items from {'remote' if remote else 'local'} watchlist")
 
     # Filter out items that already exist in watchlist
     existing_type_ids = set(watchlist['type_id'].tolist()) if not watchlist.empty else set()
@@ -59,27 +66,38 @@ def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = Fals
     updated_watchlist.to_csv("data/watchlist_updated.csv", index=False)
     logger.info(f"Saved updated watchlist to data/watchlist_updated.csv")
 
-    # Insert new items into database using proper upsert to avoid duplicates
+    # Insert new items into local database (not remote - we don't want to affect production watchlist)
     try:
-        from mkts_backend.db.db_handlers import upsert_database
-        from mkts_backend.db.models import Watchlist
+        db = DatabaseConfig("wcmkt")
+        engine = db.remote_engine if remote else db.engine
 
-        # Use the existing upsert_database function to handle conflicts properly
-        success = upsert_database(Watchlist, new_items)
+        with engine.connect() as conn:
+            for _, row in new_items.iterrows():
+                stmt = insert(Watchlist).values(
+                    type_id=row['type_id'],
+                    type_name=row['type_name'],
+                    group_id=row['group_id'],
+                    group_name=row['group_name'],
+                    category_id=row['category_id'],
+                    category_name=row['category_name']
+                )
+                try:
+                    conn.execute(stmt)
+                    logger.info(f"Added {row['type_name']} (ID: {row['type_id']}) to watchlist")
+                except Exception as e:
+                    logger.warning(f"Item {row['type_id']} may already exist: {e}")
+            conn.commit()
 
-        if success:
-            logger.info(f"Successfully added {len(new_items)} new items to watchlist")
-            return f"Added {len(new_items)} items to watchlist: {new_items['type_name'].tolist()}"
-        else:
-            logger.error("Failed to add items to watchlist")
-            return "Failed to add items to watchlist"
+        engine.dispose()
+        logger.info(f"Successfully added {len(new_items)} new items to watchlist")
+        return f"Added {len(new_items)} items to watchlist: {new_items['type_name'].tolist()}"
 
     except Exception as e:
         logger.error(f"Error adding items to watchlist: {e}")
         return f"Error adding items to watchlist: {e}"
 
 def get_type_info(type_ids: list[int], remote: bool = False):
-    engine = sde_db.engine if remote else sde_db.remote_engine
+    engine = sde_db.remote_engine if remote else sde_db.engine
     with engine.connect() as conn:
         stmt = text("SELECT * FROM inv_info WHERE typeID IN :type_ids").bindparams(bindparam('type_ids', expanding=True))
         res = conn.execute(stmt, {"type_ids": type_ids})
@@ -118,121 +136,6 @@ def update_watchlist_tables(missing_items: list[int]):
             except Exception as e:
                 logger.warning(f"Item {row['type_id']} may already exist in watchlist: {e}")
 
-
-def restore_doctrines_from_backup(backup_db_path: str, target_db_alias: str = "wcmkt"):
-    """
-    Restore doctrines table from a backup database file.
-
-    Args:
-        backup_db_path: Path to the backup database file (e.g., "backup_wcmkt2.db")
-        target_db_alias: Target database alias to restore to (default: "wcmkt")
-    """
-    logger.info(f"Starting doctrines restoration from backup: {backup_db_path}")
-
-    try:
-        # Connect to backup database
-        backup_engine = create_engine(f"sqlite:///{backup_db_path}")
-
-        # Check if doctrines table exists in backup
-        with backup_engine.connect() as conn:
-            result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='doctrines'"))
-            if not result.fetchone():
-                logger.error(f"Doctrines table not found in backup database: {backup_db_path}")
-                return False
-
-            # Get all doctrines data from backup
-            doctrines_df = pd.read_sql_query("SELECT * FROM doctrines", conn)
-            logger.info(f"Found {len(doctrines_df)} doctrines records in backup")
-
-        # Connect to target database
-        target_db = DatabaseConfig(target_db_alias)
-        target_engine = target_db.remote_engine
-
-        # Clear existing doctrines table
-        with target_engine.connect() as conn:
-            conn.execute(text("DELETE FROM doctrines"))
-            conn.commit()
-            logger.info("Cleared existing doctrines table")
-
-            # Insert backup data
-            doctrines_df.to_sql("doctrines", conn, if_exists="append", index=False)
-            conn.commit()
-            logger.info(f"Restored {len(doctrines_df)} doctrines records to target database")
-
-        # Verify restoration
-        with target_engine.connect() as conn:
-            result = conn.execute(text("SELECT COUNT(*) FROM doctrines"))
-            count = result.scalar()
-            logger.info(f"Verification: {count} doctrines records in target database")
-
-        return True
-
-    except Exception as e:
-        logger.error(f"Error restoring doctrines from backup: {e}")
-        return False
-    finally:
-        if 'backup_engine' in locals():
-            backup_engine.dispose()
-        if 'target_engine' in locals():
-            target_engine.dispose()
-
-def merge_doctrines_with_backup(backup_db_path: str, target_db_alias: str = "wcmkt"):
-    """
-    Merge doctrines from backup with existing data, avoiding duplicates.
-
-    Args:
-        backup_db_path: Path to the backup database file
-        target_db_alias: Target database alias to merge into
-    """
-    logger.info(f"Starting doctrines merge from backup: {backup_db_path}")
-
-    try:
-        # Connect to backup database
-        backup_engine = create_engine(f"sqlite:///{backup_db_path}")
-
-        # Get doctrines from backup
-        with backup_engine.connect() as conn:
-            backup_df = pd.read_sql_query("SELECT * FROM doctrines", conn)
-            logger.info(f"Found {len(backup_df)} doctrines records in backup")
-
-        # Connect to target database
-        target_db = DatabaseConfig(target_db_alias)
-        target_engine = target_db.engine
-
-        # Get existing doctrines from target
-        with target_engine.connect() as conn:
-            existing_df = pd.read_sql_query("SELECT * FROM doctrines", conn)
-            logger.info(f"Found {len(existing_df)} existing doctrines records")
-
-        # Merge dataframes, keeping existing data and adding new from backup
-        if not existing_df.empty:
-            # Use fit_id as unique identifier for merging
-            merged_df = pd.concat([existing_df, backup_df], ignore_index=True)
-            # Remove duplicates based on fit_id, ship_id, type_id combination
-            merged_df = merged_df.drop_duplicates(subset=['fit_id', 'ship_id', 'type_id'], keep='first')
-            logger.info(f"Merged to {len(merged_df)} unique doctrines records")
-        else:
-            merged_df = backup_df
-            logger.info("No existing data, using backup data as-is")
-
-        # Clear and restore merged data
-        with target_engine.connect() as conn:
-            conn.execute(text("DELETE FROM doctrines"))
-            conn.commit()
-            merged_df.to_sql("doctrines", conn, if_exists="append", index=False)
-            conn.commit()
-            logger.info(f"Restored {len(merged_df)} merged doctrines records")
-
-        return True
-
-    except Exception as e:
-        logger.error(f"Error merging doctrines with backup: {e}")
-        return False
-    finally:
-        if 'backup_engine' in locals():
-            backup_engine.dispose()
-        if 'target_engine' in locals():
-            target_engine.dispose()
 
 def export_doctrines_to_csv(db_alias: str = "wcmkt", output_file: str = "doctrines_backup.csv"):
     """
@@ -370,5 +273,23 @@ def check_updates(remote: bool = False):
 def get_time_since_update(table_name: str, remote: bool = False):
     status = check_updates(remote=remote)
     return status.get(table_name).get("time_since")
+
+def fix_null_doctrine_stats_timestamps (doctrine_stats: pd.DataFrame, timestamp: str) -> pd.DataFrame:
+    null_timestamp = doctrine_stats[doctrine_stats.timestamp.isnull()].reset_index(drop=True)
+    null_timestamp["timestamp"] = timestamp
+    # Filter out rows with null timestamps from original dataframe before concatenating
+    doctrine_stats = doctrine_stats[doctrine_stats.timestamp.notnull()]
+    doctrine_stats = pd.concat([doctrine_stats, null_timestamp], ignore_index=True)
+    return doctrine_stats
+
+def restore_watchlist_from_csv(csv_file: str = "data/watchlist_updated.csv", remote: bool = False):
+    db = DatabaseConfig("wcmkt")
+    engine = db.remote_engine if remote else db.engine
+    with engine.connect() as conn:
+        df = pd.read_csv(csv_file)
+        df.to_sql("watchlist", conn, if_exists="replace", index=False)
+    conn.close()
+    engine.dispose()
+    logger.info(f"Restored watchlist from {csv_file} to {db.alias}")
 if __name__ == "__main__":
     pass
