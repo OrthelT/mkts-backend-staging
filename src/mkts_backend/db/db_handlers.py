@@ -123,12 +123,13 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
         logger.error(f"No data to upsert into {tabname}")
         return False
 
-    MAX_PARAMETER_BYTES = 256 * 1024
-    BYTES_PER_PARAMETER = 8
-    MAX_PARAMETERS = MAX_PARAMETER_BYTES // BYTES_PER_PARAMETER
+    #MAX_PARAMETER_BYTES = 256 * 1024
+    #BYTES_PER_PARAMETER = 8
+    #MAX_PARAMETERS = MAX_PARAMETER_BYTES // BYTES_PER_PARAMETER
 
     column_count = len(df.columns)
-    chunk_size = min(2000, MAX_PARAMETERS // column_count)
+    chunk_size = 1000
+    #chunk_size = min(100, MAX_PARAMETERS // column_count)
 
     logger.info(
         f"Table {table.__tablename__} has {column_count} columns, using chunk size {chunk_size}"
@@ -190,11 +191,25 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
                 else:
                     # Single primary key - delete records not in incoming data
                     incoming_pks = [row[pk_col.name] for row in data]
-                    delete_stmt = delete(t).where(pk_col.notin_(incoming_pks))
-                    delete_result = session.execute(delete_stmt)
-                    deleted_count = delete_result.rowcount
-                    if deleted_count > 0:
-                        logger.info(f"Deleted {deleted_count} stale records from {tabname}")
+
+                    # Fetch existing PKs and delete stale ones in small chunks to avoid
+                    # SQLite/LibSQL variable count limits (Hrana throws SQL_INPUT_ERROR)
+                    existing_pks = session.execute(select(pk_col)).scalars().all()
+                    stale_pks = list(set(existing_pks) - set(incoming_pks))
+                    delete_chunk_size = 500  # keep well under libsql/sqlite var limits
+
+                    if stale_pks:
+                        for del_idx in range(0, len(stale_pks), delete_chunk_size):
+                            del_chunk = stale_pks[del_idx : del_idx + delete_chunk_size]
+                            delete_stmt = delete(t).where(pk_col.in_(del_chunk))
+                            delete_result = session.execute(delete_stmt)
+                            deleted_count += delete_result.rowcount
+
+                        chunk_batches = (len(stale_pks) + delete_chunk_size - 1) // delete_chunk_size
+                        logger.info(
+                            f"Deleted {deleted_count} stale records from {tabname} "
+                            f"in {chunk_batches} chunks"
+                        )
 
                 non_pk_cols = [c for c in t.columns if c not in pk_cols]
                 # Exclude timestamp columns from change detection to avoid unnecessary updates
