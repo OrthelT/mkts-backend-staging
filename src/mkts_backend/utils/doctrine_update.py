@@ -1,8 +1,11 @@
 import datetime
 from dataclasses import dataclass, field
+from typing import List
+
 import pandas as pd
 from sqlalchemy import text, select
 from sqlalchemy.orm import Session
+
 from mkts_backend.db.models import Doctrines, LeadShips, DoctrineFitItems, Base
 from mkts_backend.db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items
 from mkts_backend.utils.get_type_info import TypeInfo
@@ -13,6 +16,10 @@ from mkts_backend.utils.utils import get_type_name
 
 
 logger = configure_logging(__name__)
+
+def _get_engine(db_alias: str, remote: bool = False):
+    cfg = DatabaseConfig(db_alias)
+    return cfg.remote_engine if remote else cfg.engine
 
 
 doctrines_fields = ['id', 'fit_id', 'ship_id', 'ship_name', 'hulls', 'type_id', 'type_name', 'fit_qty', 'fits_on_mkt', 'total_stock', 'price', 'avg_vol', 'days', 'group_id', 'group_name', 'category_id', 'category_name', 'timestamp']
@@ -116,6 +123,71 @@ class DoctrineFit:
                 })
                 conn.commit()
 
+
+def upsert_doctrine_fits(doctrine_fit: DoctrineFit, remote: bool = False) -> None:
+    """
+    Upsert doctrine_fits entry keyed by fit_id.
+    """
+    engine = _get_engine("wcmkt", remote)
+    with engine.connect() as conn:
+        existing = conn.execute(
+            text("SELECT id FROM doctrine_fits WHERE fit_id = :fit_id"),
+            {"fit_id": doctrine_fit.fit_id},
+        ).fetchone()
+        if existing:
+            stmt = text(
+                """
+                UPDATE doctrine_fits
+                SET doctrine_name = :doctrine_name,
+                    fit_name = :fit_name,
+                    ship_type_id = :ship_type_id,
+                    doctrine_id = :doctrine_id,
+                    ship_name = :ship_name,
+                    target = :target
+                WHERE fit_id = :fit_id
+                """
+            )
+        else:
+            stmt = text(
+                """
+                INSERT INTO doctrine_fits (doctrine_name, fit_name, ship_type_id, doctrine_id, fit_id, ship_name, target)
+                VALUES (:doctrine_name, :fit_name, :ship_type_id, :doctrine_id, :fit_id, :ship_name, :target)
+                """
+            )
+        conn.execute(
+            stmt,
+            {
+                "doctrine_name": doctrine_fit.doctrine_name,
+                "fit_name": doctrine_fit.fit_name,
+                "ship_type_id": doctrine_fit.ship_type_id,
+                "doctrine_id": doctrine_fit.doctrine_id,
+                "fit_id": doctrine_fit.fit_id,
+                "ship_name": doctrine_fit.ship_name,
+                "target": doctrine_fit.target,
+            },
+        )
+        conn.commit()
+    engine.dispose()
+    logger.info(f"Upserted doctrine_fits for fit_id {doctrine_fit.fit_id}")
+
+
+def upsert_doctrine_map(doctrine_id: int, fit_id: int, remote: bool = False) -> None:
+    engine = _get_engine("wcmkt", remote)
+    with engine.connect() as conn:
+        exists = conn.execute(
+            text("SELECT 1 FROM doctrine_map WHERE doctrine_id = :doctrine_id AND fitting_id = :fit_id"),
+            {"doctrine_id": doctrine_id, "fit_id": fit_id},
+        ).fetchone()
+        if exists:
+            return
+        conn.execute(
+            text("INSERT INTO doctrine_map (doctrine_id, fitting_id) VALUES (:doctrine_id, :fit_id)"),
+            {"doctrine_id": doctrine_id, "fit_id": fit_id},
+        )
+        conn.commit()
+    engine.dispose()
+    logger.info(f"Upserted doctrine_map entry doctrine_id={doctrine_id}, fit_id={fit_id}")
+
 @dataclass
 class DoctrineFitItems:
     fit_id: int
@@ -139,17 +211,39 @@ class DoctrineFitItems:
     def __post_init__(self):
         self.timestamp = datetime.datetime.strftime(datetime.datetime.now(datetime.timezone.utc), '%Y-%m-%d %H:%M:%S')
 
-def add_ship_target(fit_id: int, fit_name: str, ship_id: int, ship_name: str, ship_target: int) -> bool:
+def upsert_ship_target(fit_id: int, fit_name: str, ship_id: int, ship_name: str, ship_target: int, remote: bool = False) -> bool:
+    """
+    Upsert ship_targets entry keyed by fit_id.
+    """
     created_at = datetime.datetime.strftime(datetime.datetime.now(datetime.timezone.utc), '%Y-%m-%d %H:%M:%S')
-    db = DatabaseConfig("wcmkt")
-    engine = db.remote_engine
+    engine = _get_engine("wcmkt", remote)
     with engine.connect() as conn:
-        stmt = text("INSERT INTO ship_targets ('fit_id', 'fit_name', 'ship_id', 'ship_name', 'ship_target', 'created_at') VALUES (:fit_id, :fit_name, :ship_id, :ship_name, :ship_target, :created_at)")
-        conn.execute(stmt, {"fit_id": fit_id, "fit_name": fit_name, "ship_id": ship_id, "ship_name": ship_name, "ship_target": ship_target, "created_at": created_at})
+        stmt = text(
+            """
+            INSERT INTO ship_targets (fit_id, fit_name, ship_id, ship_name, ship_target, created_at)
+            VALUES (:fit_id, :fit_name, :ship_id, :ship_name, :ship_target, :created_at)
+            ON CONFLICT(fit_id) DO UPDATE SET
+                fit_name = excluded.fit_name,
+                ship_id = excluded.ship_id,
+                ship_name = excluded.ship_name,
+                ship_target = excluded.ship_target,
+                created_at = excluded.created_at
+            """
+        )
+        conn.execute(
+            stmt,
+            {
+                "fit_id": fit_id,
+                "fit_name": fit_name,
+                "ship_id": ship_id,
+                "ship_name": ship_name,
+                "ship_target": ship_target,
+                "created_at": created_at,
+            },
+        )
         conn.commit()
-        print("Ship target added")
-    conn.close()
     engine.dispose()
+    logger.info(f"Upserted ship_targets for fit_id {fit_id}")
     return True
 
 def add_doctrine_map_from_fittings_doctrine_fittings(doctrine_id: int):
@@ -352,6 +446,70 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
         engine.dispose()
         logger.info(f"Added {type_info.type_name} to watchlist")
         print(f"Added {type_info.type_name} to watchlist")
+
+def refresh_doctrines_for_fit(fit_id: int, ship_id: int, ship_name: str, remote: bool = False) -> None:
+    """
+    Rebuild doctrines table rows for a fit based on fittings_fittingitem content.
+    """
+    # Aggregate component quantities from fittings
+    fittings_engine = _get_engine("fittings", remote)
+    with fittings_engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT type_id, SUM(quantity) as qty FROM fittings_fittingitem WHERE fit_id = :fit_id GROUP BY type_id"
+            ),
+            {"fit_id": fit_id},
+        ).fetchall()
+
+    components = [(row.type_id, row.qty) for row in rows]
+    # Ensure hull present (qty 1)
+    if ship_id not in [c[0] for c in components]:
+        components.append((ship_id, 1))
+
+    doctrines_engine = _get_engine("wcmkt", remote)
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    with doctrines_engine.connect() as conn:
+        conn.execute(text("DELETE FROM doctrines WHERE fit_id = :fit_id"), {"fit_id": fit_id})
+        insert_stmt = text(
+            """
+            INSERT INTO doctrines (
+                fit_id, ship_id, ship_name, type_id, type_name, fit_qty,
+                fits_on_mkt, total_stock, price, avg_vol, days,
+                group_id, group_name, category_id, category_name, timestamp
+            ) VALUES (
+                :fit_id, :ship_id, :ship_name, :type_id, :type_name, :fit_qty,
+                :fits_on_mkt, :total_stock, :price, :avg_vol, :days,
+                :group_id, :group_name, :category_id, :category_name, :timestamp
+            )
+            """
+        )
+        for type_id, qty in components:
+            type_info = TypeInfo(type_id)
+            conn.execute(
+                insert_stmt,
+                {
+                    "fit_id": fit_id,
+                    "ship_id": ship_id,
+                    "ship_name": ship_name,
+                    "type_id": type_id,
+                    "type_name": type_info.type_name,
+                    "fit_qty": int(qty),
+                    "fits_on_mkt": None,
+                    "total_stock": None,
+                    "price": None,
+                    "avg_vol": None,
+                    "days": None,
+                    "group_id": int(type_info.group_id),
+                    "group_name": type_info.group_name,
+                    "category_id": int(type_info.category_id),
+                    "category_name": type_info.category_name,
+                    "timestamp": timestamp,
+                },
+            )
+        conn.commit()
+    doctrines_engine.dispose()
+    logger.info(f"Rebuilt doctrines rows for fit_id {fit_id} ({len(components)} components)")
 
 def add_doctrine_fits_to_wcmkt(df: pd.DataFrame, remote: bool = False):
 

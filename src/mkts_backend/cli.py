@@ -31,6 +31,7 @@ from mkts_backend.utils.db_utils import check_updates, add_missing_items_to_watc
 from mkts_backend.utils.parse_items import parse_items
 from mkts_backend.utils.utils import get_type_name
 from mkts_backend.utils.validation import validate_all
+from mkts_backend.utils.parse_fits import update_fit_workflow, parse_fit_metadata
 logger = configure_logging(__name__)
 
 def check_tables():
@@ -50,12 +51,13 @@ def check_tables():
     db.engine.dispose()
 
 def display_cli_help():
-    print("\nUsage: mkts-backend [--history|--include-history] [--check_tables] [add_watchlist --type_id=<list[int]>] [parse-items --input=<file> --output=<file>]\n")
+    print("\nUsage: mkts-backend [--history|--include-history] [--check_tables] [add_watchlist --type_id=<list[int]>] [parse-items --input=<file> --output=<file>] [update-fit --fit-file=<path> --meta-file=<path> [--remote] [--no-clear] [--dry-run]]\n")
     print("""Options:\n
   [--history | --include-history]: Include history processing\n
   [--check_tables]:  Check the tables in the database\n
   [add_watchlist]: --type_id=<list>: Add items to watchlist by type IDs (comma-separated --type_id=81144,88001,89240)\n
-  [--local]: Use local database instead of remote (default: remote)\n
+  [update-fit]: Process an EFT fit file and metadata and update doctrine tables (defaults local, add --remote for production, --no-clear to keep existing items, --dry-run to preview)\n
+  [--local]: Use local database instead of remote for commands that default to remote\n
   [parse-items --input=<file> --output=<file>]: Parse Eve structure data and create CSV with pricing from database\n
   [sync]: Sync the database\n
   [validate]: Validate the database\n
@@ -254,6 +256,47 @@ def parse_args(args: list[str])->dict | None:
         else:
             print("Parse items command failed")
         exit()
+
+    if "update-fit" in args:
+        fit_file = None
+        meta_file = None
+        for arg in args:
+            if arg.startswith("--fit-file="):
+                fit_file = arg.split("=", 1)[1]
+            if arg.startswith("--meta-file="):
+                meta_file = arg.split("=", 1)[1]
+
+        if not fit_file or not meta_file:
+            print("Error: --fit-file and --meta-file are required for update-fit")
+            return None
+
+        remote = "--remote" in args  # default to local per user preference
+        clear_existing = "--no-clear" not in args
+        dry_run = "--dry-run" in args
+
+        try:
+            metadata = parse_fit_metadata(meta_file)
+            result = update_fit_workflow(
+                fit_id=metadata.fit_id,
+                fit_file=fit_file,
+                fit_metadata_file=meta_file,
+                remote=remote,
+                clear_existing=clear_existing,
+                dry_run=dry_run,
+            )
+            if dry_run:
+                print("Dry run complete")
+                print(f"Ship: {result['ship_name']} ({result['ship_type_id']})")
+                print(f"Items parsed: {len(result['items'])}")
+                if result["missing_items"]:
+                    print(f"Missing type_ids for: {result['missing_items']}")
+            else:
+                print(f"Fit update completed for fit_id {metadata.fit_id} (remote={remote})")
+            exit()
+        except Exception as e:
+            logger.error(f"update-fit failed: {e}")
+            print(f"Error running update-fit: {e}")
+            exit(1)
 
     if "sync" in args:
         db = DatabaseConfig("wcmkt")

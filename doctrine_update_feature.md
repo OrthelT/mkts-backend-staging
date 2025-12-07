@@ -33,3 +33,9 @@ There is a great deal of existing code from my past incomplete attempts to imple
 - Determine which tables will need to be updated for existing fits and new fits. 
 - Plan the code that will be required. 
 - Plan a refactor of existing code to centralize and streamline the implementation of this functionality.
+
+## Usage (implemented)
+- Run the CLI to update a fit from EFT text + metadata:  
+  `mkts-backend update-fit --fit-file=new_zealot993.txt --meta-file=new_zealot_metadata.json`
+- Defaults to local databases; add `--remote` to target production.  
+- Use `--no-clear` to keep existing `fittings_fittingitem` rows; `--dry-run` to preview parsed items without writing.
