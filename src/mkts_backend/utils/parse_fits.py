@@ -175,14 +175,14 @@ def parse_eft_fit_file(fit_file: str, fit_id: int, sde_engine) -> FitParseResult
                 if current_slot in {"LoSlot", "MedSlot", "HiSlot", "RigSlot"}:
                     suffix = slot_counters[current_slot]
                     slot_counters[current_slot] += 1
-                    slot_name = f\"{current_slot}{suffix}\"
+                    slot_name = f"{current_slot}{suffix}"
                 else:
                     slot_name = current_slot
 
                 type_id = _lookup_type_id(item_name, sde_conn)
                 if type_id is None:
                     missing.append(item_name)
-                    logger.warning(f\"Unable to resolve type_id for '{item_name}' (fit {fit_id})\")
+                    logger.warning(f"Unable to resolve type_id for '{item_name}' (fit {fit_id})")
                     continue
 
                 items.append(
