@@ -481,16 +481,19 @@ def refresh_doctrines_for_fit(fit_id: int, ship_id: int, ship_name: str, remote:
         for r in stats_rows:
             stats_map[r.type_id] = r
 
+    hull_stats = stats_map.get(ship_id)
+    hull_stock = int(hull_stats.total_volume_remain) if hull_stats and hull_stats.total_volume_remain is not None else 0
+
     with doctrines_engine.connect() as conn:
         conn.execute(text("DELETE FROM doctrines WHERE fit_id = :fit_id"), {"fit_id": fit_id})
         insert_stmt = text(
             """
             INSERT INTO doctrines (
-                fit_id, ship_id, ship_name, type_id, type_name, fit_qty,
+                fit_id, ship_id, ship_name, type_id, type_name, fit_qty, hulls,
                 fits_on_mkt, total_stock, price, avg_vol, days,
                 group_id, group_name, category_id, category_name, timestamp
             ) VALUES (
-                :fit_id, :ship_id, :ship_name, :type_id, :type_name, :fit_qty,
+                :fit_id, :ship_id, :ship_name, :type_id, :type_name, :fit_qty, :hulls,
                 :fits_on_mkt, :total_stock, :price, :avg_vol, :days,
                 :group_id, :group_name, :category_id, :category_name, :timestamp
             )
@@ -504,6 +507,8 @@ def refresh_doctrines_for_fit(fit_id: int, ship_id: int, ship_name: str, remote:
             avg_vol = float(stats.avg_volume) if stats and stats.avg_volume is not None else 0.0
             days_rem = float(stats.days_remaining) if stats and stats.days_remaining is not None else 0.0
             fits_on_mkt = (total_stock / qty) if qty else 0
+            # Set hulls for all rows based on the hull's total_volume_remain
+            hulls = hull_stock
 
             if stats is None:
                 logger.warning(f"No marketstats for type_id {type_id}; defaulting price/stock to 0")
@@ -517,6 +522,7 @@ def refresh_doctrines_for_fit(fit_id: int, ship_id: int, ship_name: str, remote:
                     "type_id": type_id,
                     "type_name": type_info.type_name,
                     "fit_qty": int(qty),
+                    "hulls": hulls,
                     "fits_on_mkt": fits_on_mkt,
                     "total_stock": total_stock,
                     "price": price_val,
