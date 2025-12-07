@@ -1,7 +1,7 @@
 # Doctine Update Feature
 
 ## Goal
-Create simple functionality to parse an Eve Online doctrine fit from a text file in Eve Fitting Tool (EFT) format and update it in the appropriate database tables. It should be extendable to add new fits and new doctrines (which may include existing fits or new fits).
+Create simple functionality to parse an Eve Online doctrine fit from a text file in Eve Fitting Tool (EFT) format and update it in the appropriate database tables. It should be extendable to add new fits and new doctrines (which may include existing fits or new fits). These databases are the backend for two streamlit apps. 
 
 ## Desired functionality
 - User points the function to a text file containing the EFT formatted fit file and a fit Metadata file providing things like fit name and description. 
@@ -15,7 +15,7 @@ Create simple functionality to parse an Eve Online doctrine fit from a text file
 
 ## Databases
 - wcfitting.db is the master database containing fittings and doctrines. 
-- wcmktprod.db contains tables with the market information for doctrines and fits. 
+- wcmktprod.db contains tables with the market information for doctrines and fits that is used in our production streamlit app. 
 - schemas for key tables are outlined in fit_schemas.md
 
 ## Existing Code
