@@ -164,7 +164,7 @@ def parse_eft_fit_file(fit_file: str, fit_id: int, sde_engine) -> FitParseResult
                 if current_slot is None:
                     current_slot = next(slot_gen)
 
-                qty_match = re.search(r"\\s+x(\\d+)$", line)
+                qty_match = re.search(r"\s+x(\d+)$", line)
                 if qty_match:
                     qty = int(qty_match.group(1))
                     item_name = line[: qty_match.start()].strip()
@@ -187,11 +187,11 @@ def parse_eft_fit_file(fit_file: str, fit_id: int, sde_engine) -> FitParseResult
 
                 items.append(
                     {
-                        \"flag\": slot_name,
-                        \"quantity\": qty,
-                        \"type_id\": type_id,
-                        \"fit_id\": fit_id,
-                        \"type_fk_id\": type_id,
+                        "flag": slot_name,
+                        "quantity": qty,
+                        "type_id": type_id,
+                        "fit_id": fit_id,
+                        "type_fk_id": type_id,
                     }
                 )
 

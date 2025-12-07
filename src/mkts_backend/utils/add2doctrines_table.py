@@ -49,6 +49,10 @@ def update_items(items: list[Doctrines]):
         for item in items:
             result = conn.execute(text("SELECT * FROM inv_info WHERE typeID = :type_id"), {"type_id": item.type_id})
             new_item = result.fetchone()
+            if new_item is None:
+                logger.warning(f"TypeID {item.type_id} not found in inv_info; skipping")
+                continue
+
             item.type_name = new_item.typeName
             item.group_name = new_item.groupName
             item.category_name = new_item.categoryName
