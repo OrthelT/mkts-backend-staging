@@ -136,7 +136,6 @@ def update_watchlist_tables(missing_items: list[int]):
             except Exception as e:
                 logger.warning(f"Item {row['type_id']} may already exist in watchlist: {e}")
 
-
 def export_doctrines_to_csv(db_alias: str = "wcmkt", output_file: str = "doctrines_backup.csv"):
     """
     Export doctrines table to CSV for backup purposes.
@@ -291,5 +290,6 @@ def restore_watchlist_from_csv(csv_file: str = "data/watchlist_updated.csv", rem
     conn.close()
     engine.dispose()
     logger.info(f"Restored watchlist from {csv_file} to {db.alias}")
+
 if __name__ == "__main__":
     pass

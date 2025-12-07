@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 from sqlalchemy import text, select
 from sqlalchemy.orm import Session
-from mkts_backend.db.models import Doctrines, LeadShips, DoctrineFit, Base
+from mkts_backend.db.models import Doctrines, LeadShips, DoctrineFitItems, Base
 from mkts_backend.db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items
 from mkts_backend.utils.get_type_info import TypeInfo
 from mkts_backend.config.config import DatabaseConfig
@@ -25,8 +25,99 @@ doctrine_name = '2507  WC-EN Shield DPS HFI v1.0'
 fit_name = '2507  WC-EN Shield DPS HFI v1.0'
 ship_type_id = 33157
 
+
 @dataclass
 class DoctrineFit:
+    doctrine_id: int
+    fit_id: int
+    target: int
+    doctrine_name: str = field(init=False)
+    fit_name: str = field(init=False)
+    ship_type_id: int = field(init=False)
+    ship_name: str = field(init=False)
+
+    def __post_init__(self):
+        self.doctrine_name = self.get_doctrine_name()
+        self.fit_name = self.get_fit_name()
+        self.ship_type_id = self.get_ship_type_id()
+        self.ship_name = self.get_ship_name()
+
+    def get_doctrine_name(self):
+        db = DatabaseConfig("fittings")
+        engine = db.engine
+        with engine.connect() as conn:
+            stmt = text("SELECT * FROM fittings_doctrine WHERE id = :doctrine_id")
+            result = conn.execute(stmt, {"doctrine_id": self.doctrine_id})
+            name = result.fetchone()[1]
+            return name.strip()
+
+    def get_ship_type_id(self):
+        db = DatabaseConfig("fittings")
+        engine = db.engine
+        with engine.connect() as conn:
+            stmt = text("SELECT * FROM fittings_fitting WHERE id = :fit_id")
+            result = conn.execute(stmt, {"fit_id": self.fit_id})
+            type_id = result.fetchone()[4]
+            return type_id
+
+    def get_fit_name(self):
+        db = DatabaseConfig("fittings")
+        engine = db.engine
+        with engine.connect() as conn:
+            stmt = text("SELECT * FROM fittings_fitting WHERE id = :fit_id")
+            result = conn.execute(stmt, {"fit_id": self.fit_id})
+            name = result.fetchone()[2]
+            return name.strip()
+
+    def get_ship_name(self, remote=False):
+        db = DatabaseConfig("sde")
+        engine = db.engine
+        with engine.connect() as conn:
+            stmt = text("SELECT * FROM inv_info WHERE typeID = :type_id")
+            result = conn.execute(stmt, {"type_id": self.ship_type_id})
+            name = result.fetchone()[1]
+            return name.strip()
+
+    def add_wcmkts2_doctrine_fits(self, remote=False):
+        db = DatabaseConfig("wcmkt")
+        engine = db.remote_engine if remote else db.engine
+        with engine.connect() as conn:
+            stmt = text("SELECT * FROM doctrine_fits")
+            df = pd.read_sql_query(stmt, conn)
+            if self.fit_id in df['fit_id'].values:
+                logger.info(f"fit_id {self.fit_id} already exists, updating")
+                stmt = text("""
+                    UPDATE doctrine_fits SET doctrine_name = :doctrine_name,
+                    fit_name = :fit_name, ship_type_id = :ship_type_id, ship_name = :ship_name, doctrine_id = :doctrine_id
+                    WHERE fit_id = :fit_id
+                """)
+                conn.execute(stmt, {
+                    "doctrine_name": self.doctrine_name,
+                    "fit_name": self.fit_name,
+                    "ship_type_id": self.ship_type_id,
+                    "ship_name": self.ship_name,
+                    "doctrine_id": self.doctrine_id,
+                    "fit_id": self.fit_id,
+                })
+                conn.commit()
+            else:
+                logger.info(f"fit_id {self.fit_id} does not exist, adding")
+                stmt = text("""
+                    INSERT INTO doctrine_fits (doctrine_name, fit_name, ship_type_id, doctrine_id, fit_id, ship_name)
+                    VALUES (:doctrine_name, :fit_name, :ship_type_id, :doctrine_id, :fit_id, :ship_name)
+                """)
+                conn.execute(stmt, {
+                    "doctrine_name": self.doctrine_name,
+                    "fit_name": self.fit_name,
+                    "ship_type_id": self.ship_type_id,
+                    "doctrine_id": self.doctrine_id,
+                    "fit_id": self.fit_id,
+                    "ship_name": self.ship_name,
+                })
+                conn.commit()
+
+@dataclass
+class DoctrineFitItems:
     fit_id: int
     ship_id: int
     ship_name: str
@@ -48,17 +139,18 @@ class DoctrineFit:
     def __post_init__(self):
         self.timestamp = datetime.datetime.strftime(datetime.datetime.now(datetime.timezone.utc), '%Y-%m-%d %H:%M:%S')
 
-def add_ship_target():
+def add_ship_target(fit_id: int, fit_name: str, ship_id: int, ship_name: str, ship_target: int) -> bool:
+    created_at = datetime.datetime.strftime(datetime.datetime.now(datetime.timezone.utc), '%Y-%m-%d %H:%M:%S')
     db = DatabaseConfig("wcmkt")
-    stmt = text("""INSERT INTO ship_targets ('fit_id', 'fit_name', 'ship_id', 'ship_name', 'ship_target', 'created_at')
-    VALUES (494, '2507  WC-EN Shield DPS HFI v1.0', 33157, 'Hurricane Fleet Issue', 100, '2025-07-05 00:00:00')""")
     engine = db.remote_engine
     with engine.connect() as conn:
-        conn.execute(stmt)
+        stmt = text("INSERT INTO ship_targets ('fit_id', 'fit_name', 'ship_id', 'ship_name', 'ship_target', 'created_at') VALUES (:fit_id, :fit_name, :ship_id, :ship_name, :ship_target, :created_at)")
+        conn.execute(stmt, {"fit_id": fit_id, "fit_name": fit_name, "ship_id": ship_id, "ship_name": ship_name, "ship_target": ship_target, "created_at": created_at})
         conn.commit()
         print("Ship target added")
     conn.close()
     engine.dispose()
+    return True
 
 def add_doctrine_map_from_fittings_doctrine_fittings(doctrine_id: int):
     db = DatabaseConfig("fittings")
@@ -154,7 +246,7 @@ def add_hurricane_fleet_issue_to_doctrines():
 
     return True
 
-def add_fit_to_doctrines_table(DoctrineFit: DoctrineFit):
+def add_fit_to_doctrines_table(DoctrineFit: DoctrineFitItems):
     db = DatabaseConfig("wcmkt")
     stmt = text("""INSERT INTO doctrines ('fit_id', 'fit_name', 'ship_id', 'ship_name', 'ship_target', 'created_at')
     VALUES (494, '2507  WC-EN Shield DPS HFI v1.0', 33157, 'Hurricane Fleet Issue', 100, '2025-07-05 00:00:00')""")
@@ -165,7 +257,6 @@ def add_fit_to_doctrines_table(DoctrineFit: DoctrineFit):
         print("Fit added to doctrines table")
     conn.close()
     engine.dispose()
-
 
 def add_lead_ship():
     hfi = LeadShips(doctrine_name=doctrine_name, doctrine_id=84, lead_ship=ship_id, fit_id=doctrine_fit_id)
@@ -178,10 +269,10 @@ def add_lead_ship():
         print("Lead ship added")
     session.close()
 
-def process_hfi_fit_items(type_ids: list[int]) -> list[DoctrineFit]:
+def process_hfi_fit_items(type_ids: list[int]) -> list[DoctrineFitItems]:
     items = []
     for type_id in type_ids:
-        item = DoctrineFit(
+        item = DoctrineFitItems(
             fit_id=494,
             ship_id=33157,
             ship_name='Hurricane Fleet Issue',
@@ -270,7 +361,7 @@ def add_doctrine_fits_to_wcmkt(df: pd.DataFrame, remote: bool = False):
     session = Session(engine)
     with session.begin():
         for index, row in df.iterrows():
-            fit = DoctrineFit(doctrine_name=row["doctrine_name"], fit_name=row["fit_name"], ship_type_id=row["ship_type_id"], ship_name=row["ship_name"], fit_id=row["fit_id"], doctrine_id=row["doctrine_id"], target=row["target"])
+            fit = DoctrineFitItems(doctrine_name=row["doctrine_name"], fit_name=row["fit_name"], ship_type_id=row["ship_type_id"], ship_name=row["ship_name"], fit_id=row["fit_id"], doctrine_id=row["doctrine_id"], target=row["target"])
             session.add(fit)
             print(f"Added {fit.fit_name} to doctrine_fits table")
     session.commit()
