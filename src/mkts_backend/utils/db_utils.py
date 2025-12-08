@@ -13,7 +13,7 @@ logger = configure_logging(__name__)
 sde_db = DatabaseConfig("sde")
 wcmkt_db = DatabaseConfig("wcmkt")
 
-def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = False):
+def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = False, db_alias: str = "wcmkt"):
     """
     Add missing items to the watchlist by fetching type information from SDE database.
 
@@ -38,7 +38,7 @@ def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = Fals
         return "No type information found for provided type IDs"
 
     # Get current watchlist to check for duplicates
-    db = DatabaseConfig("wcmkt")
+    db = DatabaseConfig(db_alias)
     logger.info(f"Database config: {db.alias}")
     logger.info(f"Remote engine: {remote}")
 
@@ -68,7 +68,7 @@ def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = Fals
 
     # Insert new items into local database (not remote - we don't want to affect production watchlist)
     try:
-        db = DatabaseConfig("wcmkt")
+        db = DatabaseConfig(db_alias)
         engine = db.remote_engine if remote else db.engine
 
         with engine.connect() as conn:
@@ -135,7 +135,6 @@ def update_watchlist_tables(missing_items: list[int]):
                 logger.info(f"Added {row['type_name']} (ID: {row['type_id']}) to watchlist")
             except Exception as e:
                 logger.warning(f"Item {row['type_id']} may already exist in watchlist: {e}")
-
 
 def export_doctrines_to_csv(db_alias: str = "wcmkt", output_file: str = "doctrines_backup.csv"):
     """
@@ -291,5 +290,6 @@ def restore_watchlist_from_csv(csv_file: str = "data/watchlist_updated.csv", rem
     conn.close()
     engine.dispose()
     logger.info(f"Restored watchlist from {csv_file} to {db.alias}")
+
 if __name__ == "__main__":
     pass

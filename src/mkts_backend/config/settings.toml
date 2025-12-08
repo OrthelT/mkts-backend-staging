@@ -21,6 +21,10 @@ production_database_file = "wcmktprod.db"
 testing_database_alias = "wcmkttest"
 testing_database_file = "wcmkttest.db"
 
+# North market (secondary production) database
+north_database_alias = "wcmktnorth"
+north_database_file = "wcmktnorth2.db"
+
 [market_data]
 primary_market_region_id = 10000003
 secondary_market_region_id = 'None'

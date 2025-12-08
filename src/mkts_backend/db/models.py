@@ -171,7 +171,7 @@ class DoctrineInfo(Base):
     doctrine_id: Mapped[int] = mapped_column(Integer)
     doctrine_name: Mapped[str] = mapped_column(String)
 
-class DoctrineFit(Base):
+class DoctrineFitItems(Base):
     __tablename__ = "doctrine_fits"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     doctrine_name: Mapped[str] = mapped_column(String)
