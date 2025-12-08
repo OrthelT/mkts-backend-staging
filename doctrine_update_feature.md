@@ -39,3 +39,4 @@ There is a great deal of existing code from my past incomplete attempts to imple
   `mkts-backend update-fit --fit-file=new_zealot993.txt --meta-file=new_zealot_metadata.json`
 - Defaults to local databases; add `--remote` to target production.  
 - Use `--no-clear` to keep existing `fittings_fittingitem` rows; `--dry-run` to preview parsed items without writing.
+- To target the north market DB (`wcmktnorth2.db`), add `--target=wcmktnorth` (or `--north`) to the update-fit command; other flags behave the same.

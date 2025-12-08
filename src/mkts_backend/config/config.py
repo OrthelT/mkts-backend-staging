@@ -31,6 +31,8 @@ class DatabaseConfig:
     _production_db_file = settings["db"]["production_database_file"]
     _testing_db_alias = settings["db"]["testing_database_alias"]
     _testing_db_file = settings["db"]["testing_database_file"]
+    _north_db_alias = settings["db"].get("north_database_alias", "wcmktnorth")
+    _north_db_file = settings["db"].get("north_database_file", "wcmktnorth2.db")
 
 
     _db_paths = {
@@ -38,6 +40,7 @@ class DatabaseConfig:
         "sde": "sde.db",
         "fittings": "wcfitting.db",
         _production_db_alias: _production_db_file,
+        _north_db_alias: _north_db_file,
     }
 
     _db_turso_urls = {
@@ -45,6 +48,7 @@ class DatabaseConfig:
         _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_URL"),
         "sde_turso": os.getenv("TURSO_SDE_URL"),
         "fittings_turso": os.getenv("TURSO_FITTING_URL"),
+        _north_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_URL"),
     }
 
     _db_turso_auth_tokens = {
@@ -52,6 +56,7 @@ class DatabaseConfig:
         _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_TOKEN"),
         "sde_turso": os.getenv("TURSO_SDE_TOKEN"),
         "fittings_turso": os.getenv("TURSO_FITTING_TOKEN"),
+        _north_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_TOKEN"),
     }
 
     def __init__(self, alias: str, dialect: str = "sqlite+libsql"):

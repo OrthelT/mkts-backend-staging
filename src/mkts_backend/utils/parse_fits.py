@@ -436,6 +436,7 @@ def update_fit_workflow(
     remote: bool = False,
     clear_existing: bool = True,
     dry_run: bool = False,
+    target_alias: str = "wcmkt",
 ):
     """
     End-to-end update for a fit:
@@ -473,8 +474,8 @@ def update_fit_workflow(
     doctrine_fit = DoctrineFit(doctrine_id=metadata.doctrine_id, fit_id=fit_id, target=metadata.target)
 
     # Propagate to market/production dbs
-    upsert_doctrine_fits(doctrine_fit, remote=remote)
-    upsert_doctrine_map(doctrine_fit.doctrine_id, doctrine_fit.fit_id, remote=remote)
+    upsert_doctrine_fits(doctrine_fit, remote=remote, db_alias=target_alias)
+    upsert_doctrine_map(doctrine_fit.doctrine_id, doctrine_fit.fit_id, remote=remote, db_alias=target_alias)
     upsert_ship_target(
         fit_id=doctrine_fit.fit_id,
         fit_name=doctrine_fit.fit_name,
@@ -482,18 +483,20 @@ def update_fit_workflow(
         ship_name=doctrine_fit.ship_name,
         ship_target=metadata.target,
         remote=remote,
+        db_alias=target_alias,
     )
     refresh_doctrines_for_fit(
         fit_id=doctrine_fit.fit_id,
         ship_id=doctrine_fit.ship_type_id,
         ship_name=doctrine_fit.ship_name,
         remote=remote,
+        db_alias=target_alias,
     )
 
     # Add missing items to watchlist in wcmkt
     type_ids = {item["type_id"] for item in parse_result.items}
     type_ids.add(ship_type_id)
-    add_missing_items_to_watchlist(list(type_ids), remote=remote)
+    add_missing_items_to_watchlist(list(type_ids), remote=remote, db_alias=target_alias)
     logger.info(
         f"Completed fit update for fit_id={fit_id}, doctrine_id={metadata.doctrine_id} (remote={remote})"
     )

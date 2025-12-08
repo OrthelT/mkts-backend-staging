@@ -13,7 +13,7 @@ logger = configure_logging(__name__)
 sde_db = DatabaseConfig("sde")
 wcmkt_db = DatabaseConfig("wcmkt")
 
-def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = False):
+def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = False, db_alias: str = "wcmkt"):
     """
     Add missing items to the watchlist by fetching type information from SDE database.
 
@@ -38,7 +38,7 @@ def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = Fals
         return "No type information found for provided type IDs"
 
     # Get current watchlist to check for duplicates
-    db = DatabaseConfig("wcmkt")
+    db = DatabaseConfig(db_alias)
     logger.info(f"Database config: {db.alias}")
     logger.info(f"Remote engine: {remote}")
 
@@ -68,7 +68,7 @@ def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = Fals
 
     # Insert new items into local database (not remote - we don't want to affect production watchlist)
     try:
-        db = DatabaseConfig("wcmkt")
+        db = DatabaseConfig(db_alias)
         engine = db.remote_engine if remote else db.engine
 
         with engine.connect() as conn:

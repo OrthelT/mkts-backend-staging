@@ -51,12 +51,12 @@ def check_tables():
     db.engine.dispose()
 
 def display_cli_help():
-    print("\nUsage: mkts-backend [--history|--include-history] [--check_tables] [add_watchlist --type_id=<list[int]>] [parse-items --input=<file> --output=<file>] [update-fit --fit-file=<path> --meta-file=<path> [--remote] [--no-clear] [--dry-run]]\n")
+    print("\nUsage: mkts-backend [--history|--include-history] [--check_tables] [add_watchlist --type_id=<list[int]>] [parse-items --input=<file> --output=<file>] [update-fit --fit-file=<path> --meta-file=<path> [--remote] [--no-clear] [--dry-run] [--target=<wcmkt|wcmktnorth>|--north]]\n")
     print("""Options:\n
   [--history | --include-history]: Include history processing\n
   [--check_tables]:  Check the tables in the database\n
   [add_watchlist]: --type_id=<list>: Add items to watchlist by type IDs (comma-separated --type_id=81144,88001,89240)\n
-  [update-fit]: Process an EFT fit file and metadata and update doctrine tables (defaults local, add --remote for production, --no-clear to keep existing items, --dry-run to preview)\n
+  [update-fit]: Process an EFT fit file and metadata and update doctrine tables (defaults local, add --remote for production, --no-clear to keep existing items, --dry-run to preview; use --target=wcmktnorth or --north to write to north DB)\n
   [--local]: Use local database instead of remote for commands that default to remote\n
   [parse-items --input=<file> --output=<file>]: Parse Eve structure data and create CSV with pricing from database\n
   [sync]: Sync the database\n
@@ -260,11 +260,16 @@ def parse_args(args: list[str])->dict | None:
     if "update-fit" in args:
         fit_file = None
         meta_file = None
+        target_alias = "wcmkt"
         for arg in args:
             if arg.startswith("--fit-file="):
                 fit_file = arg.split("=", 1)[1]
             if arg.startswith("--meta-file="):
                 meta_file = arg.split("=", 1)[1]
+            if arg.startswith("--target="):
+                target_alias = arg.split("=", 1)[1]
+            if arg == "--north":
+                target_alias = "wcmktnorth"
 
         if not fit_file or not meta_file:
             print("Error: --fit-file and --meta-file are required for update-fit")
@@ -273,6 +278,10 @@ def parse_args(args: list[str])->dict | None:
         remote = "--remote" in args  # default to local per user preference
         clear_existing = "--no-clear" not in args
         dry_run = "--dry-run" in args
+
+        if target_alias not in {"wcmkt", "wcmktnorth"}:
+            print("Error: --target must be one of: wcmkt, wcmktnorth")
+            return None
 
         try:
             metadata = parse_fit_metadata(meta_file)
@@ -283,6 +292,7 @@ def parse_args(args: list[str])->dict | None:
                 remote=remote,
                 clear_existing=clear_existing,
                 dry_run=dry_run,
+                target_alias=target_alias,
             )
             if dry_run:
                 print("Dry run complete")

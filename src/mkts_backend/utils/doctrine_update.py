@@ -124,11 +124,11 @@ class DoctrineFit:
                 conn.commit()
 
 
-def upsert_doctrine_fits(doctrine_fit: DoctrineFit, remote: bool = False) -> None:
+def upsert_doctrine_fits(doctrine_fit: DoctrineFit, remote: bool = False, db_alias: str = "wcmkt") -> None:
     """
     Upsert doctrine_fits entry keyed by fit_id.
     """
-    engine = _get_engine("wcmkt", remote)
+    engine = _get_engine(db_alias, remote)
     with engine.connect() as conn:
         existing = conn.execute(
             text("SELECT id FROM doctrine_fits WHERE fit_id = :fit_id"),
@@ -171,8 +171,8 @@ def upsert_doctrine_fits(doctrine_fit: DoctrineFit, remote: bool = False) -> Non
     logger.info(f"Upserted doctrine_fits for fit_id {doctrine_fit.fit_id}")
 
 
-def upsert_doctrine_map(doctrine_id: int, fit_id: int, remote: bool = False) -> None:
-    engine = _get_engine("wcmkt", remote)
+def upsert_doctrine_map(doctrine_id: int, fit_id: int, remote: bool = False, db_alias: str = "wcmkt") -> None:
+    engine = _get_engine(db_alias, remote)
     with engine.connect() as conn:
         exists = conn.execute(
             text("SELECT 1 FROM doctrine_map WHERE doctrine_id = :doctrine_id AND fitting_id = :fit_id"),
@@ -211,12 +211,12 @@ class DoctrineFitItems:
     def __post_init__(self):
         self.timestamp = datetime.datetime.strftime(datetime.datetime.now(datetime.timezone.utc), '%Y-%m-%d %H:%M:%S')
 
-def upsert_ship_target(fit_id: int, fit_name: str, ship_id: int, ship_name: str, ship_target: int, remote: bool = False) -> bool:
+def upsert_ship_target(fit_id: int, fit_name: str, ship_id: int, ship_name: str, ship_target: int, remote: bool = False, db_alias: str = "wcmkt") -> bool:
     """
     Upsert ship_targets entry keyed by fit_id.
     """
     created_at = datetime.datetime.strftime(datetime.datetime.now(datetime.timezone.utc), '%Y-%m-%d %H:%M:%S')
-    engine = _get_engine("wcmkt", remote)
+    engine = _get_engine(db_alias, remote)
     with engine.connect() as conn:
         stmt = text(
             """
@@ -447,7 +447,7 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
         logger.info(f"Added {type_info.type_name} to watchlist")
         print(f"Added {type_info.type_name} to watchlist")
 
-def refresh_doctrines_for_fit(fit_id: int, ship_id: int, ship_name: str, remote: bool = False) -> None:
+def refresh_doctrines_for_fit(fit_id: int, ship_id: int, ship_name: str, remote: bool = False, db_alias: str = "wcmkt") -> None:
     """
     Rebuild doctrines table rows for a fit based on fittings_fittingitem content.
     """
@@ -466,8 +466,8 @@ def refresh_doctrines_for_fit(fit_id: int, ship_id: int, ship_name: str, remote:
     if ship_id not in [c[0] for c in components]:
         components.append((ship_id, 1))
 
-    doctrines_engine = _get_engine("wcmkt", remote)
-    stats_engine = _get_engine("wcmkt", remote)
+    doctrines_engine = _get_engine(db_alias, remote)
+    stats_engine = _get_engine(db_alias, remote)
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     # Pull market stats once into dict for quick lookup
