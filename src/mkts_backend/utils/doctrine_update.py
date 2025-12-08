@@ -55,7 +55,10 @@ class DoctrineFit:
         with engine.connect() as conn:
             stmt = text("SELECT * FROM fittings_doctrine WHERE id = :doctrine_id")
             result = conn.execute(stmt, {"doctrine_id": self.doctrine_id})
-            name = result.fetchone()[1]
+            row = result.fetchone()
+            if row is None:
+                raise ValueError(f"Doctrine {self.doctrine_id} not found in fittings_doctrine")
+            name = row[1]
             return name.strip()
 
     def get_ship_type_id(self):
@@ -64,7 +67,10 @@ class DoctrineFit:
         with engine.connect() as conn:
             stmt = text("SELECT * FROM fittings_fitting WHERE id = :fit_id")
             result = conn.execute(stmt, {"fit_id": self.fit_id})
-            type_id = result.fetchone()[4]
+            row = result.fetchone()
+            if row is None:
+                raise ValueError(f"Fit {self.fit_id} not found in fittings_fitting")
+            type_id = row[4]
             return type_id
 
     def get_fit_name(self):
@@ -73,7 +79,10 @@ class DoctrineFit:
         with engine.connect() as conn:
             stmt = text("SELECT * FROM fittings_fitting WHERE id = :fit_id")
             result = conn.execute(stmt, {"fit_id": self.fit_id})
-            name = result.fetchone()[2]
+            row = result.fetchone()
+            if row is None:
+                raise ValueError(f"Fit {self.fit_id} not found in fittings_fitting")
+            name = row[2]
             return name.strip()
 
     def get_ship_name(self, remote=False):
@@ -82,7 +91,10 @@ class DoctrineFit:
         with engine.connect() as conn:
             stmt = text("SELECT * FROM inv_info WHERE typeID = :type_id")
             result = conn.execute(stmt, {"type_id": self.ship_type_id})
-            name = result.fetchone()[1]
+            row = result.fetchone()
+            if row is None:
+                raise ValueError(f"Ship type_id {self.ship_type_id} not found in inv_info")
+            name = row[1]
             return name.strip()
 
     def add_wcmkts2_doctrine_fits(self, remote=False):
