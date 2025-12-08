@@ -138,13 +138,13 @@ class DoctrineFit:
 
 def upsert_doctrine_fits(doctrine_fit: DoctrineFit, remote: bool = False, db_alias: str = "wcmkt") -> None:
     """
-    Upsert doctrine_fits entry keyed by fit_id.
+    Upsert doctrine_fits entry keyed by (doctrine_id, fit_id).
     """
     engine = _get_engine(db_alias, remote)
     with engine.connect() as conn:
         existing = conn.execute(
-            text("SELECT id FROM doctrine_fits WHERE fit_id = :fit_id"),
-            {"fit_id": doctrine_fit.fit_id},
+            text("SELECT id FROM doctrine_fits WHERE fit_id = :fit_id AND doctrine_id = :doctrine_id"),
+            {"fit_id": doctrine_fit.fit_id, "doctrine_id": doctrine_fit.doctrine_id},
         ).fetchone()
         if existing:
             stmt = text(
@@ -156,7 +156,7 @@ def upsert_doctrine_fits(doctrine_fit: DoctrineFit, remote: bool = False, db_ali
                     doctrine_id = :doctrine_id,
                     ship_name = :ship_name,
                     target = :target
-                WHERE fit_id = :fit_id
+                WHERE fit_id = :fit_id AND doctrine_id = :doctrine_id
                 """
             )
         else:
@@ -194,9 +194,12 @@ def upsert_doctrine_map(doctrine_id: int, fit_id: int, remote: bool = False, db_
             if exists:
                 logger.info(f"doctrine_map already present for doctrine_id={doctrine_id}, fit_id={fit_id}")
                 return
+            next_id = conn.execute(
+                text("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM doctrine_map")
+            ).scalar_one()
             conn.execute(
-                text("INSERT INTO doctrine_map (doctrine_id, fitting_id) VALUES (:doctrine_id, :fit_id)"),
-                {"doctrine_id": doctrine_id, "fit_id": fit_id},
+                text("INSERT INTO doctrine_map (id, doctrine_id, fitting_id) VALUES (:id, :doctrine_id, :fit_id)"),
+                {"id": next_id, "doctrine_id": doctrine_id, "fit_id": fit_id},
             )
             conn.commit()
             logger.info(f"Upserted doctrine_map entry doctrine_id={doctrine_id}, fit_id={fit_id}")

@@ -1,11 +1,12 @@
 import re
 import json
 from dataclasses import dataclass, field
-from typing import Generator, Optional, Tuple, List, Dict
+from typing import Any, Generator, Optional, Tuple, List, Dict
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, bindparam
+
 import pandas as pd
 
 from mkts_backend.config.logging_config import configure_logging
@@ -81,13 +82,30 @@ class FitMetadata:
     description: str
     name: str
     fit_id: int
-    doctrine_id: int
+    doctrine_id: Any  # Accept int or list from metadata for backward compatibility
     target: int
     ship_type_id: Optional[int] = None
     ship_name: Optional[str] = None
     last_updated: datetime = field(init=False)
+    doctrine_ids: List[int] = field(init=False)
+
     def __post_init__(self):
         self.last_updated = datetime.now().astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        self.doctrine_ids = self._normalize_doctrine_ids(self.doctrine_id)
+        # Maintain legacy single-doctrine access
+        self.doctrine_id = self.doctrine_ids[0]
+
+    @staticmethod
+    def _normalize_doctrine_ids(raw_value: Any) -> List[int]:
+        if isinstance(raw_value, (list, tuple, set)):
+            ids = [int(v) for v in raw_value if v is not None]
+        elif raw_value is None:
+            raise ValueError("doctrine_id is required in metadata")
+        else:
+            ids = [int(raw_value)]
+        if not ids:
+            raise ValueError("doctrine_id list is empty after normalization")
+        return ids
 
 
 @dataclass
@@ -419,11 +437,14 @@ def ensure_doctrine_link(doctrine_id: int, fit_id: int, remote: bool = False) ->
         ).fetchone()
         if exists:
             return
+        next_id = conn.execute(
+            text("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM fittings_doctrine_fittings")
+        ).scalar_one()
         conn.execute(
             text(
-                "INSERT INTO fittings_doctrine_fittings (doctrine_id, fitting_id) VALUES (:doctrine_id, :fit_id)"
+                "INSERT INTO fittings_doctrine_fittings (id, doctrine_id, fitting_id) VALUES (:id, :doctrine_id, :fit_id)"
             ),
-            {"doctrine_id": doctrine_id, "fit_id": fit_id},
+            {"id": next_id, "doctrine_id": doctrine_id, "fit_id": fit_id},
         )
         conn.commit()
     logger.info(f"Linked doctrine_id {doctrine_id} to fit_id {fit_id} in fittings_doctrine_fittings")
@@ -472,26 +493,28 @@ def update_fit_workflow(
     # Upsert core fitting data
     upsert_fittings_fitting(metadata, ship_type_id, remote=remote)
     insert_fit_items_to_db(parse_result.items, fit_id=fit_id, clear_existing=clear_existing, remote=remote)
-    ensure_doctrine_link(metadata.doctrine_id, fit_id, remote=remote)
+    for doctrine_id in metadata.doctrine_ids:
+        ensure_doctrine_link(doctrine_id, fit_id, remote=remote)
 
-    doctrine_fit = DoctrineFit(doctrine_id=metadata.doctrine_id, fit_id=fit_id, target=metadata.target)
+        doctrine_fit = DoctrineFit(doctrine_id=doctrine_id, fit_id=fit_id, target=metadata.target)
 
-    # Propagate to market/production dbs
-    upsert_doctrine_fits(doctrine_fit, remote=remote, db_alias=target_alias)
-    upsert_doctrine_map(doctrine_fit.doctrine_id, doctrine_fit.fit_id, remote=remote, db_alias=target_alias)
+        # Propagate to market/production dbs
+        upsert_doctrine_fits(doctrine_fit, remote=remote, db_alias=target_alias)
+        upsert_doctrine_map(doctrine_fit.doctrine_id, doctrine_fit.fit_id, remote=remote, db_alias=target_alias)
+
     upsert_ship_target(
-        fit_id=doctrine_fit.fit_id,
-        fit_name=doctrine_fit.fit_name,
-        ship_id=doctrine_fit.ship_type_id,
-        ship_name=doctrine_fit.ship_name,
+        fit_id=fit_id,
+        fit_name=parse_result.fit_name,
+        ship_id=ship_type_id,
+        ship_name=parse_result.ship_name,
         ship_target=metadata.target,
         remote=remote,
         db_alias=target_alias,
     )
     refresh_doctrines_for_fit(
-        fit_id=doctrine_fit.fit_id,
-        ship_id=doctrine_fit.ship_type_id,
-        ship_name=doctrine_fit.ship_name,
+        fit_id=fit_id,
+        ship_id=ship_type_id,
+        ship_name=parse_result.ship_name,
         remote=remote,
         db_alias=target_alias,
     )
@@ -501,7 +524,7 @@ def update_fit_workflow(
     type_ids.add(ship_type_id)
     add_missing_items_to_watchlist(list(type_ids), remote=remote, db_alias=target_alias)
     logger.info(
-        f"Completed fit update for fit_id={fit_id}, doctrine_id={metadata.doctrine_id} (remote={remote})"
+        f"Completed fit update for fit_id={fit_id}, doctrine_ids={metadata.doctrine_ids} (remote={remote})"
     )
 
 
