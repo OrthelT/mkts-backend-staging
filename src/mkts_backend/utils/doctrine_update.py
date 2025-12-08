@@ -452,18 +452,21 @@ def refresh_doctrines_for_fit(fit_id: int, ship_id: int, ship_name: str, remote:
     """
     # Aggregate component quantities from fittings
     fittings_engine = _get_engine("fittings", remote)
-    with fittings_engine.connect() as conn:
-        rows = conn.execute(
-            text(
-                "SELECT type_id, SUM(quantity) as qty FROM fittings_fittingitem WHERE fit_id = :fit_id GROUP BY type_id"
-            ),
-            {"fit_id": fit_id},
-        ).fetchall()
+    try:
+        with fittings_engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT type_id, SUM(quantity) as qty FROM fittings_fittingitem WHERE fit_id = :fit_id GROUP BY type_id"
+                ),
+                {"fit_id": fit_id},
+            ).fetchall()
 
-    components = [(row.type_id, row.qty) for row in rows]
-    # Ensure hull present (qty 1)
-    if ship_id not in [c[0] for c in components]:
-        components.append((ship_id, 1))
+        components = [(row.type_id, row.qty) for row in rows]
+        # Ensure hull present (qty 1)
+        if ship_id not in [c[0] for c in components]:
+            components.append((ship_id, 1))
+    finally:
+        fittings_engine.dispose()
 
     doctrines_engine = _get_engine(db_alias, remote)
     stats_engine = _get_engine(db_alias, remote)
