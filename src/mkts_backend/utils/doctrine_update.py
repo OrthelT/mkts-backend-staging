@@ -218,20 +218,16 @@ def upsert_ship_target(fit_id: int, fit_name: str, ship_id: int, ship_name: str,
     created_at = datetime.datetime.strftime(datetime.datetime.now(datetime.timezone.utc), '%Y-%m-%d %H:%M:%S')
     engine = _get_engine(db_alias, remote)
     with engine.connect() as conn:
-        stmt = text(
+        # Some schemas (e.g., wcmktnorth2) lack PK/unique constraint on fit_id; use delete-then-insert.
+        conn.execute(text("DELETE FROM ship_targets WHERE fit_id = :fit_id"), {"fit_id": fit_id})
+        insert_stmt = text(
             """
             INSERT INTO ship_targets (fit_id, fit_name, ship_id, ship_name, ship_target, created_at)
             VALUES (:fit_id, :fit_name, :ship_id, :ship_name, :ship_target, :created_at)
-            ON CONFLICT(fit_id) DO UPDATE SET
-                fit_name = excluded.fit_name,
-                ship_id = excluded.ship_id,
-                ship_name = excluded.ship_name,
-                ship_target = excluded.ship_target,
-                created_at = excluded.created_at
             """
         )
         conn.execute(
-            stmt,
+            insert_stmt,
             {
                 "fit_id": fit_id,
                 "fit_name": fit_name,
