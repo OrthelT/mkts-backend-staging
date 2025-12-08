@@ -448,23 +448,26 @@ def update_fit_workflow(
     metadata = parse_fit_metadata(fit_metadata_file)
     sde_engine = _get_engine("sde", False)
 
-    parse_result = parse_eft_fit_file(fit_file, fit_id, sde_engine)
-    metadata.ship_name = parse_result.ship_name
+    try:
+        parse_result = parse_eft_fit_file(fit_file, fit_id, sde_engine)
+        metadata.ship_name = parse_result.ship_name
 
-    with sde_engine.connect() as conn:
-        ship_type_id = metadata.ship_type_id or _resolve_ship_type_id(parse_result.ship_name, conn)
+        with sde_engine.connect() as conn:
+            ship_type_id = metadata.ship_type_id or _resolve_ship_type_id(parse_result.ship_name, conn)
 
-    if ship_type_id is None:
-        raise ValueError(f"Could not resolve ship type id for ship '{parse_result.ship_name}'")
+        if ship_type_id is None:
+            raise ValueError(f"Could not resolve ship type id for ship '{parse_result.ship_name}'")
 
-    if dry_run:
-        return {
-            "fit_id": fit_id,
-            "ship_name": parse_result.ship_name,
-            "ship_type_id": ship_type_id,
-            "items": parse_result.items,
-            "missing_items": parse_result.missing_types,
-        }
+        if dry_run:
+            return {
+                "fit_id": fit_id,
+                "ship_name": parse_result.ship_name,
+                "ship_type_id": ship_type_id,
+                "items": parse_result.items,
+                "missing_items": parse_result.missing_types,
+            }
+    finally:
+        sde_engine.dispose()
 
     # Upsert core fitting data
     upsert_fittings_fitting(metadata, ship_type_id, remote=remote)
