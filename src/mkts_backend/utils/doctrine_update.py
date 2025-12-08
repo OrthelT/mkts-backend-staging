@@ -189,7 +189,7 @@ def upsert_doctrine_map(doctrine_id: int, fit_id: int, remote: bool = False, db_
     logger.info(f"Upserted doctrine_map entry doctrine_id={doctrine_id}, fit_id={fit_id}")
 
 @dataclass
-class DoctrineFitItems:
+class DoctrineComponent:
     fit_id: int
     ship_id: int
     ship_name: str
@@ -359,10 +359,10 @@ def add_lead_ship():
         print("Lead ship added")
     session.close()
 
-def process_hfi_fit_items(type_ids: list[int]) -> list[DoctrineFitItems]:
+def process_hfi_fit_items(type_ids: list[int]) -> list[DoctrineComponent]:
     items = []
     for type_id in type_ids:
-        item = DoctrineFitItems(
+        item = DoctrineComponent(
             fit_id=494,
             ship_id=33157,
             ship_name='Hurricane Fleet Issue',
