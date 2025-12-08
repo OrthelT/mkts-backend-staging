@@ -173,20 +173,23 @@ def upsert_doctrine_fits(doctrine_fit: DoctrineFit, remote: bool = False, db_ali
 
 def upsert_doctrine_map(doctrine_id: int, fit_id: int, remote: bool = False, db_alias: str = "wcmkt") -> None:
     engine = _get_engine(db_alias, remote)
-    with engine.connect() as conn:
-        exists = conn.execute(
-            text("SELECT 1 FROM doctrine_map WHERE doctrine_id = :doctrine_id AND fitting_id = :fit_id"),
-            {"doctrine_id": doctrine_id, "fit_id": fit_id},
-        ).fetchone()
-        if exists:
-            return
-        conn.execute(
-            text("INSERT INTO doctrine_map (doctrine_id, fitting_id) VALUES (:doctrine_id, :fit_id)"),
-            {"doctrine_id": doctrine_id, "fit_id": fit_id},
-        )
-        conn.commit()
-    engine.dispose()
-    logger.info(f"Upserted doctrine_map entry doctrine_id={doctrine_id}, fit_id={fit_id}")
+    try:
+        with engine.connect() as conn:
+            exists = conn.execute(
+                text("SELECT 1 FROM doctrine_map WHERE doctrine_id = :doctrine_id AND fitting_id = :fit_id"),
+                {"doctrine_id": doctrine_id, "fit_id": fit_id},
+            ).fetchone()
+            if exists:
+                logger.info(f"doctrine_map already present for doctrine_id={doctrine_id}, fit_id={fit_id}")
+                return
+            conn.execute(
+                text("INSERT INTO doctrine_map (doctrine_id, fitting_id) VALUES (:doctrine_id, :fit_id)"),
+                {"doctrine_id": doctrine_id, "fit_id": fit_id},
+            )
+            conn.commit()
+            logger.info(f"Upserted doctrine_map entry doctrine_id={doctrine_id}, fit_id={fit_id}")
+    finally:
+        engine.dispose()
 
 @dataclass
 class DoctrineComponent:
