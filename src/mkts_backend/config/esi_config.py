@@ -1,8 +1,11 @@
 from mkts_backend.esi.esi_auth import get_token
 from mkts_backend.config.logging_config import configure_logging
+from mkts_backend.config.config import load_settings, settings_file
 
 logger = configure_logging(__name__)
 
+
+settings = load_settings(settings_file)
 
 class ESIConfig:
     """ESI configuration for primary and secondary markets."""
@@ -10,9 +13,9 @@ class ESIConfig:
     _region_ids = {"primary_region_id": 10000003, "secondary_region_id": None}
     _system_ids = {"primary_system_id": 30000240, "secondary_system_id": None}
     _structure_ids = {"primary_structure_id": 1035466617946, "secondary_structure_id": None}
-    _valid_aliases = ["primary", "secondary"] #primary is the default market, secondary is the secondary market, and is currently unused.
-    _shortcut_aliases = {"4h": "primary", "nakah": "secondary"}
-    _names = {"primary": "4-HWWF Keepstar", "secondary": "Nakah I - Moon 1 - Thukker Mix Factory"}
+    _valid_aliases = ["primary"] #primary is the default market, secondary is the secondary market, and is currently unused.
+    _shortcut_aliases = {"4h": "primary"}
+    _names = {"primary": "4-HWWF Keepstar"}
 
     def __init__(self, alias: str):
         alias = alias.lower()
@@ -29,8 +32,8 @@ class ESIConfig:
         self.system_id = self._system_ids[f"{self.alias}_system_id"]
         self.structure_id = self._structure_ids[f"{self.alias}_structure_id"]
 
-        self.user_agent = 'wcmkts_backend/2.1dev, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)'
-        self.compatibility_date = "2025-08-26"
+        self.user_agent = settings["esi"]["user_agent"]
+        self.compatibility_date = settings["esi"]["compatibility_date"]
 
     def token(self, scope: str = "esi-markets.structure_markets.v1"):
         return get_token(scope)

@@ -1,6 +1,5 @@
-from sqlalchemy import String, Integer, DateTime, Float, Boolean, event, create_engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
-from mkts_backend.utils.utils import get_type_name
+from sqlalchemy import String, Integer, DateTime, Float, Boolean, event
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class Base(DeclarativeBase):
     pass
@@ -30,7 +29,6 @@ class MarketStats(Base):
             f"category_name={self.category_name!r}, days_remaining={self.days_remaining!r}, "
             f"last_update={self.last_update!r})"
         )
-
 
 class MarketOrders(Base):
     __tablename__ = "marketorders"
@@ -150,20 +148,6 @@ class Watchlist(Base):
             f"group_name={self.group_name!r}, category_id={self.category_id!r}, category_name={self.category_name!r})"
         )
 
-class NakahWatchlist(Base):
-    __tablename__ = "nakah_watchlist"
-    type_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    group_id: Mapped[int] = mapped_column(Integer)
-    type_name: Mapped[str] = mapped_column(String)
-    group_name: Mapped[str] = mapped_column(String)
-    category_id: Mapped[int] = mapped_column(Integer)
-    category_name: Mapped[str] = mapped_column(String)
-
-    def __repr__(self) -> str:
-        return (
-            f"watchlist(type_id={self.type_id!r}, group_id={self.group_id!r}, type_name={self.type_name!r}, "
-            f"group_name={self.group_name!r}, category_id={self.category_id!r}, category_name={self.category_name!r})"
-        )
 
 class DoctrineInfo(Base):
     __tablename__ = "doctrine_info"
@@ -187,87 +171,6 @@ class DoctrineFitItems(Base):
             f"doctrine_fits(id={self.id!r}, doctrine_name={self.doctrine_name!r}, fit_name={self.fit_name!r}, "
             f"ship_type_id={self.ship_type_id!r}, doctrine_id={self.doctrine_id!r}, fit_id={self.fit_id!r}, "
             f"ship_name={self.ship_name!r}, target={self.target!r})"
-        )
-
-
-class RegionOrders(Base):
-    __tablename__ = "region_orders"
-    order_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    duration: Mapped[int] = mapped_column(Integer)
-    is_buy_order: Mapped[bool] = mapped_column(Boolean)
-    issued: Mapped[DateTime] = mapped_column(DateTime)
-    location_id: Mapped[int] = mapped_column(Integer)
-    min_volume: Mapped[int] = mapped_column(Integer)
-    price: Mapped[float] = mapped_column(Float)
-    range: Mapped[str] = mapped_column(String)
-    system_id: Mapped[int] = mapped_column(Integer)
-    type_id: Mapped[int] = mapped_column(Integer)
-    volume_remain: Mapped[int] = mapped_column(Integer)
-    volume_total: Mapped[int] = mapped_column(Integer)
-
-    @property
-    def resolved_type_name(self) -> str:
-        return get_type_name(self.type_id)
-
-    def __repr__(self) -> str:
-        return (
-            f"region_orders(order_id={self.order_id!r}, duration={self.duration!r}, is_buy_order={self.is_buy_order!r}, "
-            f"issued={self.issued!r}, location_id={self.location_id!r}, min_volume={self.min_volume!r}, "
-            f"price={self.price!r}, range={self.range!r}, system_id={self.system_id!r}, type_id={self.type_id!r}, "
-            f"volume_remain={self.volume_remain!r}, volume_total={self.volume_total!r})"
-        )
-
-
-class RegionHistory(Base):
-    __tablename__ = "region_history"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    type_id: Mapped[int] = mapped_column(Integer)
-    average: Mapped[float] = mapped_column(Float)
-    date: Mapped[DateTime] = mapped_column(DateTime)
-    highest: Mapped[float] = mapped_column(Float)
-    lowest: Mapped[float] = mapped_column(Float)
-    order_count: Mapped[int] = mapped_column(Integer)
-    volume: Mapped[int] = mapped_column(Integer)
-    timestamp: Mapped[DateTime] = mapped_column(DateTime)
-    type_name: Mapped[str] = mapped_column(String)
-
-    @property
-    def resolved_type_name(self) -> str:
-        return get_type_name(self.type_id)
-
-    def __repr__(self) -> str:
-        return (
-            f"region_history(type_id={self.type_id!r}, type_name={self.type_name!r}, average={self.average!r}, "
-            f"date={self.date!r}, highest={self.highest!r}, lowest={self.lowest!r}, "
-            f"order_count={self.order_count!r}, volume={self.volume!r}, timestamp={self.timestamp!r})"
-        )
-
-
-@event.listens_for(RegionHistory, 'before_insert')
-def populate_region_history_type_name(mapper, connection, target):
-    if target.type_id and not target.type_name:
-        try:
-            target.type_name = get_type_name(target.type_id)
-        except Exception:
-            pass
-
-class JitaHistory(Base):
-    __tablename__ = "jita_history"
-    date: Mapped[DateTime] = mapped_column(DateTime, primary_key=True)
-    type_id: Mapped[str] = mapped_column(String(10), primary_key=True)
-    type_name: Mapped[str] = mapped_column(String(100))
-    average: Mapped[float] = mapped_column(Float)
-    volume: Mapped[int] = mapped_column(Integer)
-    highest: Mapped[float] = mapped_column(Float)
-    lowest: Mapped[float] = mapped_column(Float)
-    order_count: Mapped[int] = mapped_column(Integer)
-    timestamp: Mapped[DateTime] = mapped_column(DateTime)
-
-    def __repr__(self) -> str:
-        return (
-            f"jita_history(date={self.date!r}, type_name={self.type_name!r}, type_id={self.type_id!r}, "
-            f"average={self.average!r}, volume={self.volume!r}, highest={self.highest!r}, "
-            f"lowest={self.lowest!r}, order_count={self.order_count!r}, timestamp={self.timestamp!r})"
         )
 
 
