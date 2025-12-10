@@ -4,17 +4,14 @@ import time
 import httpx
 from aiolimiter import AsyncLimiter
 import backoff
-from datetime import datetime
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.config.logging_config import configure_logging
-from mkts_backend.db.models import JitaHistory
-from mkts_backend.utils.utils import get_type_name
 
 logger = configure_logging(__name__)
 request_count = 0
 
-HEADERS = {"User-Agent": "TaylorDataApp/1.0"}
+HEADERS = {"User-Agent": ESIConfig("primary").user_agent}
 
 
 def _on_backoff(details):
@@ -82,40 +79,6 @@ async def async_history(watchlist: list[int] = None, region_id: int = None):
 
 def run_async_history(watchlist: list[int] = None, region_id: int = None):
     return asyncio.run(async_history(watchlist, region_id))
-
-
-def process_jita_history_data(results: list) -> list[JitaHistory]:
-    """Process raw API results into JitaHistory model instances"""
-    processed_records = []
-    timestamp = datetime.now()
-
-    for result in results:
-        type_id = result["type_id"]
-        type_name = get_type_name(type_id)
-
-        for day_data in result["data"]:
-            record = JitaHistory(
-                date=datetime.strptime(day_data["date"], "%Y-%m-%d"),
-                type_name=type_name,
-                type_id=str(type_id),
-                average=day_data["average"],
-                volume=day_data["volume"],
-                highest=day_data["highest"],
-                lowest=day_data["lowest"],
-                order_count=day_data["order_count"],
-                timestamp=timestamp
-            )
-            processed_records.append(record)
-
-    return processed_records
-
-
-# Convenience function for fetching Jita (The Forge) history
-def run_async_jita_history(watchlist: list[int] = None):
-    """Fetch history from The Forge region (Jita) and return processed JitaHistory records"""
-    THE_FORGE_REGION_ID = 10000002
-    results = asyncio.run(async_history(watchlist, THE_FORGE_REGION_ID))
-    return process_jita_history_data(results)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,8 @@
 import pandas as pd
-from sqlalchemy import select, insert, func, or_, delete, text
+from sqlalchemy import select, insert, func, or_, delete
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-import sqlalchemy as sa
 from dotenv import load_dotenv
 from datetime import datetime, timezone
 import time
@@ -18,12 +17,10 @@ from mkts_backend.utils.utils import (
     get_type_names_from_df,
 )
 from mkts_backend.config.logging_config import configure_logging
-from mkts_backend.db.models import Base, MarketHistory, MarketOrders, RegionOrders, UpdateLog, JitaHistory
+from mkts_backend.db.models import Base, MarketHistory, MarketOrders, UpdateLog
 from mkts_backend.config.config import DatabaseConfig
-from mkts_backend.db.db_queries import get_table_length, get_remote_status
-from mkts_backend.esi.esi_requests import fetch_region_orders
+from mkts_backend.db.db_queries import get_table_length
 
-from mkts_backend.utils.utils import sde_db
 
 load_dotenv()
 logger = configure_logging(__name__)
@@ -101,7 +98,7 @@ def handle_nulls(df: pd.DataFrame, tabname: str) -> pd.DataFrame:
 
 def upsert_database(table: Base, df: pd.DataFrame) -> bool:
     """Upsert data into the database
-    
+
     Args:
         table: The table model to update
         df: The DataFrame containing the data to update
@@ -381,7 +378,6 @@ def update_history(history_results: list[dict]):
         return False
     return True
 
-
 def update_market_orders(orders: list[dict]) -> bool:
     """Prepares data for update to the marketorders table, then calls upsert_database to update the table
     
@@ -412,75 +408,6 @@ def update_market_orders(orders: list[dict]) -> bool:
         return True
     else:
         logger.error("Failed to update market orders")
-        return False
-
-
-def update_region_orders(region_id: int, order_type: str = 'sell') -> pd.DataFrame:
-    orders = fetch_region_orders(region_id, order_type)
-    engine = DatabaseConfig("wcmkt").engine
-    session = Session(bind=engine)
-
-    session.query(RegionOrders).delete()
-    session.commit()
-    session.expunge_all()
-    session.close()
-    time.sleep(1)
-    session = Session(bind=engine)
-
-    for order_data in orders:
-        region_order = RegionOrders(
-            order_id=order_data['order_id'],
-            duration=order_data['duration'],
-            is_buy_order=order_data['is_buy_order'],
-            issued=datetime.fromisoformat(order_data['issued'].replace('Z', '+00:00')),
-            location_id=order_data['location_id'],
-            min_volume=order_data['min_volume'],
-            price=order_data['price'],
-            range=order_data['range'],
-            system_id=order_data['system_id'],
-            type_id=order_data['type_id'],
-            volume_remain=order_data['volume_remain'],
-            volume_total=order_data['volume_total']
-        )
-        session.add(region_order)
-
-    session.commit()
-    session.close()
-
-    return pd.DataFrame(orders)
-
-def update_jita_history(jita_records: list[JitaHistory]) -> bool:
-    """Update JitaHistory table with Jita history data"""
-    if not jita_records:
-        logger.error("No Jita history data to process")
-        return False
-
-    # Convert JitaHistory objects to DataFrame
-    records_data = []
-    for record in jita_records:
-        records_data.append({
-            'date': record.date,
-            'type_name': record.type_name,
-            'type_id': record.type_id,
-            'average': record.average,
-            'volume': record.volume,
-            'highest': record.highest,
-            'lowest': record.lowest,
-            'order_count': record.order_count,
-            'timestamp': record.timestamp
-        })
-
-    jita_df = pd.DataFrame.from_records(records_data)
-
-    valid_columns = JitaHistory.__table__.columns.keys()
-    jita_df = validate_columns(jita_df, valid_columns)
-
-    try:
-        upsert_database(JitaHistory, jita_df)
-        logger.info(f"Jita history updated: {len(jita_records)} records")
-        return True
-    except Exception as e:
-        logger.error(f"Jita history update failed: {e}")
         return False
 
 def log_update(table_name: str, remote: bool = False):

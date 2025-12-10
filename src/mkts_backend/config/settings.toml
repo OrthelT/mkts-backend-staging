@@ -2,6 +2,7 @@
 
 [esi]
 user_agent = "wcmkts_backend/2.1dev, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)" #change this to reflect your app please.
+compatibility_date = "2025-08-26"
 
 [auth]
 # esi_client_id, esi_secret_key, and refresh token should be set in .env file for local development. Use secure credential storage (github secrets) in production.
@@ -11,7 +12,7 @@ token_file = "file:token.json"
 [app]
 name = "WinterCo Markets"
 market_name = "4-HWWF"
-environment = "production"  # "production" or "development"
+environment = "development"  # "production" or "development"
 log_level = "info"
 
 [db] # change this to reflect your database. You will need to also edit the database aliases in the .env file and in the .github/workflows/market-data-collection.yml file.

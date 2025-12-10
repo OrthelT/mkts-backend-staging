@@ -1,30 +1,12 @@
 import pandas as pd
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.utils.db_utils import fix_null_doctrine_stats_timestamps
-from mkts_backend.db.models import MarketStats, RegionHistory, MarketHistory
+from mkts_backend.db.models import MarketStats, MarketHistory
 from mkts_backend.config.config import DatabaseConfig
-from mkts_backend.config.esi_config import ESIConfig
-from mkts_backend.esi.esi_requests import fetch_region_history
-from mkts_backend.utils.utils import (
-    add_timestamp,
-    add_autoincrement,
-    validate_columns,
-    convert_datetime_columns,
-    get_type_names_from_df,
-)
-from mkts_backend.db.db_handlers import upsert_database
-from mkts_backend.db.db_queries import (
-    get_table_length,
-    get_remote_status,
-    get_system_orders_from_db,
-)
-from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
-esi = ESIConfig("primary")
 wcmkt_db = DatabaseConfig("wcmkt")
-sde_db = DatabaseConfig("sde")
 
 logger = configure_logging(__name__)
 
