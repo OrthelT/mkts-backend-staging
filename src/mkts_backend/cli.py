@@ -9,10 +9,9 @@ from mkts_backend.db.db_handlers import (
     upsert_database,
     update_history,
     update_market_orders,
-    update_jita_history,
     log_update,
 )
-from mkts_backend.db.models import MarketStats, Doctrines, Base
+from mkts_backend.db.models import MarketStats, Doctrines
 from mkts_backend.utils.utils import (
     validate_columns,
     convert_datetime_columns,
@@ -26,10 +25,9 @@ from sqlalchemy import text
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.esi.esi_requests import fetch_market_orders
-from mkts_backend.esi.async_history import run_async_history, run_async_jita_history
-from mkts_backend.utils.db_utils import check_updates, add_missing_items_to_watchlist
+from mkts_backend.esi.async_history import run_async_history
+from mkts_backend.utils.db_utils import add_missing_items_to_watchlist
 from mkts_backend.utils.parse_items import parse_items
-from mkts_backend.utils.utils import get_type_name
 from mkts_backend.utils.validation import validate_all
 from mkts_backend.utils.parse_fits import update_fit_workflow, parse_fit_metadata
 logger = configure_logging(__name__)

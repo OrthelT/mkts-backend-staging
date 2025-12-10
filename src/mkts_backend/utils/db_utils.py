@@ -1,12 +1,11 @@
 import pandas as pd
-from sqlalchemy import text, insert, create_engine, select, bindparam
+from sqlalchemy import text, insert, select, bindparam
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.db.models import Watchlist, UpdateLog
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 
-from mkts_backend.utils.utils import update_watchlist_data
 
 logger = configure_logging(__name__)
 
@@ -269,10 +268,6 @@ def check_updates(remote: bool = False):
 
     return update_status
 
-def get_time_since_update(table_name: str, remote: bool = False):
-    status = check_updates(remote=remote)
-    return status.get(table_name).get("time_since")
-
 def fix_null_doctrine_stats_timestamps (doctrine_stats: pd.DataFrame, timestamp: str) -> pd.DataFrame:
     null_timestamp = doctrine_stats[doctrine_stats.timestamp.isnull()].reset_index(drop=True)
     null_timestamp["timestamp"] = timestamp
@@ -282,6 +277,7 @@ def fix_null_doctrine_stats_timestamps (doctrine_stats: pd.DataFrame, timestamp:
     return doctrine_stats
 
 def restore_watchlist_from_csv(csv_file: str = "data/watchlist_updated.csv", remote: bool = False):
+
     db = DatabaseConfig("wcmkt")
     engine = db.remote_engine if remote else db.engine
     with engine.connect() as conn:
