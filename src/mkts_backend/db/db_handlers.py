@@ -19,7 +19,7 @@ from mkts_backend.utils.utils import (
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.db.models import Base, MarketHistory, MarketOrders, UpdateLog
 from mkts_backend.config.config import DatabaseConfig
-from mkts_backend.db.db_queries import get_table_length
+from mkts_backend.db.db_queries import get_table_length, get_remote_status
 
 
 load_dotenv()

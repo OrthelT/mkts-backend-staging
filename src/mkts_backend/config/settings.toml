@@ -12,7 +12,7 @@ token_file = "file:token.json"
 [app]
 name = "WinterCo Markets"
 market_name = "4-HWWF"
-environment = "development"  # "production" or "development"
+environment = "production"  # "production" or "development"
 log_level = "info"
 
 [db] # change this to reflect your database. You will need to also edit the database aliases in the .env file and in the .github/workflows/market-data-collection.yml file.

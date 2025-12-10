@@ -31,6 +31,11 @@ def get_market_stats(type_id: int) -> pd.DataFrame:
     conn.close()
     return df
 
+def get_remote_status():
+    db = DatabaseConfig("wcmkt")
+    status_dict = db.get_status()
+    return status_dict
+
 def get_doctrine_stats(type_id: int) -> pd.DataFrame:
     db = DatabaseConfig("wcmkt")
     engine = db.engine
