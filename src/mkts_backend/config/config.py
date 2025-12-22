@@ -13,6 +13,7 @@ from time import perf_counter
 import json
 from pathlib import Path
 import tomllib
+import turso
 
 load_dotenv()
 settings_file = "src/mkts_backend/config/settings.toml"
@@ -80,7 +81,8 @@ class DatabaseConfig:
         self._remote_engine = None
         self._libsql_connect = None
         self._libsql_sync_connect = None
-        self._sqlite_local_connect = None
+        self._turso_connect = None
+        self._turso_sync_connect = None
 
     @property
     def engine(self):
@@ -103,16 +105,37 @@ class DatabaseConfig:
 
     @property
     def libsql_local_connect(self):
-        if self._libsql_connect is None:
+        if self._libsql_connect is None and self.settings["db"]["binding"] == "libsql":
             self._libsql_connect = libsql.connect(self.path)
-        return self._libsql_connect
+            return self._libsql_connect
+        elif self.settings["db"]["binding"] == "turso":
+            return self.turso_connect
+        else:
+            raise ValueError(f"Unknown binding: {self.settings['db']['binding']}")
 
     @property
     def libsql_sync_connect(self):
-        self._libsql_sync_connect = libsql.connect(
-                f"{self.path}", sync_url=self.turso_url, auth_token=self.token
-            )
-        return self._libsql_sync_connect
+        if self._libsql_sync_connect is None and self.settings["db"]["binding"] == "libsql":
+            self._libsql_sync_connect = libsql.connect(
+                    f"{self.path}", sync_url=self.turso_url, auth_token=self.token
+                )
+            return self._libsql_sync_connect
+        elif self.settings["db"]["binding"] == "turso":
+            return self.turso_sync_connect
+        else:
+            raise ValueError(f"Unknown binding: {self.settings['db']['binding']}")
+
+    @property
+    def turso_connect(self):
+        if self._turso_connect is None:
+            self._turso_connect = turso.connect(self.path)
+        return self._turso_connect
+
+    @property
+    def turso_sync_connect(self):
+        if self._turso_sync_connect is None:
+            self._turso_sync_connect = turso.connect(self.path, sync_url=self.turso_url)
+        return self._turso_sync_connect
 
     @property
     def sqlite_local_connect(self):

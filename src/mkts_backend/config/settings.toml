@@ -12,7 +12,7 @@ token_file = "file:token.json"
 [app]
 name = "WinterCo Markets"
 market_name = "4-HWWF"
-environment = "production"  # "production" or "development"
+environment = "development"  # "production" or "development"
 log_level = "info"
 
 [db] # change this to reflect your database. You will need to also edit the database aliases in the .env file and in the .github/workflows/market-data-collection.yml file.
@@ -25,6 +25,8 @@ testing_database_file = "wcmkttest.db"
 # North market (secondary production) database
 north_database_alias = "wcmktnorth"
 north_database_file = "wcmktnorth2.db"
+
+binding = 'turso' # 'turso' or 'libsql'
 
 [market_data]
 primary_market_region_id = 10000003

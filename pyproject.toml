@@ -1,6 +1,6 @@
 [project]
-name = "mkts-backend"
-version = "0.1.0"
+name = "mkts-backend-stage"
+version = "0.1"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -34,4 +34,4 @@ build-backend = "hatchling.build"
 packages = ["src/mkts_backend"]
 
 [project.scripts]
-mkts-backend = "mkts_backend.cli:main"
+mkts-stage = "mkts_backend.cli:main"
