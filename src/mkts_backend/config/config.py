@@ -1,4 +1,5 @@
 import os
+from numpy.char import upper
 from sqlalchemy import create_engine, text
 import pandas as pd
 import pathlib
@@ -14,6 +15,7 @@ import json
 from pathlib import Path
 import tomllib
 import turso
+from turso.sync import connect as turso_sync_connect
 
 load_dotenv()
 settings_file = "src/mkts_backend/config/settings.toml"
@@ -28,61 +30,63 @@ def load_settings(file_path: str = settings_file):
 
 class DatabaseConfig:
     settings = load_settings()
-    _production_db_alias = settings["db"]["production_database_alias"]
-    _production_db_file = settings["db"]["production_database_file"]
-    _testing_db_alias = settings["db"]["testing_database_alias"]
-    _testing_db_file = settings["db"]["testing_database_file"]
+    _env = settings["app"]["environment"]
+    _wcmkt_alias = settings[_env]["wcmkt"]
+    _sde_alias = settings[_env]["sde"]
+    _fittings_alias = settings[_env]["fittings"]
     _north_db_alias = settings["db"].get("north_database_alias", "wcmktnorth")
     _north_db_file = settings["db"].get("north_database_file", "wcmktnorth2.db")
+    print(f"environment: {_env}")
+    print(f"wcmkt alias: {_wcmkt_alias}")
+    print(f"sde alias: {_sde_alias}")
+    print(f"fittings alias: {_fittings_alias}")
+    print(f"north db alias: {_north_db_alias}")
+    print(f"north db file: {_north_db_file}")
 
 
-    _db_paths = {
-        _testing_db_alias: _testing_db_file,
-        "sde": "sde.db",
-        "fittings": "wcfitting.db",
-        _production_db_alias: _production_db_file,
-        _north_db_alias: _north_db_file,
-    }
 
     _db_turso_urls = {
-        _production_db_alias + "_turso": os.getenv("TURSO_WCMKTPROD_URL"),
-        _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_URL"),
-        "sde_turso": os.getenv("TURSO_SDE_URL"),
-        "fittings_turso": os.getenv("TURSO_FITTING_URL"),
-        _north_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_URL"),
+        "wcmkt": os.getenv(f"TURSO_{_wcmkt_alias}_URL"),
+        "sde": os.getenv(f"TURSO_{_sde_alias}_URL"),
+        "fittings": os.getenv(f"TURSO_{_fittings_alias}_URL"),
+        "wcmktnorth": os.getenv("TURSO_WCMKTNORTH_URL"),
     }
 
     _db_turso_auth_tokens = {
-        _production_db_alias + "_turso": os.getenv("TURSO_WCMKTPROD_TOKEN"),
-        _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_TOKEN"),
-        "sde_turso": os.getenv("TURSO_SDE_TOKEN"),
-        "fittings_turso": os.getenv("TURSO_FITTING_TOKEN"),
-        _north_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_TOKEN"),
+        "wcmkt": os.getenv(f"TURSO_{_wcmkt_alias}_TOKEN"),
+        "sde": os.getenv(f"TURSO_{_sde_alias}_TOKEN"),
+        "fittings": os.getenv(f"TURSO_{_fittings_alias}_TOKEN"),
+        "wcmktnorth": os.getenv("TURSO_WCMKTNORTH_TOKEN"),
     }
-
-    def __init__(self, alias: str, dialect: str = "sqlite+libsql"):
-        if alias == "wcmkt":
-            if self.settings["app"]["environment"] == "development":
-                alias = self._testing_db_alias
-            else:
-                alias = self._production_db_alias
-
-        if alias not in self._db_paths:
+    _db_aliases = {
+        "wcmkt": _wcmkt_alias,
+        "sde": _sde_alias,
+        "fittings": _fittings_alias,
+        "wcmktnorth": _north_db_alias,
+    }
+    
+    def __init__(self, user_alias: str, dialect: str = "sqlite+libsql"):
+        
+        if user_alias not in self._db_aliases.keys():
             raise ValueError(
-                f"Unknown database alias '{alias}'. Available: {list(self._db_paths.keys())}"
+                f"Unknown database alias '{user_alias}'. Available: {list(self._db_aliases.keys())}"
             )
 
-        self.alias = alias
-        self.path = self._db_paths[alias]
-        self.url = f"{dialect}:///{self.path}"
-        self.turso_url = self._db_turso_urls[f"{self.alias}_turso"]
-        self.token = self._db_turso_auth_tokens[f"{self.alias}_turso"]
+        self.alias = user_alias
+        self.db_alias = self._db_aliases[self.alias]
+        self.path = f"{self.db_alias}.db"
+        self.turso_url = os.getenv(f"TURSO_{upper(self.db_alias)}_URL")
+        self.token = os.getenv(f"TURSO_{upper(self.db_alias)}_TOKEN")
         self._engine = None
         self._remote_engine = None
         self._libsql_connect = None
         self._libsql_sync_connect = None
         self._turso_connect = None
-        self._turso_sync_connect = None
+        self._turso_remote_connect = None
+        self.settings = load_settings()
+        self._binding = self.settings["app"]["binding"]
+        self._dialect = "sqlite+libsql" if self._binding == "libsql" else "sqlite"
+        self.url = f"{self._dialect}:///{self.path}" 
 
     @property
     def engine(self):
@@ -93,8 +97,8 @@ class DatabaseConfig:
     @property
     def remote_engine(self):
         if self._remote_engine is None:
-            turso_url = self._db_turso_urls[f"{self.alias}_turso"]
-            auth_token = self._db_turso_auth_tokens[f"{self.alias}_turso"]
+            turso_url = self.turso_url
+            auth_token = self.token
             self._remote_engine = create_engine(
                 f"sqlite+{turso_url}?secure=true",
                 connect_args={
@@ -105,22 +109,22 @@ class DatabaseConfig:
 
     @property
     def libsql_local_connect(self):
-        if self._libsql_connect is None and self.settings["db"]["binding"] == "libsql":
+        if self._libsql_connect is None and self._binding == "libsql":
             self._libsql_connect = libsql.connect(self.path)
             return self._libsql_connect
-        elif self.settings["db"]["binding"] == "turso":
+        elif self._binding == "turso":
             return self.turso_connect
         else:
             raise ValueError(f"Unknown binding: {self.settings['db']['binding']}")
 
     @property
     def libsql_sync_connect(self):
-        if self._libsql_sync_connect is None and self.settings["db"]["binding"] == "libsql":
+        if self._libsql_sync_connect is None and self._binding == "libsql":
             self._libsql_sync_connect = libsql.connect(
                     f"{self.path}", sync_url=self.turso_url, auth_token=self.token
                 )
             return self._libsql_sync_connect
-        elif self.settings["db"]["binding"] == "turso":
+        elif self._binding == "turso":
             return self.turso_sync_connect
         else:
             raise ValueError(f"Unknown binding: {self.settings['db']['binding']}")
@@ -132,18 +136,23 @@ class DatabaseConfig:
         return self._turso_connect
 
     @property
-    def turso_sync_connect(self):
-        if self._turso_sync_connect is None:
-            self._turso_sync_connect = turso.connect(self.path, sync_url=self.turso_url)
-        return self._turso_sync_connect
-
-    @property
     def sqlite_local_connect(self):
-        if self._sqlite_local_connect is None:
+        if self._sqlite_local_connect is None and self._binding == "libsql":
             self._sqlite_local_connect = libsql.connect(self.path)
+        elif self._binding == "turso":
+            return self.turso_connect
+        else:
+            raise ValueError(f"Unknown binding: {self.settings['db']['binding']}")
         return self._sqlite_local_connect
 
-    def sync(self):
+
+    def sync(self, push: bool = False):
+        if self._binding == "turso":
+            self.sync_turso(push=push)
+        else:
+            self.sync_libsql()
+
+    def sync_libsql(self):
         conn = self.libsql_sync_connect
         start_info = json.loads(self.read_db_info())
         if start_info is not None:
@@ -160,13 +169,28 @@ class DatabaseConfig:
         logger.info(f"Sync time: {end_time - start_time:.1f} seconds")
         logger.info(f"Sync time: {(end_time - start_time)/60:.1f} minutes")
         logger.info(f"Sync end time: {datetime.now()}")
-        end_info = json.loads(self.read_db_info())
-        generation_change = end_info["generation"] - start_info["generation"]
-        frames_synced = end_info["durable_frame_num"] - start_info["durable_frame_num"]
-        logger.info(f"Generation change: {generation_change}")
-        logger.info(f"Frames synced: {frames_synced}")
         logger.info("Sync complete")
         logger.info("=" * 80)
+
+    def sync_turso(self, push: bool = False):
+        conn = turso_sync_connect(self.path, remote_url=self.turso_url, auth_token=self.token)
+        if push:
+            logger.info("Pushing to remote database")
+            conn.push()
+            logger.info(f"Stats: {conn.stats()}")
+        else:
+            logger.info("Pulling from remote database")
+            changed = conn.pull()
+            logger.info(f"Changed: {changed}")
+            logger.info(f"Stats: {conn.stats()}")
+
+            conn.checkpoint()
+            logger.info(f"Checkpoint complete")
+            logger.info(f"Stats: {conn.stats()}")
+        conn.close()
+        logger.info("Sync complete")
+        logger.info("=" * 80)
+        return True
 
     def validate_sync(self) -> bool:
         logger.info(f"Validating sync for {self.alias}, url: {self.turso_url}, self.path: {self.path}")
@@ -269,11 +293,6 @@ class DatabaseConfig:
             db_info = f.read()
         return db_info
 
-    def get_db_credentials_dicts(self):
-        return {
-            "turso_urls": self._db_turso_urls,
-            "turso_tokens": self._db_turso_auth_tokens,
-        }
 
 if __name__ == "__main__":
     pass

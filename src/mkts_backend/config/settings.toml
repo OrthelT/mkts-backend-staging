@@ -14,19 +14,52 @@ name = "WinterCo Markets"
 market_name = "4-HWWF"
 environment = "development"  # "production" or "development"
 log_level = "info"
+binding = 'turso' # 'turso' or 'libsql' for database type
 
 [db] # change this to reflect your database. You will need to also edit the database aliases in the .env file and in the .github/workflows/market-data-collection.yml file.
-production_database_alias = "wcmktprod"
-production_database_file = "wcmktprod.db"
+# sde_db_alias = "sde"
+# sde_db_file = "sde.db"
 
-testing_database_alias = "wcmkttest"
-testing_database_file = "wcmkttest.db"
+# fitting_db_alias = "fitting"
+# fitting_db_file = "wcfitting.db"
+
+# production_database_alias = "wcmktprod"
+# production_database_file = "wcmktprod.db"
+
+# #development databases used when app.environment set "development"
+# testing_database_alias = "wcmkttest"
+# testing_database_file = "wcmkttest.db"
+
+# testing_sde_alias = "sdetest"
+# testing_sde_file = "sdetest.db"
+
+# testing_fitting_alias = "wcfittingtest"
+# testing_fitting_file = "wcfittingtest.db"
 
 # North market (secondary production) database
 north_database_alias = "wcmktnorth"
 north_database_file = "wcmktnorth2.db"
 
-binding = 'turso' # 'turso' or 'libsql'
+
+
+#the alias for the file used to access .env credentials
+#and the prefix for the local db file <alias>.db 
+#(i.e. alias = wcfitting, file: wcfitting.db)
+
+[production]
+sde = "sde"
+fittings = "wcfitting"
+wcmkt = "wcmktprod"
+
+[development]
+sde = "sdetest"
+fittings = "wcfittingtest"
+wcmkt = "wcmkttest"
+
+[testing]
+[testing.sde]
+alias = "sdetest2"
+file = "sdetest2.db"
 
 [market_data]
 primary_market_region_id = 10000003
