@@ -17,7 +17,7 @@ from mkts_backend.utils.utils import (
     get_type_names_from_df,
 )
 from mkts_backend.config.logging_config import configure_logging
-from mkts_backend.db.models import Base, MarketHistory, MarketOrders, UpdateLog
+from mkts_backend.db.models import Base, MarketHistory, MarketOrders, UpdateLog, TestMarketOrders
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.db.db_queries import get_table_length, get_remote_status
 
@@ -106,7 +106,7 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
     Returns:
         True if successful, False otherwise
     """
-    WIPE_REPLACE_TABLES = ["marketstats", "doctrines"]
+    WIPE_REPLACE_TABLES = ["marketstats", "doctrines", "test_marketorders"]
     tabname = table.__tablename__
     is_wipe_replace = tabname in WIPE_REPLACE_TABLES
     logger.info(f"Processing table: {tabname}, wipe_replace: {is_wipe_replace}")
@@ -378,7 +378,7 @@ def update_history(history_results: list[dict]):
         return False
     return True
 
-def update_market_orders(orders: list[dict]) -> bool:
+def update_market_orders(orders: list[dict], test_mode: bool = False) -> bool:
     """Prepares data for update to the marketorders table, then calls upsert_database to update the table
     
     Args:
@@ -387,6 +387,12 @@ def update_market_orders(orders: list[dict]) -> bool:
     Returns:
         True if successful, False otherwise
     """
+
+    if test_mode:
+        table = TestMarketOrders
+    else:
+        table = MarketOrders
+    valid_columns = table.__table__.columns.keys()
 
     orders_df = pd.DataFrame.from_records(orders)
     type_names = get_type_names_from_df(orders_df)
@@ -398,16 +404,16 @@ def update_market_orders(orders: list[dict]) -> bool:
     orders_df = orders_df.fillna(0)
     orders_df = add_autoincrement(orders_df)
 
-    valid_columns = MarketOrders.__table__.columns.keys()
+    valid_columns = table.__table__.columns.keys()
     orders_df = validate_columns(orders_df, valid_columns)
 
     logger.info(f"Orders fetched:{len(orders_df)} items")
-    status = upsert_database(MarketOrders, orders_df)
+    status = upsert_database(table, orders_df)
     if status:
-        logger.info(f"Orders updated:{get_table_length('marketorders')} items")
+        logger.info(f"Orders updated:{get_table_length(table.__tablename__)} items")
         return True
     else:
-        logger.error("Failed to update market orders")
+        logger.error(f"Failed to update {table.__tablename__}")
         return False
 
 def log_update(table_name: str, remote: bool = False):

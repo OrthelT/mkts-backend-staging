@@ -183,5 +183,23 @@ class UpdateLog(Base):
     def __repr__(self) -> str:
         return f"updatelog(id={self.id!r}, table_name={self.table_name!r}, timestamp={self.timestamp!r})"
 
+class TestMarketOrders(Base):
+    __tablename__ = "test_marketorders"
+    order_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    is_buy_order: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    type_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    type_name: Mapped[str] = mapped_column(String, nullable=True)
+    duration: Mapped[int] = mapped_column(Integer, nullable=True)
+    issued: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    price: Mapped[float] = mapped_column(Float, nullable=True)
+    volume_remain: Mapped[int] = mapped_column(Integer, nullable=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"marketorders(order_id={self.order_id!r}, is_buy_order={self.is_buy_order!r}, "
+            f"type_id={self.type_id!r}, type_name={self.type_name!r}, duration={self.duration!r}, "
+            f"issued={self.issued!r}, price={self.price!r}, volume_remain={self.volume_remain!r})"
+        )
+
 if __name__ == "__main__":
     pass

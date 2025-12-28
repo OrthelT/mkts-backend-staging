@@ -36,24 +36,17 @@ class DatabaseConfig:
     _fittings_alias = settings[_env]["fittings"]
     _north_db_alias = settings["db"].get("north_database_alias", "wcmktnorth")
     _north_db_file = settings["db"].get("north_database_file", "wcmktnorth2.db")
-    print(f"environment: {_env}")
-    print(f"wcmkt alias: {_wcmkt_alias}")
-    print(f"sde alias: {_sde_alias}")
-    print(f"fittings alias: {_fittings_alias}")
-    print(f"north db alias: {_north_db_alias}")
-    print(f"north db file: {_north_db_file}")
-
 
 
     _db_turso_urls = {
-        "wcmkt": os.getenv(f"TURSO_{_wcmkt_alias}_URL"),
+        "wcmkt": os.getenv(f"TURSO_{_wcmkt_alias.upper()}_URL"),
         "sde": os.getenv(f"TURSO_{_sde_alias}_URL"),
         "fittings": os.getenv(f"TURSO_{_fittings_alias}_URL"),
         "wcmktnorth": os.getenv("TURSO_WCMKTNORTH_URL"),
     }
 
     _db_turso_auth_tokens = {
-        "wcmkt": os.getenv(f"TURSO_{_wcmkt_alias}_TOKEN"),
+        "wcmkt": os.getenv(f"TURSO_{_wcmkt_alias.upper()}_TOKEN"),
         "sde": os.getenv(f"TURSO_{_sde_alias}_TOKEN"),
         "fittings": os.getenv(f"TURSO_{_fittings_alias}_TOKEN"),
         "wcmktnorth": os.getenv("TURSO_WCMKTNORTH_TOKEN"),
@@ -71,19 +64,18 @@ class DatabaseConfig:
             raise ValueError(
                 f"Unknown database alias '{user_alias}'. Available: {list(self._db_aliases.keys())}"
             )
-
+        self.settings = load_settings()
         self.alias = user_alias
         self.db_alias = self._db_aliases[self.alias]
         self.path = f"{self.db_alias}.db"
-        self.turso_url = os.getenv(f"TURSO_{upper(self.db_alias)}_URL")
-        self.token = os.getenv(f"TURSO_{upper(self.db_alias)}_TOKEN")
+        self.turso_url = self._db_turso_urls[self.alias]
+        self.token = self._db_turso_auth_tokens[self.alias]
         self._engine = None
         self._remote_engine = None
         self._libsql_connect = None
         self._libsql_sync_connect = None
         self._turso_connect = None
         self._turso_remote_connect = None
-        self.settings = load_settings()
         self._binding = self.settings["app"]["binding"]
         self._dialect = "sqlite+libsql" if self._binding == "libsql" else "sqlite"
         self.url = f"{self._dialect}:///{self.path}" 
@@ -144,7 +136,8 @@ class DatabaseConfig:
         else:
             raise ValueError(f"Unknown binding: {self.settings['db']['binding']}")
         return self._sqlite_local_connect
-
+    def get_wcmkt_alias(self):
+        return self._wcmkt_alias
 
     def sync(self, push: bool = False):
         if self._binding == "turso":
