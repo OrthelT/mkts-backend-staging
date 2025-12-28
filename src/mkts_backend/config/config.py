@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 import tomllib
 import turso
-from turso.sync import connect as turso_sync_connect
+from turso.sync import connect as ts_connect
 
 load_dotenv()
 settings_file = "src/mkts_backend/config/settings.toml"
@@ -88,6 +88,8 @@ class DatabaseConfig:
 
     @property
     def remote_engine(self):
+        if self._binding == 'turso':
+            raise InvalidConfiguration("Use local writes with turso binding")
         if self._remote_engine is None:
             turso_url = self.turso_url
             auth_token = self.token
@@ -117,7 +119,7 @@ class DatabaseConfig:
                 )
             return self._libsql_sync_connect
         elif self._binding == "turso":
-            return self.turso_sync_connect
+            return self.ts_connect
         else:
             raise ValueError(f"Unknown binding: {self.settings['db']['binding']}")
 
@@ -136,6 +138,12 @@ class DatabaseConfig:
         else:
             raise ValueError(f"Unknown binding: {self.settings['db']['binding']}")
         return self._sqlite_local_connect
+    
+    @property
+    def turso_sync_connect(self):
+        conn = ts_connect(self.path, remote_url=self.turso_url,auth_token=self.token)
+        return conn
+    
     def get_wcmkt_alias(self):
         return self._wcmkt_alias
 
@@ -166,7 +174,7 @@ class DatabaseConfig:
         logger.info("=" * 80)
 
     def sync_turso(self, push: bool = False):
-        conn = turso_sync_connect(self.path, remote_url=self.turso_url, auth_token=self.token)
+        conn = ts_connect(self.path, remote_url=self.turso_url, auth_token=self.token)
         if push:
             logger.info("Pushing to remote database")
             conn.push()
@@ -288,4 +296,12 @@ class DatabaseConfig:
 
 
 if __name__ == "__main__":
-    pass
+    from sqlalchemy.orm import Session
+    from sqlalchemy import Select
+    from mkts_backend.db.models import MarketStats, Base
+
+    db = DatabaseConfig('wcmkt')
+
+    engine = db.engine
+    Base.metadata.create_all(engine)
+
