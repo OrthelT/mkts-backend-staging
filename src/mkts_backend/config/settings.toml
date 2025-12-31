@@ -35,6 +35,7 @@ primary_market_structure_id = 1035466617946
 secondary_market_structure_id = 'None'
 
 [google_sheets]
-enabled = false
+enabled = true
 sheet_url = 'https://docs.google.com/spreadsheets/d/1RmNJB9Yz4lG6kKKitGQ0zDuPbOiSe0ywn4SbSKabdwc/edit?gid=0#gid=0'
+sheet_url2 = 'https://docs.google.com/spreadsheets/d/1sLr5VaUsHKfwZV_CA1K1o2bfywwzl4w-FGYWVnKmwKA/edit?gid=1670971557#gid=1670971557'
 # private_key_file should be in .env or github secrets
