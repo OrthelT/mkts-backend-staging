@@ -22,7 +22,6 @@ from mkts_backend.processing.data_processing import (
     calculate_doctrine_stats,
 )
 from sqlalchemy import text
-from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.esi.esi_requests import fetch_market_orders
 from mkts_backend.esi.async_history import run_async_history
@@ -30,6 +29,10 @@ from mkts_backend.utils.db_utils import add_missing_items_to_watchlist
 from mkts_backend.utils.parse_items import parse_items
 from mkts_backend.utils.validation import validate_all
 from mkts_backend.utils.parse_fits import update_fit_workflow, parse_fit_metadata
+from mkts_backend.config.config import load_settings, DatabaseConfig
+from mkts_backend.config.gsheets_config import GoogleSheetConfig
+
+settings = load_settings(file_path="src/mkts_backend/config/settings.toml")
 logger = configure_logging(__name__)
 
 def check_tables():
@@ -216,6 +219,23 @@ def process_doctrine_stats():
     else:
         logger.error("Failed to update doctrines")
         return False
+
+def google_sheets_update_workflow():
+    settings = load_settings(file_path="src/mkts_backend/config/settings.toml")
+    google_sheet_url2 = settings["google_sheets"]["sheet_url2"]
+    google_sheet_config = GoogleSheetConfig(sheet_url=google_sheet_url2)
+    update_google_sheet(google_sheet_config, sheet_name="market_orders_4h", table_name="marketorders")
+    update_google_sheet(google_sheet_config, sheet_name="market_data_4h", table_name="marketstats")
+
+def update_google_sheet(google_sheet_config: GoogleSheetConfig, sheet_name: str, table_name: str):
+    import pandas as pd
+
+    db = DatabaseConfig("wcmkt")
+    engine = db.engine
+    with engine.connect() as conn:
+        df = pd.read_sql_table(table_name, conn)
+        google_sheet_config.update_sheet(df, sheet_name=sheet_name)
+        logger.info(f"Updated Google Sheet with {len(df)} rows of data")
 
 def parse_args(args: list[str])->dict | None:
     return_args = {}
@@ -444,13 +464,6 @@ def main(history: bool = False):
             logger.error("Failed to update history")
 
 
-        # TODO: Uncomment this when ready to use Jita history
-        # jita_status = process_jita_history()
-        # if jita_status:
-        #     logger.info("Jita history updated")
-        # else:
-        #     logger.error("Failed to update Jita history")
-
     else:
         logger.info("History mode disabled. Skipping history processing")
 
@@ -467,6 +480,12 @@ def main(history: bool = False):
     else:
         logger.error("Failed to update doctrines")
         exit()
+
+    if settings["google_sheets"]["enabled"]:
+        logger.info("Google Sheets are enabled in settings.toml. Updating Google Sheets")
+        google_sheets_update_workflow()
+    else:
+        logger.info("Google Sheets are disabled in settings.toml. Skipping Google Sheets update")
 
     logger.info("=" * 80)
     logger.info(f"Market job complete in {time.perf_counter()-start_time:.1f}s")

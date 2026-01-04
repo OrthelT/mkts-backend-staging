@@ -76,7 +76,22 @@ jobs:
         echo "TURSO_WCMKTPROD_TOKEN=${{ secrets.TURSO_WCMKTPROD_TOKEN }}" >> $GITHUB_ENV
 
     #- name: Set up Google Service Account
-      #run: not currently implemented. add reference to secrets.GOOGLE_SHEET_KEY to use.
+    - name: Write Google Service Account JSON
+      env:
+        GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
+      run: |
+        # write to a file with strict perms
+        echo "$GOOGLE_SA_JSON" > "$GITHUB_WORKSPACE/creds.json"
+        chmod 600 "$GITHUB_WORKSPACE/creds.json"
+        # most Google libs honor this automatically
+        echo "GOOGLE_APPLICATION_CREDENTIALS=$GITHUB_WORKSPACE/creds.json" >> $GITHUB_ENV
+        # if you use pygsheets, this also works:
+        echo "PYGSHEETS_JSON=$GITHUB_WORKSPACE/creds.json" >> $GITHUB_ENV
+        #run: not currently implemented. add reference to secrets.GOOGLE_SHEET_KEY to use.
+
+    - name: Set up EVE SSO refresh token
+      run: |
+        echo "REFRESH_TOKEN=${{ secrets.REFRESH_TOKEN }}" >> $GITHUB_ENV
 
     - name: Set up EVE SSO refresh token
       run: |
