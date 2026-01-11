@@ -10,12 +10,12 @@ settings = load_settings(settings_file)
 class ESIConfig:
     """ESI configuration for primary and secondary markets."""
 
-    _region_ids = {"primary_region_id": 10000003, "secondary_region_id": None}
-    _system_ids = {"primary_system_id": 30000240, "secondary_system_id": None}
-    _structure_ids = {"primary_structure_id": 1035466617946, "secondary_structure_id": None}
-    _valid_aliases = ["primary"] #primary is the default market, secondary is the secondary market, and is currently unused.
+    _region_ids = {"primary_region_id": settings["market_data"]["primary_region_id"], "secondary_region_id": settings["market_data"]["deployment_region_id"]}
+    _system_ids = {"primary_system_id": settings["market_data"]["primary_system_id"], "secondary_system_id": settings["market_data"]["deployment_system_id"]}
+    _structure_ids = {"primary_structure_id": settings["market_data"]["primary_structure_id"], "secondary_structure_id": settings["market_data"]["deployment_structure_id"]}
+    _valid_aliases = ["primary", "deployment"] #primary is the default market, deployment is the secondary market, and is currently unused.
     _shortcut_aliases = {"4h": "primary"}
-    _names = {"primary": "4-HWWF Keepstar"}
+    _names = {"primary": settings["market_data"]["primary_market_name"], "deployment": settings["market_data"]["deployment_market_name"]}
 
     def __init__(self, alias: str):
         alias = alias.lower()
