@@ -2,6 +2,7 @@ import os
 from sqlalchemy import create_engine, text
 import pandas as pd
 import pathlib
+from typing import Optional, TYPE_CHECKING
 
 #os.environ.setdefault("RUST_LOG", "debug")
 
@@ -13,6 +14,9 @@ from time import perf_counter
 import json
 from pathlib import Path
 import tomllib
+
+if TYPE_CHECKING:
+    from mkts_backend.config.market_context import MarketContext
 
 load_dotenv()
 settings_file = "src/mkts_backend/config/settings.toml"
@@ -31,8 +35,8 @@ class DatabaseConfig:
     _production_db_file = settings["db"]["production_database_file"]
     _testing_db_alias = settings["db"]["testing_database_alias"]
     _testing_db_file = settings["db"]["testing_database_file"]
-    _north_db_alias = settings["db"].get("north_database_alias", "wcmktnorth")
-    _north_db_file = settings["db"].get("north_database_file", "wcmktnorth2.db")
+    _deployment_db_alias = settings["db"].get("deployment_database_alias")
+    _deployment_db_file = settings["db"].get("deployment_database_file")
 
 
     _db_paths = {
@@ -40,7 +44,7 @@ class DatabaseConfig:
         "sde": "sde.db",
         "fittings": "wcfitting.db",
         _production_db_alias: _production_db_file,
-        _north_db_alias: _north_db_file,
+        _deployment_db_alias: _deployment_db_file,
     }
 
     _db_turso_urls = {
@@ -48,7 +52,7 @@ class DatabaseConfig:
         _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_URL"),
         "sde_turso": os.getenv("TURSO_SDE_URL"),
         "fittings_turso": os.getenv("TURSO_FITTING_URL"),
-        _north_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_URL"),
+        _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_URL"),
     }
 
     _db_turso_auth_tokens = {
@@ -56,26 +60,54 @@ class DatabaseConfig:
         _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_TOKEN"),
         "sde_turso": os.getenv("TURSO_SDE_TOKEN"),
         "fittings_turso": os.getenv("TURSO_FITTING_TOKEN"),
-        _north_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_TOKEN"),
+        _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_TOKEN"),
     }
 
-    def __init__(self, alias: str, dialect: str = "sqlite+libsql"):
-        if alias == "wcmkt":
-            if self.settings["app"]["environment"] == "development":
-                alias = self._testing_db_alias
-            else:
-                alias = self._production_db_alias
+    def __init__(
+        self,
+        alias: str = None,
+        dialect: str = "sqlite+libsql",
+        market_context: Optional["MarketContext"] = None
+    ):
+        """
+        Initialize database configuration.
 
-        if alias not in self._db_paths:
-            raise ValueError(
-                f"Unknown database alias '{alias}'. Available: {list(self._db_paths.keys())}"
-            )
+        Args:
+            alias: Database alias (e.g., "wcmkt", "wcmktprod", "wcmktnorth").
+                   If market_context is provided, this is ignored.
+            dialect: SQLAlchemy dialect string.
+            market_context: Optional MarketContext that provides all config values.
+                           When provided, takes precedence over alias parameter.
+        """
+        if market_context is not None:
+            # Use MarketContext for configuration (preferred method)
+            self.alias = market_context.database_alias
+            self.path = market_context.database_file
+            self.turso_url = market_context.turso_url
+            self.token = market_context.turso_token
+            logger.info(f"DatabaseConfig initialized from MarketContext: {market_context.name}")
+        else:
+            # Legacy alias-based initialization (backward compatibility)
+            if alias is None:
+                alias = "wcmkt"
 
-        self.alias = alias
-        self.path = self._db_paths[alias]
+            if alias == "wcmkt":
+                if self.settings["app"]["environment"] == "development":
+                    alias = self._testing_db_alias
+                else:
+                    alias = self._production_db_alias
+
+            if alias not in self._db_paths:
+                raise ValueError(
+                    f"Unknown database alias '{alias}'. Available: {list(self._db_paths.keys())}"
+                )
+
+            self.alias = alias
+            self.path = self._db_paths[alias]
+            self.turso_url = self._db_turso_urls.get(f"{self.alias}_turso")
+            self.token = self._db_turso_auth_tokens.get(f"{self.alias}_turso")
+
         self.url = f"{dialect}:///{self.path}"
-        self.turso_url = self._db_turso_urls[f"{self.alias}_turso"]
-        self.token = self._db_turso_auth_tokens[f"{self.alias}_turso"]
         self._engine = None
         self._remote_engine = None
         self._libsql_connect = None
