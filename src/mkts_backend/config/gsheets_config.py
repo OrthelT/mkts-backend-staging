@@ -31,7 +31,6 @@ Credentials precedence:
 # Project root (where pyproject.toml lives)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
-
 class GoogleSheetConfig:
     # Defaults (can be overridden via env or __init__)
     _default_local_credentials_file = "wcupdates-1eec6cbb5e0c.json"

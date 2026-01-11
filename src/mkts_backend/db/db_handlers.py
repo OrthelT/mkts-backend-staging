@@ -17,16 +17,42 @@ from mkts_backend.utils.utils import (
     get_type_names_from_df,
 )
 from mkts_backend.config.logging_config import configure_logging
-from mkts_backend.db.models import Base, MarketHistory, MarketOrders, UpdateLog
+from mkts_backend.db import *
 from mkts_backend.config.config import DatabaseConfig
 from mkts_backend.db.db_queries import get_table_length, get_remote_status
+import sys
+from mkts_backend.config.logging_config import configure_logging
+logger = configure_logging(__name__)
 
+logger.info(f"sys.argv: {sys.argv}")
+logger.info("=" * 80)
 
 load_dotenv()
 logger = configure_logging(__name__)
 
-db = DatabaseConfig("wcmkt")
 sde_db = DatabaseConfig("sde")
+
+def get_mkts_db(market: str = "primary"):
+    if market == "deployment":
+        return DatabaseConfig("wcmktnorth")
+    else:
+        return DatabaseConfig("wcmkt")
+
+def translate_base_class(table: Base, market: str = "primary") -> Base:
+    if market == "deployment":
+        if table.__tablename__ == "marketstats":
+            return models.DeploymentMarketStats
+        elif table.__tablename__ == "doctrines":    
+            return models.DeploymentDoctrines
+        else:
+            return table
+    else:
+        if table.__tablename__ == "marketstats":
+            return MarketStats
+        elif table.__tablename__ == "doctrines":
+            return Doctrines
+        else:
+            return table
 
 def handle_nulls(df: pd.DataFrame, tabname: str) -> pd.DataFrame:
     # CRITICAL SAFETY CHECK: Clean all NaN/inf values before conversion to dict
@@ -48,7 +74,6 @@ def handle_nulls(df: pd.DataFrame, tabname: str) -> pd.DataFrame:
         # Fill NaN in string columns with empty string
         string_cols = df.select_dtypes(include=['object']).columns
         df[string_cols] = df[string_cols].fillna('')
-
 
         # Fill NaN in datetime columns with current timestamp
         # SQLite DateTime type requires Python datetime objects, not None or strings
@@ -96,7 +121,7 @@ def handle_nulls(df: pd.DataFrame, tabname: str) -> pd.DataFrame:
                     df[col] = df[col].fillna(0)
     return df
 
-def upsert_database(table: Base, df: pd.DataFrame) -> bool:
+def upsert_database(table: Base, df: pd.DataFrame, market: str = "primary") -> bool:
     """Upsert data into the database
 
     Args:
@@ -106,6 +131,14 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
     Returns:
         True if successful, False otherwise
     """
+    market = "primary"
+    if "--north" in sys.argv:
+        market = "deployment"
+    db = get_mkts_db(market)
+    logger.info(f"Database: {db.alias}")
+    tables = db.get_table_list()
+    logger.info(f"Tables: {tables}")
+    quit()
     WIPE_REPLACE_TABLES = ["marketstats", "doctrines"]
     tabname = table.__tablename__
     is_wipe_replace = tabname in WIPE_REPLACE_TABLES
@@ -292,7 +325,7 @@ def upsert_database(table: Base, df: pd.DataFrame) -> bool:
         remote_engine.dispose()
     return True
 
-def update_history(history_results: list[dict]):
+def update_history(history_results: list[dict], market: str = "primary"):
     """Prepares data for update to the market_history table, then calls upsert_database to update the table
     Args:
         history_results: List of dicts, each containing history data from the ESI
@@ -378,7 +411,7 @@ def update_history(history_results: list[dict]):
         return False
     return True
 
-def update_market_orders(orders: list[dict]) -> bool:
+def update_market_orders(orders: list[dict], market: str = "primary") -> bool:
     """Prepares data for update to the marketorders table, then calls upsert_database to update the table
     
     Args:
