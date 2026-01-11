@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        market: ${{ github.event.inputs.market == 'both' || github.event.inputs.market == '' && fromJSON('["primary", "deployment"]') || fromJSON(format('["{0}"]', github.event.inputs.market)) }}
+        market: ${{ fromJSON(github.event.inputs.market == 'both' && '["primary", "deployment"]' || github.event.inputs.market == '' && '["primary", "deployment"]' || format('["{0}"]', github.event.inputs.market)) }}
 
     steps:
     - name: Checkout repository
