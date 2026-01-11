@@ -45,17 +45,23 @@ def get_doctrine_stats(type_id: int) -> pd.DataFrame:
     conn.close()
     return df
 
-def get_table_length(table: str) -> int:
-    db = DatabaseConfig("wcmkt")
+def get_table_length(table: str, market: str = "primary") -> int:
+    db = DatabaseConfig("wcmkt", market=market)
+    from mkts_backend.db.db_map import TableMap
+    table_map = TableMap(db)
+    table_name = table_map.translate_table_name(table)
     engine = db.engine
     with engine.connect() as conn:
-        stmt = text(f"SELECT COUNT(*) FROM {table}")
+        stmt = text(f"SELECT COUNT(*) FROM {table_name}")
         result = conn.execute(stmt)
         return result.fetchone()[0]
 
-def get_watchlist_ids():
-    stmt = text("SELECT DISTINCT type_id FROM watchlist")
-    db = DatabaseConfig("wcmkt")
+def get_watchlist_ids(market: str = "primary"):
+    db = DatabaseConfig("wcmkt", market=market)
+    from mkts_backend.db.db_map import TableMap
+    table_map = TableMap(db)
+    watchlist_name = table_map.translate_table_name("watchlist")
+    stmt = text(f"SELECT DISTINCT type_id FROM {watchlist_name}")
     engine = db.engine
     with engine.connect() as conn:
         result = conn.execute(stmt)

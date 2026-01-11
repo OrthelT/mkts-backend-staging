@@ -24,12 +24,7 @@ def fetch_market_orders(esi: ESIConfig, order_type: str = "all", etag: str = Non
         request_count += 1
         logger.info(f"NEW REQUEST: request_count: {request_count}, page: {page}, max_pages: {max_pages}")
 
-        if esi.alias == "primary":
-            querystring = {"page": str(page)}
-        elif esi.alias == "secondary":
-            querystring = {"page": str(page), "order_type": order_type}
-        else:
-            raise ValueError(f"Invalid alias: {esi.alias}. Valid aliases are: {esi._valid_aliases}")
+        querystring = {"page": str(page)}
         logger.info(f"querystring: {querystring}")
 
         response = requests.get(url, headers=headers, params=querystring, timeout=10)

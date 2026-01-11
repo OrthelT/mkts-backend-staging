@@ -2,7 +2,7 @@ import sys
 import json
 import time
 import os
-
+import pandas as pd
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.db.db_queries import get_table_length
 from mkts_backend.db.db_handlers import (
@@ -107,7 +107,7 @@ def process_add_watchlist(type_ids_str: str, remote: bool = False):
         print(f"Error: {e}")
         return False
 
-def process_market_orders(esi: ESIConfig, order_type: str = "all", test_mode: bool = False) -> bool:
+def process_market_orders(esi: ESIConfig, order_type: str = "all", test_mode: bool = False, market: str = "primary") -> bool:
     """Fetches market orders from ESI and updates the database"""
     save_path = "data/market_orders_new.json"
     data = fetch_market_orders(esi, order_type=order_type, test_mode=test_mode)
@@ -115,7 +115,7 @@ def process_market_orders(esi: ESIConfig, order_type: str = "all", test_mode: bo
         with open(save_path, "w") as f:
             json.dump(data, f)
         logger.info(f"ESI returned {len(data)} market orders. Saved to {save_path}")
-        status = update_market_orders(data)
+        status = update_market_orders(data, market=market)
         if status:
             log_update("marketorders",remote=True)
             logger.info(f"Orders updated:{get_table_length('marketorders')} items")
@@ -129,26 +129,30 @@ def process_market_orders(esi: ESIConfig, order_type: str = "all", test_mode: bo
         logger.error("no data returned from ESI call.")
         return False
 
-def process_history():
+def process_history(market: str = "primary", local: bool = True):
     logger.info("History mode enabled")
     logger.info("Processing history")
-    data = run_async_history()
+    data = run_async_history(market=market)
     if data:
         with open("data/market_history_new.json", "w") as f:
             json.dump(data, f)
-        status = update_history(data)
+        status = update_history(data, market=market, local=local)
         if status:
             log_update("market_history",remote=True)
-            logger.info(f"History updated:{get_table_length('market_history')} items")
+            logger.info(f"History updated:{get_table_length('market_history', market=market)} items")
             return True
         else:
             logger.error("Failed to update market history")
             return False
 
-def process_market_stats():
+def process_market_stats(market: str = "primary"):
     logger.info("Calculating market stats")
     logger.info("syncing database")
-    db = DatabaseConfig("wcmkt")
+    db = DatabaseConfig("wcmkt", market=market)
+    from mkts_backend.db.db_map import TableMap
+    table_map = TableMap(db)
+    marketstats_class = table_map.translate_table_class(MarketStats)
+    marketstats_name = marketstats_class.__tablename__
     db.sync()
     logger.info("database synced")
     logger.info("validating database")
@@ -160,7 +164,7 @@ def process_market_stats():
         raise Exception("database validation failed in market stats")
 
     try:
-        market_stats_df = calculate_market_stats()
+        market_stats_df = calculate_market_stats(market=market)
         if len(market_stats_df) > 0:
             logger.info(f"Market stats calculated: {len(market_stats_df)} items")
         else:
@@ -171,8 +175,8 @@ def process_market_stats():
         return False
     try:
         logger.info("Validating market stats columns")
-        valid_market_stats_columns = MarketStats.__table__.columns.keys()
-        market_stats_df = validate_columns(market_stats_df, valid_market_stats_columns)
+        valid_market_stats_columns = marketstats_class.__table__.columns.keys()
+        # market_stats_df = validate_columns(market_stats_df, valid_market_stats_columns)
         if len(market_stats_df) > 0:
             logger.info(f"Market stats validated: {len(market_stats_df)} items")
         else:
@@ -195,10 +199,13 @@ def process_market_stats():
         logger.error(f"Failed to update market stats: {e}")
         return False
 
-def process_doctrine_stats():
+def process_doctrine_stats(market: str = "primary", local: bool = True):
     logger.info("Calculating doctrines stats")
     logger.info("syncing database")
-    db = DatabaseConfig("wcmkt")
+    db = DatabaseConfig("wcmkt", market=market)
+    from mkts_backend.db.db_map import TableMap
+    table_map = TableMap(db)
+    doctrines_class = table_map.translate_table_class(Doctrines)
     db.sync()
     logger.info("database synced")
     logger.info("validating database")
@@ -209,12 +216,11 @@ def process_doctrine_stats():
         logger.error("database validation failed")
         raise Exception("database validation failed in doctrines stats")
 
-    doctrine_stats_df = calculate_doctrine_stats()
+    doctrine_stats_df = calculate_doctrine_stats(market=market)
     doctrine_stats_df = convert_datetime_columns(doctrine_stats_df, ["timestamp"])
-    status = upsert_database(Doctrines, doctrine_stats_df)
+    status = upsert_database(doctrines_class, doctrine_stats_df, market=market, local=local)
     if status:
-        log_update("doctrines",remote=True)
-        logger.info(f"Doctrines updated:{get_table_length('doctrines')} items")
+        log_update("doctrines",market=market,local=local)
         return True
     else:
         logger.error("Failed to update doctrines")
@@ -239,15 +245,6 @@ def update_google_sheet(google_sheet_config: GoogleSheetConfig, sheet_name: str,
 
 def parse_args(args: list[str])->dict | None:
     return_args = {}
-    market = "primary"
-    if "--north" in args:
-        return_args["market"] = "deployment"
-    else:
-        return_args["market"] = "primary"
-    return_args["history"] = False
-    if len(args) == 0:
-        return None
-
     if "--help" in args:
         display_cli_help()
         exit()
@@ -255,6 +252,7 @@ def parse_args(args: list[str])->dict | None:
     if "--check_tables" in args:
         check_tables()
         exit()
+        
 
     # Handle parse-items command
     if "parse-items" in args:
@@ -386,22 +384,38 @@ def parse_args(args: list[str])->dict | None:
         exit()
 
     if "--history" in args or "--include-history" in args:
-        history = True
-        return_args["history"] = history
+        return_args["history"] = True
+    else:
+        return_args["history"] = False
     
+    if "--north" in args or "--deployment" in args:
+        return_args["market"] = "deployment"
+    else:
+        return_args["market"] = "primary"
+    
+    if "--local" in args:
+        return_args["local"] = True
+    else:
+        return_args["local"] = False
+
     return return_args
 
-def main(history: bool = False):
+def main():
     """Main function to process market orders, history, market stats, and doctrines"""
-    if len(sys.argv) > 1:
-        args = parse_args(sys.argv)
+    
+    args = parse_args(sys.argv)
 
-    if args is not None and "history" in args:
-            history = args["history"]
+    if args is not None:
+        history = args["history"]
+        market = args["market"]
+        local = args["local"]
+    else:
+        history = False
+        market = "primary"
+        logger.info("No arguments provided. Using default values.")
+        logger.info(f"History: {history}")
+        logger.info(f"Market: {market}")
 
-    market = "primary"
-    if "--north" in args:
-        market = "deployment"
 
     start_time = time.perf_counter()
 
@@ -416,24 +430,15 @@ def main(history: bool = False):
         sys.exit(1)
     logger.info("Environment validation passed")
 
-    init_databases(market=market)
+    init_databases()
     logger.info("Databases initialized")
     os.makedirs("data", exist_ok=True)
     logger.info(f"Data directory created: {os.path.abspath('data')}")
     logger.info("=" * 80)
 
+    esi = ESIConfig(alias=market)
 
-
-    esi = ESIConfig(market=market)
-    logger.info(f"ESI: {esi.alias}")
-    logger.info(f"ESI region ID: {esi.region_id}")
-    logger.info(f"ESI system ID: {esi.system_id}")
-    logger.info(f"ESI structure ID: {esi.structure_id}")
-    logger.info(f"ESI url: {esi.market_orders_url}")
-    logger.info(f"ESI history url: {esi.market_history_url}")
-    quit()
-
-    db = DatabaseConfig("wcmkt", market=market)
+    db = DatabaseConfig("wcmkt", market=market, local=local)
     logger.info(f"Database: {db.alias}")
     validation_test = db.validate_sync()
 
@@ -450,6 +455,14 @@ def main(history: bool = False):
 
     print("=" * 80)
     print("Fetching market orders")
+    print(esi.name)
+    print(f"Market: {market}")
+    print(f"ESI: {esi.alias}")
+    print(f"ESI region ID: {esi.region_id}")
+    print(f"ESI system ID: {esi.system_id}")
+    print(f"ESI structure ID: {esi.structure_id}")
+    print(f"ESI url: {esi.market_orders_url}")
+    print(f"ESI history url: {esi.market_history_url}")
     print("=" * 80)
 
     status = process_market_orders(esi, order_type="all", test_mode=False)
@@ -461,33 +474,34 @@ def main(history: bool = False):
 
     logger.info("=" * 80)
 
-    watchlist = db.get_watchlist()
+    # Get watchlist
+    watchlist: pd.DataFrame = db.get_watchlist()
     if len(watchlist) > 0:
-        logger.info(f"Watchlist found: {len(watchlist)} items")
+        logger.info(f"Watchlist found: {len(watchlist)} items from {db.alias}")
     else:
         logger.error("No watchlist found. Unable to proceed further.")
         exit()
 
+    # Process history
     if history:
-        logger.info("Processing history ")
-        status = process_history()
+        logger.info(f"Processing history for {db.alias}")
+        status = process_history(market=market, local=local)
         if status:
             logger.info("History updated")
         else:
             logger.error("Failed to update history")
-
-
     else:
         logger.info("History mode disabled. Skipping history processing")
 
-    status = process_market_stats()
+    # Process market stats
+    status = process_market_stats(market=market, local=local)
     if status:
         logger.info("Market stats updated")
     else:
         logger.error("Failed to update market stats")
         exit()
 
-    status = process_doctrine_stats()
+    status = process_doctrine_stats(market=market, local=local)
     if status:
         logger.info("Doctrines updated")
     else:

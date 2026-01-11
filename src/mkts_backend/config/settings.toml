@@ -11,7 +11,7 @@ token_file = "file:token.json"
 
 [app]
 name = "WinterCo Markets"
-environment = "production"  # "production" or "development"
+environment = "development"  # "production" or "development"
 log_level = "info"
 
 [db] # change this to reflect your database. You will need to also edit the database aliases in the .env file and in the .github/workflows/market-data-collection.yml file.
@@ -26,12 +26,15 @@ deployment_database_alias = "wcmktnorth"
 deployment_database_file = "wcmktnorth2.db"
 
 [market_data]
-primary_market_region_id = 10000003
-deployment_market_region_id = 10000023
-primary_market_system_id = 30000240
-deployment_market_system_id = 30002029
-primary_market_structure_id = 1035466617946
-deployment_market_structure_id = 1046831245129
+primary_region_id = 10000003
+deployment_region_id = 10000023
+
+primary_system_id = 30000240
+deployment_system_id = 30002029
+
+primary_structure_id = 1035466617946
+deployment_structure_id = 1046831245129
+
 primary_market_name = "4-HWWF Keepstar"
 deployment_market_name = "B-9C24 Keepstar"
 

@@ -38,23 +38,11 @@ def get_mkts_db(market: str = "primary"):
     else:
         return DatabaseConfig("wcmkt")
 
-def translate_base_class(table: Base, market: str = "primary") -> Base:
-    if market == "deployment":
-        if table.__tablename__ == "marketstats":
-            return models.DeploymentMarketStats
-        elif table.__tablename__ == "doctrines":    
-            return models.DeploymentDoctrines
-        else:
-            return table
-    else:
-        if table.__tablename__ == "marketstats":
-            return MarketStats
-        elif table.__tablename__ == "doctrines":
-            return Doctrines
-        else:
-            return table
-
-def handle_nulls(df: pd.DataFrame, tabname: str) -> pd.DataFrame:
+def handle_nulls(df: pd.DataFrame, tabname: str, market: str = "primary") -> pd.DataFrame:
+    db = DatabaseConfig("wcmkt", market=market)
+    from mkts_backend.db.db_map import TableMap
+    table_map = TableMap(db)
+    table = table_map.translate_table_name(tabname)
     # CRITICAL SAFETY CHECK: Clean all NaN/inf values before conversion to dict
     # This is a final safety net to prevent SQLAlchemy errors
 
@@ -121,7 +109,7 @@ def handle_nulls(df: pd.DataFrame, tabname: str) -> pd.DataFrame:
                     df[col] = df[col].fillna(0)
     return df
 
-def upsert_database(table: Base, df: pd.DataFrame, market: str = "primary") -> bool:
+def upsert_database(table: models.Base, df: pd.DataFrame, market: str = "primary", local: bool = True) -> bool:
     """Upsert data into the database
 
     Args:
@@ -131,21 +119,16 @@ def upsert_database(table: Base, df: pd.DataFrame, market: str = "primary") -> b
     Returns:
         True if successful, False otherwise
     """
-    market = "primary"
-    if "--north" in sys.argv:
-        market = "deployment"
-    db = get_mkts_db(market)
-    logger.info(f"Database: {db.alias}")
-    tables = db.get_table_list()
-    logger.info(f"Tables: {tables}")
-    quit()
-    WIPE_REPLACE_TABLES = ["marketstats", "doctrines"]
+    db = DatabaseConfig("wcmkt", market=market, local=local)
+    table_map = TableMap(db)
+    table = table_map.translate_table_class(table)
+    WIPE_REPLACE_TABLES = ["marketstats", "doctrines", "deployment_marketstats", "deployment_doctrines"]
     tabname = table.__tablename__
     is_wipe_replace = tabname in WIPE_REPLACE_TABLES
     logger.info(f"Processing table: {tabname}, wipe_replace: {is_wipe_replace}")
     logger.info(f"Upserting {len(df)} rows into {table.__tablename__}")
 
-    df = handle_nulls(df, tabname)
+    df = handle_nulls(df, tabname, market)
 
     if df is not None and len(df) > 0:
         data = df.to_dict(orient="records")
@@ -165,11 +148,10 @@ def upsert_database(table: Base, df: pd.DataFrame, market: str = "primary") -> b
         f"Table {table.__tablename__} has {column_count} columns, using chunk size {chunk_size}"
     )
 
-    db = DatabaseConfig("wcmkt")
     logger.info(f"updating: {db}")
 
-    remote_engine = db.remote_engine
-    session = Session(bind=remote_engine)
+    engine = db.engine if local else db.remote_engine
+    session = Session(bind=engine)
 
     t = table.__table__
     pk_cols = list(t.primary_key.columns)
@@ -322,18 +304,22 @@ def upsert_database(table: Base, df: pd.DataFrame, market: str = "primary") -> b
         raise e
     finally:
         session.close()
-        remote_engine.dispose()
+        engine.dispose()
     return True
 
-def update_history(history_results: list[dict], market: str = "primary"):
+def update_history(history_results: list[dict], market: str = "primary", local: bool = True):
     """Prepares data for update to the market_history table, then calls upsert_database to update the table
     Args:
         history_results: List of dicts, each containing history data from the ESI
     Returns:
         True if successful, False otherwise
     """
-
-    valid_history_columns = MarketHistory.__table__.columns.keys()
+    db = DatabaseConfig("wcmkt", market=market, local=local)
+    from mkts_backend.db.db_map import TableMap
+    table_map = TableMap(db)
+    market_history_class = table_map.translate_table_class(models.MarketHistory)
+    market_history_name = market_history_class.__tablename__
+    valid_history_columns = db.get_table_columns(market_history_name)
 
     flattened_history = []
     for result in history_results:
@@ -391,21 +377,21 @@ def update_history(history_results: list[dict], market: str = "primary"):
                 history_df[col] = 0
 
     history_df = add_timestamp(history_df)
-    history_df = validate_columns(history_df, valid_history_columns)
+    # history_df = validate_columns(history_df, valid_history_columns)
     history_df = convert_datetime_columns(history_df, ['date'])
     history_df.infer_objects()
     history_df.fillna(0)
 
     try:
-        upsert_database(MarketHistory, history_df)
+        upsert_database(market_history_class, history_df, market=market, local=local)
     except Exception as e:
         logger.error(f"history data update failed: {e}")
         return False
 
-    status = get_remote_status()['market_history']
+    status = db.get_table_length(market_history_name)
     if status > 0:
-        logger.info(f"History updated:{get_table_length('market_history')} items")
-        print(f"History updated:{get_table_length('market_history')} items")
+        logger.info(f"History updated:{get_table_length('market_history', market)} items")
+        print(f"History updated:{get_table_length('market_history', market)} items")
     else:
         logger.error("Failed to update market history")
         return False
@@ -420,24 +406,30 @@ def update_market_orders(orders: list[dict], market: str = "primary") -> bool:
     Returns:
         True if successful, False otherwise
     """
-
+    db = DatabaseConfig("wcmkt", market=market)
     orders_df = pd.DataFrame.from_records(orders)
     type_names = get_type_names_from_df(orders_df)
     orders_df = orders_df.merge(type_names, on="type_id", how="left")
 
     orders_df = convert_datetime_columns(orders_df, ['issued'])
     orders_df = add_timestamp(orders_df)
-    orders_df = orders_df.infer_objects()
+    orders_df = orders_df.infer_objects()   
     orders_df = orders_df.fillna(0)
     orders_df = add_autoincrement(orders_df)
 
-    valid_columns = MarketOrders.__table__.columns.keys()
-    orders_df = validate_columns(orders_df, valid_columns)
+    from mkts_backend.db.db_map import TableMap
+    from mkts_backend.db import models
+    table_map = TableMap(db)
+    marketorders_class = table_map.translate_table_class(models.MarketOrders)
+    marketorders_name = marketorders_class.__tablename__
 
-    logger.info(f"Orders fetched:{len(orders_df)} items")
-    status = upsert_database(MarketOrders, orders_df)
+    # valid_columns = db.get_table_columns(marketorders_name)
+    # orders_df = validate_columns(orders_df, valid_columns)
+
+    logger.info(f"Orders fetched:{len(orders_df)} items from {db.alias}")
+    status = upsert_database(marketorders_class, orders_df)
     if status:
-        logger.info(f"Orders updated:{get_table_length('marketorders')} items")
+        logger.info(f"Orders updated:{db.get_table_length(marketorders_name)} items")
         return True
     else:
         logger.error("Failed to update market orders")

@@ -182,8 +182,31 @@ class UpdateLog(Base):
     def __repr__(self) -> str:
         return f"updatelog(id={self.id!r}, table_name={self.table_name!r}, timestamp={self.timestamp!r})"
 
+class DeploymentMarketStats(Base):
+    __tablename__ = "deployment_marketstats"
+    type_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    total_volume_remain: Mapped[int] = mapped_column(Integer)
+    min_price: Mapped[float] = mapped_column(Float)
+    price: Mapped[float] = mapped_column(Float)
+    avg_price: Mapped[float] = mapped_column(Float)
+    avg_volume: Mapped[float] = mapped_column(Float)
+    group_id: Mapped[int] = mapped_column(Integer)
+    type_name: Mapped[str] = mapped_column(String)
+    group_name: Mapped[str] = mapped_column(String)
+    category_id: Mapped[int] = mapped_column(Integer)
+    category_name: Mapped[str] = mapped_column(String)
+    days_remaining: Mapped[float] = mapped_column(Float)
+    last_update: Mapped[DateTime] = mapped_column(DateTime)
 
-
+    def __repr__(self) -> str:
+        return (
+            f"deployment_marketstats(type_id={self.type_id!r}, total_volume_remain={self.total_volume_remain!r}, "
+            f"min_price={self.min_price!r}, price={self.price!r}, avg_price={self.avg_price!r}, "
+            f"avg_volume={self.avg_volume!r}, group_id={self.group_id!r}, type_name={self.type_name!r}, "
+            f"group_name={self.group_name!r}, category_id={self.category_id!r}, "
+            f"category_name={self.category_name!r}, days_remaining={self.days_remaining!r}, "
+            f"last_update={self.last_update!r})"
+        )
 class DeploymentMarketOrders(Base):
     __tablename__ = "deployment_marketorders"
     order_id: Mapped[int] = mapped_column(Integer, primary_key=True)

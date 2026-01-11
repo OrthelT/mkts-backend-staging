@@ -7,19 +7,21 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from mkts_backend.db.db_queries import get_remote_status
 
-wcmkt_db = DatabaseConfig("wcmkt")
-
 logger = configure_logging(__name__)
 
-def calculate_5_percentile_price() -> pd.DataFrame:
-    query = """
+def calculate_5_percentile_price(market: str = "primary") -> pd.DataFrame:
+    db = DatabaseConfig("wcmkt", market=market)
+    from mkts_backend.db.db_map import TableMap
+    table_map = TableMap(db)
+    marketorders_name = table_map.translate_table_name("marketorders")
+    query = f"""
     SELECT
     type_id,
     price
-    FROM marketorders
+    FROM {marketorders_name}
     WHERE is_buy_order = 0
     """
-    engine = wcmkt_db.engine
+    engine = db.engine
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
     conn.close()
@@ -30,8 +32,19 @@ def calculate_5_percentile_price() -> pd.DataFrame:
     df.columns = ["type_id", "5_perc_price"]
     return df
 
-def calculate_market_stats() -> pd.DataFrame:
-    query = """
+def calculate_market_stats(market: str = "primary", local: bool = True) -> pd.DataFrame:
+    db = DatabaseConfig("wcmkt", market=market)
+    from mkts_backend.db.db_map import TableMap
+    table_map = TableMap(db)
+    watchlist_name = table_map.translate_table_name("watchlist")
+    marketorders_name = table_map.translate_table_name("marketorders")
+    market_history_name = table_map.translate_table_name("market_history")
+    watchlist_name = table_map.translate_table_name("watchlist")
+    marketorders_name = table_map.translate_table_name("marketorders")
+    market_history_name = table_map.translate_table_name("market_history")
+    marketstats_name = table_map.translate_table_name("marketstats")
+
+    query = f"""
     SELECT
     w.type_id,
     w.type_name,
@@ -49,14 +62,14 @@ def calculate_market_stats() -> pd.DataFrame:
     ELSE 0
     END, 2) as days_remaining
 
-    FROM watchlist w
+    FROM {watchlist_name} w
 
     LEFT JOIN (
     SELECT
         type_id,
         MIN(price) as min_price,
         SUM(volume_remain) as total_volume_remain
-    FROM marketorders
+    FROM {marketorders_name}
         WHERE is_buy_order = 0
         GROUP BY type_id
     ) AS o
@@ -66,20 +79,23 @@ def calculate_market_stats() -> pd.DataFrame:
         type_id,
         AVG(average) as avg_price,
         AVG(volume) as avg_volume
-    FROM market_history
+    FROM {market_history_name}
     WHERE date >= DATE('now', '-30 day') AND average > 0 AND volume > 0
     GROUP BY type_id
     ) AS h ON w.type_id = h.type_id
     """
-    db = DatabaseConfig("wcmkt")
-    engine = db.engine
+    db = DatabaseConfig("wcmkt", market=market)
+    if local:
+        engine = db.engine
+    else:
+        engine = db.remote_engine
     with engine.connect() as conn:
         df = pd.read_sql_query(query, conn)
         logger.info(f"Market stats queried: {df.shape[0]} items")
     engine.dispose()
 
     logger.info("Calculating 5 percentile price")
-    df2 = calculate_5_percentile_price()
+    df2 = calculate_5_percentile_price(market=market)
     logger.info("Merging 5 percentile price with market stats")
     df = df.merge(df2, on="type_id", how="left")
     df = df.rename(columns={"5_perc_price": "price"})
@@ -104,11 +120,17 @@ def calculate_market_stats() -> pd.DataFrame:
     logger.info(f"Market stats calculated: {df.shape[0]} items")
     return df
 
-def fill_nulls_from_history(stats: pd.DataFrame) -> pd.DataFrame:
+def fill_nulls_from_history(stats: pd.DataFrame, market: str = "primary") -> pd.DataFrame:
     """
     Fill nulls from market history data.
     """
     logger.info("Filling nulls from history")
+    db = DatabaseConfig("wcmkt", market=market)
+    from mkts_backend.db.db_map import TableMap
+    table_map = TableMap(db)
+    from mkts_backend.db import models
+    market_history_class = table_map.translate_table_class(models.MarketHistory)
+    market_history_name = market_history_class.__tablename__
 
     # Check if there are any null values to fill
     if stats.isnull().sum().sum() == 0:
@@ -131,7 +153,7 @@ def fill_nulls_from_history(stats: pd.DataFrame) -> pd.DataFrame:
         return stats
 
     logger.info("Querying history")
-    engine = wcmkt_db.engine
+    engine = db.engine
     session = Session(engine)
     try:
         with session.begin():
@@ -198,7 +220,7 @@ def fill_nulls_from_history(stats: pd.DataFrame) -> pd.DataFrame:
         logger.error(f"stats has nulls after filling: {stats.isnull().sum().sum()}")
     return stats
 
-def calculate_doctrine_stats() -> pd.DataFrame:
+def calculate_doctrine_stats(market: str = "primary", local: bool = True) -> pd.DataFrame:
     doctrine_query = """
     SELECT
     *
@@ -209,8 +231,11 @@ def calculate_doctrine_stats() -> pd.DataFrame:
     *
     FROM marketstats
     """
-    db = DatabaseConfig("wcmkt")
-    engine = db.engine
+    db = DatabaseConfig("wcmkt", market=market, local=local)
+    if local:
+        engine = db.engine
+    else:
+        engine = db.remote_engine
     with engine.connect() as conn:
         doctrine_stats = pd.read_sql_query(doctrine_query, conn)
         market_stats = pd.read_sql_query(stats_query, conn)

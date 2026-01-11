@@ -77,8 +77,8 @@ async def async_history(watchlist: list[int] = None, region_id: int = None):
     return results
 
 
-def run_async_history(watchlist: list[int] = None, region_id: int = None):
-    return asyncio.run(async_history(watchlist, region_id))
+def run_async_history(watchlist: list[int] = None, region_id: int = None, market: str = "primary"):
+    return asyncio.run(async_history(watchlist=watchlist, region_id=region_id, market=market))
 
 
 if __name__ == "__main__":

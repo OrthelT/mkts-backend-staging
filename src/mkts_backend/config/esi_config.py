@@ -10,14 +10,15 @@ settings = load_settings(settings_file)
 class ESIConfig:
     """ESI configuration for primary and secondary markets."""
 
-    _region_ids = {"primary_region_id": settings["market_data"]["primary_market_region_id"], "secondary_region_id": settings["market_data"]["deployment_market_region_id"]}
-    _system_ids = {"primary_system_id": settings["market_data"]["primary_market_system_id"], "secondary_system_id": settings["market_data"]["deployment_market_system_id"]}
-    _structure_ids = {"primary_structure_id": settings["market_data"]["primary_market_structure_id"], "secondary_structure_id": settings["market_data"]["deployment_market_structure_id"]}
+    _region_ids = {"primary_region_id": settings["market_data"]["primary_region_id"], "deployment_region_id": settings["market_data"]["deployment_region_id"]}
+    _system_ids = {"primary_system_id": settings["market_data"]["primary_system_id"], "deployment_system_id": settings["market_data"]["deployment_system_id"]}
+    _structure_ids = {"primary_structure_id": settings["market_data"]["primary_structure_id"], "deployment_structure_id": settings["market_data"]["deployment_structure_id"]}
     _valid_aliases = ["primary", "deployment"] #primary is the default market, deployment is the deployment market, and is currently unused.
     _shortcut_aliases = {"4h": "primary", "deployment": "deployment"}
-    _names = {"primary": settings["market_data"]["primary_market_name"], "deployment": settings["market_data"]["deployment_market_name"]}
+    _names = {"primary": settings["market_data"]["primary_market_name"], 
+              "deployment": settings["market_data"]["deployment_market_name"]} #deployment is currently unused, but will be used in the future.
 
-    def __init__(self, alias: str, market: str = "primary"):
+    def __init__(self, alias: str = "primary"):
         alias = alias.lower()
         if alias not in self._valid_aliases and alias not in self._shortcut_aliases:
             raise ValueError(

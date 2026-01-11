@@ -14,6 +14,8 @@ import json
 from pathlib import Path
 import tomllib
 
+
+
 logger = configure_logging(__name__)
 logger.info("Loading environment variables for config")
 logger.info("=" * 80)
@@ -36,9 +38,8 @@ class DatabaseConfig:
     _production_db_file = settings["db"]["production_database_file"]
     _testing_db_alias = settings["db"]["testing_database_alias"]
     _testing_db_file = settings["db"]["testing_database_file"]
-    _deployment_db_alias = settings["db"].get("deployment_database_alias", "wcmktnorth")
-    _deployment_db_file = settings["db"].get("deployment_database_file", "wcmktnorth2.db")
-
+    _deployment_db_alias = settings["db"]["deployment_database_alias"]
+    _deployment_db_file = settings["db"]["deployment_database_file"]
 
     _db_paths = {
         _testing_db_alias: _testing_db_file,
@@ -64,21 +65,26 @@ class DatabaseConfig:
         _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_TOKEN"),
     }
 
-    def __init__(self, alias: str, dialect: str = "sqlite+libsql", market: str = "primary"):
-        if market == "primary":
-            if alias == "wcmkt":
-                if self.settings["app"]["environment"] == "development":
-                    alias = self._testing_db_alias
-                else:
-                    alias = self._production_db_alias
-        elif market == "deployment":
-            if alias == "wcmkt":
-                alias = self._deployment_db_alias
-           
-        if alias not in self._db_paths:
-            raise ValueError(
-                f"Unknown database alias '{alias}'. Available: {list(self._db_paths.keys())}"
-            )
+    def __init__(self, alias: str, dialect: str = "sqlite+libsql", market: str = "primary", 
+        environment: str = settings["app"]["environment"], local: bool = True):
+
+        if market == "primary" and alias == "wcmkt":
+            alias = self._production_db_alias
+        elif market == "deployment" and alias == "wcmkt":
+            alias = self._deployment_db_alias
+        else: 
+            alias = alias
+
+        if environment == "development" and alias == "wcmkt":
+            alias = self._testing_db_alias
+        else:
+            alias = alias
+
+        if environment == "development":
+            if alias == "sde" or alias == "fittings":
+                alias = alias
+            else:
+                alias = self._testing_db_alias
 
         self.alias = alias
         self.path = self._db_paths[alias]
@@ -90,7 +96,9 @@ class DatabaseConfig:
         self._libsql_connect = None
         self._libsql_sync_connect = None
         self._sqlite_local_connect = None
-
+        self.environment = environment
+        self.market = market
+        self.local = local
     @property
     def engine(self):
         if self._engine is None:
@@ -99,16 +107,19 @@ class DatabaseConfig:
 
     @property
     def remote_engine(self):
-        if self._remote_engine is None:
-            turso_url = self._db_turso_urls[f"{self.alias}_turso"]
-            auth_token = self._db_turso_auth_tokens[f"{self.alias}_turso"]
-            self._remote_engine = create_engine(
-                f"sqlite+{turso_url}?secure=true",
-                connect_args={
-                    "auth_token": auth_token,
-                },
-            )
-        return self._remote_engine
+        if not self.local:
+            if self._remote_engine is None:
+                turso_url = self._db_turso_urls[f"{self.alias}_turso"]
+                auth_token = self._db_turso_auth_tokens[f"{self.alias}_turso"]
+                self._remote_engine = create_engine(
+                    f"sqlite+{turso_url}?secure=true",
+                    connect_args={
+                        "auth_token": auth_token,
+                    },
+                )
+            return self._remote_engine
+        else:
+            return self.engine
 
     @property
     def libsql_local_connect(self):
@@ -155,6 +166,9 @@ class DatabaseConfig:
         logger.info("=" * 80)
 
     def validate_sync(self) -> bool:
+        if self.environment == "development":
+            return True
+        
         logger.info(f"Validating sync for {self.alias}, url: {self.turso_url}, self.path: {self.path}")
         with self.remote_engine.connect() as conn:
             result = conn.execute(text("SELECT MAX(last_update) FROM marketstats")).fetchone()
@@ -214,9 +228,18 @@ class DatabaseConfig:
 
             return column_info
 
-    def get_table_length(self, table: str):
-        with self.remote_engine.connect() as conn:
-            result = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).fetchone()
+    def get_table_length(self, table: str, local_only: bool = True) -> int:
+
+        from mkts_backend.db.db_map import TableMap
+        table_map = TableMap(self)
+        table_name = table_map.translate_table_name(table)
+
+        if local_only:
+            engine = self.engine
+        else:
+            engine = self.remote_engine
+        with engine.connect() as conn:
+            result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).fetchone()
             return result[0]
 
     def get_status(self):
@@ -229,10 +252,15 @@ class DatabaseConfig:
             conn.close()
         return status_dict
 
-    def get_watchlist(self):
+    def get_watchlist(self, local_only: bool = False) -> pd.DataFrame:
+        logger.info(f"Getting watchlist for {self.alias}: self.path: {self.path}: self.market: {self.market}")
+        from mkts_backend.db import models
+        from mkts_backend.db.db_map import TableMap
+        table_map = TableMap(self)
+        watchlist_name = table_map.translate_table_name("watchlist")
         engine = self.engine
         with engine.connect() as conn:
-            df = pd.read_sql_table("watchlist", conn)
+            df = pd.read_sql_table(watchlist_name, conn)
         conn.close()
         return df
 
@@ -260,6 +288,10 @@ class DatabaseConfig:
             "turso_urls": self._db_turso_urls,
             "turso_tokens": self._db_turso_auth_tokens,
         }
+
+def get_models():
+    from mkts_backend.db import models
+    return models
 
 if __name__ == "__main__":
     pass
