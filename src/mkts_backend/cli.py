@@ -54,9 +54,11 @@ def check_tables():
     db.engine.dispose()
 
 def display_cli_help():
-    print("\nUsage: mkts-backend [--market=<alias>] [--history|--include-history] [--check_tables] [add_watchlist --type_id=<list[int]>] [parse-items --input=<file> --output=<file>] [update-fit --fit-file=<path> --meta-file=<path> [--remote] [--no-clear] [--dry-run] [--target=<wcmkt|wcmktnorth>|--north]]\n")
+    print("\nUsage: mkts-backend [--market=<alias>|--primary|--deployment] [--history|--include-history] [--check_tables] [add_watchlist --type_id=<list[int]>] [parse-items --input=<file> --output=<file>] [update-fit --fit-file=<path> --meta-file=<path> [--remote] [--no-clear] [--dry-run] [--target=<wcmkt|wcmktnorth>|--north]]\n")
     print("""Options:\n
   [--market=<alias>]: Select market to process (primary, deployment). Default: primary\n
+  [--primary]: Shorthand for --market=primary\n
+  [--deployment]: Shorthand for --market=deployment\n
   [--history | --include-history]: Include history processing\n
   [--check_tables]:  Check the tables in the database\n
   [add_watchlist]: --type_id=<list>: Add items to watchlist by type IDs (comma-separated --type_id=81144,88001,89240)\n
@@ -276,11 +278,17 @@ def parse_args(args: list[str])->dict | None:
         display_cli_help()
         exit()
 
-    # Parse --market flag
+    # Parse --market flag (supports --market=<alias>, --primary, --deployment shorthands)
     market_alias = "primary"  # default
     for arg in args:
         if arg.startswith("--market="):
             market_alias = arg.split("=", 1)[1]
+            break
+        elif arg == "--deployment":
+            market_alias = "deployment"
+            break
+        elif arg == "--primary":
+            market_alias = "primary"
             break
     return_args["market"] = market_alias
 

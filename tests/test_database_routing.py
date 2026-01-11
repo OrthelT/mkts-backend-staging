@@ -96,6 +96,82 @@ class TestESIConfigRouting:
         assert primary_esi.region_id != deployment_esi.region_id
         assert primary_esi.structure_id != deployment_esi.structure_id
 
+    def test_esi_config_market_orders_url_primary(self, primary_market_context):
+        """Test market_orders_url property works for primary market."""
+        from mkts_backend.config.esi_config import ESIConfig
+
+        esi = ESIConfig(market_context=primary_market_context)
+        url = esi.market_orders_url
+
+        # Primary uses structure endpoint
+        assert "structures" in url
+        assert str(primary_market_context.structure_id) in url
+
+    def test_esi_config_market_orders_url_deployment(self, deployment_market_context):
+        """Test market_orders_url property works for deployment market."""
+        from mkts_backend.config.esi_config import ESIConfig
+
+        esi = ESIConfig(market_context=deployment_market_context)
+        url = esi.market_orders_url
+
+        # Deployment uses structure endpoint (not region)
+        assert "structures" in url
+        assert str(deployment_market_context.structure_id) in url
+
+    def test_esi_config_headers_primary_does_not_raise(self, primary_market_context):
+        """Test headers property doesn't raise for primary market."""
+        from mkts_backend.config.esi_config import ESIConfig
+        from unittest.mock import patch
+
+        esi = ESIConfig(market_context=primary_market_context)
+
+        # Mock the token to avoid actual ESI auth
+        with patch.object(esi, 'token', return_value={'access_token': 'mock_token'}):
+            headers = esi.headers
+
+        assert "Authorization" in headers
+        assert "Bearer" in headers["Authorization"]
+
+    def test_esi_config_headers_deployment_does_not_raise(self, deployment_market_context):
+        """Test headers property doesn't raise for deployment market.
+
+        This test catches the bug where headers property only checked for
+        'primary' and 'secondary' aliases, not 'deployment'.
+        """
+        from mkts_backend.config.esi_config import ESIConfig
+        from unittest.mock import patch
+
+        esi = ESIConfig(market_context=deployment_market_context)
+
+        # Mock the token to avoid actual ESI auth
+        with patch.object(esi, 'token', return_value={'access_token': 'mock_token'}):
+            # This would raise ValueError before the fix:
+            # "Invalid alias: deployment. Valid aliases are: ['primary', 'deployment']"
+            headers = esi.headers
+
+        assert "Authorization" in headers
+        assert "Bearer" in headers["Authorization"]
+
+    def test_esi_config_market_history_url_primary(self, primary_market_context):
+        """Test market_history_url property works for primary market."""
+        from mkts_backend.config.esi_config import ESIConfig
+
+        esi = ESIConfig(market_context=primary_market_context)
+        url = esi.market_history_url
+
+        assert "history" in url
+        assert str(primary_market_context.region_id) in url
+
+    def test_esi_config_market_history_url_deployment(self, deployment_market_context):
+        """Test market_history_url property works for deployment market."""
+        from mkts_backend.config.esi_config import ESIConfig
+
+        esi = ESIConfig(market_context=deployment_market_context)
+        url = esi.market_history_url
+
+        assert "history" in url
+        assert str(deployment_market_context.region_id) in url
+
 
 class TestGoogleSheetsConfigRouting:
     """Tests for GoogleSheetConfig routing with MarketContext."""

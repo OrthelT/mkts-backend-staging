@@ -47,8 +47,8 @@ system_id = 30002029
 structure_id = 1046831245129
 database_alias = "wcmktnorth"
 database_file = "wcmktnorth2.db"
-turso_url_env = "TURSO_WCMKTNORTH2_URL"
-turso_token_env = "TURSO_WCMKTNORTH2_TOKEN"
+turso_url_env = "TURSO_WCMKTNORTH_URL"
+turso_token_env = "TURSO_WCMKTNORTH_TOKEN"
 gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit"
 
 [markets.deployment.gsheets_worksheets]

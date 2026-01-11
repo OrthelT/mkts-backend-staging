@@ -274,27 +274,28 @@ TURSO_SDE_TOKEN=your_sde_token_here
 
 ### Step 5: Customize Market Configuration
 
-Edit `src/mkts_backend/config/esi_config.py` to match user's market:
+Edit `src/mkts_backend/config/settings.toml` to match user's markets:
 
-```python
-class ESIConfig:
-    # Update these values for your market
-    _region_ids = {
-        "primary_region_id": 10000003,  # Change to your region ID
-        "secondary_region_id": None     # Optional secondary market
-    }
-    _system_ids = {
-        "primary_system_id": 30000240,  # Change to your system ID
-        "secondary_system_id": None
-    }
-    _structure_ids = {
-        "primary_structure_id": 1035466617946,  # Change to your structure ID
-        "secondary_structure_id": None
-    }
-    _names = {
-        "primary": "Your Structure Name",
-        "secondary": "Secondary Market Name"
-    }
+```toml
+[markets.primary]
+name = "Your Structure Name"
+region_id = 10000003        # Change to your region ID
+system_id = 30000240        # Change to your system ID
+structure_id = 1035466617946  # Change to your structure ID
+database_alias = "wcmktprod"
+database_file = "wcmktprod.db"
+turso_url_env = "TURSO_WCMKTPROD_URL"
+turso_token_env = "TURSO_WCMKTPROD_TOKEN"
+
+[markets.deployment]  # Optional second market
+name = "Deployment Market Name"
+region_id = 10000023
+system_id = 30002029
+structure_id = 1046831245129
+database_alias = "wcmktnorth"
+database_file = "wcmktnorth2.db"
+turso_url_env = "TURSO_WCMKTNORTH_URL"
+turso_token_env = "TURSO_WCMKTNORTH_TOKEN"
 ```
 
 **Finding Your IDs**:
@@ -492,12 +493,12 @@ To switch to a different market structure:
 
 ### Multi-Region Support
 
-To track multiple regions:
+To track multiple markets:
 
-1. Update `esi_config.py` with secondary market IDs
-2. Add secondary watchlist if needed
-3. Run separate data collection jobs
-4. Frontend can display multi-region comparisons
+1. Add market configuration to `settings.toml` under `[markets.<alias>]`
+2. Add Turso database credentials as environment variables
+3. Run with `--market=<alias>` flag: `uv run mkts-backend --market=deployment`
+4. Use GitHub Actions matrix strategy to process multiple markets in parallel
 
 ## Troubleshooting Guide
 

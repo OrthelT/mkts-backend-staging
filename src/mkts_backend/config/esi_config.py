@@ -13,12 +13,12 @@ logger = configure_logging(__name__)
 settings = load_settings(settings_file)
 
 class ESIConfig:
-    """ESI configuration for primary and secondary markets."""
+    """ESI configuration for primary and deployment markets."""
 
     # Legacy class-level lookups for backward compatibility
-    _region_ids = {"primary_region_id": settings["market_data"]["primary_region_id"], "secondary_region_id": settings["market_data"]["deployment_region_id"]}
-    _system_ids = {"primary_system_id": settings["market_data"]["primary_system_id"], "secondary_system_id": settings["market_data"]["deployment_system_id"]}
-    _structure_ids = {"primary_structure_id": settings["market_data"]["primary_structure_id"], "secondary_structure_id": settings["market_data"]["deployment_structure_id"]}
+    _region_ids = {"primary_region_id": settings["market_data"]["primary_region_id"], "deployment_region_id": settings["market_data"]["deployment_region_id"]}
+    _system_ids = {"primary_system_id": settings["market_data"]["primary_system_id"], "deployment_system_id": settings["market_data"]["deployment_system_id"]}
+    _structure_ids = {"primary_structure_id": settings["market_data"]["primary_structure_id"], "deployment_structure_id": settings["market_data"]["deployment_structure_id"]}
     _valid_aliases = ["primary", "deployment"]
     _shortcut_aliases = {"4h": "primary"}
     _names = {"primary": settings["market_data"]["primary_market_name"], "deployment": settings["market_data"]["deployment_market_name"]}
@@ -73,34 +73,25 @@ class ESIConfig:
 
     @property
     def market_orders_url(self):
-        if self.alias == "primary":
-            return f"https://esi.evetech.net/markets/structures/{self.structure_id}"
-        elif self.alias == "secondary":
-            return f"https://esi.evetech.net/markets/{self.region_id}/orders"
+        """URL for fetching market orders (structure-based endpoint)."""
+        # Both primary and deployment use structure markets requiring authentication
+        return f"https://esi.evetech.net/markets/structures/{self.structure_id}"
 
     @property
     def market_history_url(self):
+        """URL for fetching market history (region-based endpoint)."""
         return f"https://esi.evetech.net/markets/{self.region_id}/history"
 
     @property
     def headers(self, etag: str = None) -> dict:
-        if self.alias == "primary":
-            token = self.token()
-            return {
-                "Accept-Language": "en",
-                "If-None-Match": f"{etag}",
-                "X-Compatibility-Date": self.compatibility_date,
-                "X-Tenant": "tranquility",
-                "Accept": "application/json",
-                "Authorization": f"Bearer {token['access_token']}",
-            }
-        elif self.alias == "secondary":
-            return {
-                "Accept-Language": "en",
-                "If-None-Match": etag,
-                "X-Compatibility-Date": self.compatibility_date,
-                "Accept": "application/json",
-                "User-Agent": self.user_agent,
-            }
-        else:
-            raise ValueError(f"Invalid alias: {self.alias}. Valid aliases are: {self._valid_aliases}")
+        """HTTP headers for ESI requests (includes OAuth for structure markets)."""
+        # Both primary and deployment use structure markets requiring authentication
+        token = self.token()
+        return {
+            "Accept-Language": "en",
+            "If-None-Match": f"{etag}",
+            "X-Compatibility-Date": self.compatibility_date,
+            "X-Tenant": "tranquility",
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token['access_token']}",
+        }

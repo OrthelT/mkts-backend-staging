@@ -24,6 +24,22 @@ class TestCliMarketFlagParsing:
 
         assert args["market"] == "deployment"
 
+    def test_parse_deployment_shorthand(self):
+        """Test parsing --deployment shorthand."""
+        from mkts_backend.cli import parse_args
+
+        args = parse_args(["--deployment"])
+
+        assert args["market"] == "deployment"
+
+    def test_parse_primary_shorthand(self):
+        """Test parsing --primary shorthand."""
+        from mkts_backend.cli import parse_args
+
+        args = parse_args(["--primary"])
+
+        assert args["market"] == "primary"
+
     def test_parse_market_flag_default(self):
         """Test default market when --market not specified."""
         from mkts_backend.cli import parse_args

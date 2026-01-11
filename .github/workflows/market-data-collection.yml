@@ -90,8 +90,8 @@ jobs:
         echo "TURSO_WCMKTPROD_URL=${{ secrets.TURSO_WCMKTPROD_URL }}" >> $GITHUB_ENV
         echo "TURSO_WCMKTPROD_TOKEN=${{ secrets.TURSO_WCMKTPROD_TOKEN }}" >> $GITHUB_ENV
         # Deployment market (B-9C24 / wcmktnorth)
-        echo "TURSO_WCMKTNORTH2_URL=${{ secrets.TURSO_WCMKTNORTH2_URL }}" >> $GITHUB_ENV
-        echo "TURSO_WCMKTNORTH2_TOKEN=${{ secrets.TURSO_WCMKTNORTH2_TOKEN }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKTNORTH_URL=${{ secrets.TURSO_WCMKTNORTH_URL }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKTNORTH_TOKEN=${{ secrets.TURSO_WCMKTNORTH_TOKEN }}" >> $GITHUB_ENV
 
     - name: Write Google Service Account JSON
       env:
@@ -123,8 +123,8 @@ jobs:
         echo "TURSO_FITTING_TOKEN is set: $([ -n "$TURSO_FITTING_TOKEN" ] && echo "YES" || echo "NO")"
         echo "TURSO_WCMKTPROD_URL is set: $([ -n "$TURSO_WCMKTPROD_URL" ] && echo "YES" || echo "NO")"
         echo "TURSO_WCMKTPROD_TOKEN is set: $([ -n "$TURSO_WCMKTPROD_TOKEN" ] && echo "YES" || echo "NO")"
-        echo "TURSO_WCMKTNORTH2_URL is set: $([ -n "$TURSO_WCMKTNORTH2_URL" ] && echo "YES" || echo "NO")"
-        echo "TURSO_WCMKTNORTH2_TOKEN is set: $([ -n "$TURSO_WCMKTNORTH2_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKTNORTH_URL is set: $([ -n "$TURSO_WCMKTNORTH_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKTNORTH_TOKEN is set: $([ -n "$TURSO_WCMKTNORTH_TOKEN" ] && echo "YES" || echo "NO")"
 
     - name: Run market data collection
       run: |

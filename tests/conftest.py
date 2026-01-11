@@ -35,8 +35,8 @@ def mock_env_vars():
         "TURSO_WCMKTPROD_URL": "libsql://test-primary.turso.io",
         "TURSO_WCMKTPROD_TOKEN": "test-primary-token",
         # Deployment market
-        "TURSO_WCMKTNORTH2_URL": "libsql://test-deployment.turso.io",
-        "TURSO_WCMKTNORTH2_TOKEN": "test-deployment-token",
+        "TURSO_WCMKTNORTH_URL": "libsql://test-deployment.turso.io",
+        "TURSO_WCMKTNORTH_TOKEN": "test-deployment-token",
         # SDE and fittings
         "TURSO_SDE_URL": "libsql://test-sde.turso.io",
         "TURSO_SDE_TOKEN": "test-sde-token",

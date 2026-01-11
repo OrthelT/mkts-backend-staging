@@ -31,8 +31,8 @@ class TestMarketContextCreation:
         assert ctx.structure_id == 1046831245129
         assert ctx.database_alias == "wcmktnorth"
         assert ctx.database_file == "wcmktnorth2.db"
-        assert ctx.turso_url_env == "TURSO_WCMKTNORTH2_URL"
-        assert ctx.turso_token_env == "TURSO_WCMKTNORTH2_TOKEN"
+        assert ctx.turso_url_env == "TURSO_WCMKTNORTH_URL"
+        assert ctx.turso_token_env == "TURSO_WCMKTNORTH_TOKEN"
 
     def test_get_default_returns_primary(self):
         """Test that get_default() returns primary market context."""
