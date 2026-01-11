@@ -8,10 +8,14 @@ from typing import Optional, List
 import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
-
 from mkts_backend.config.logging_config import configure_logging
+from dotenv import load_dotenv
 
 logger = configure_logging(__name__)
+logger.info("Loading environment variables for gsheets config")
+load_dotenv()
+logger.info("Environment variables loaded for gsheets config")
+logger.info("=" * 80)
 
 """
 Configures Google Sheets API and updates a spreadsheet with market data.

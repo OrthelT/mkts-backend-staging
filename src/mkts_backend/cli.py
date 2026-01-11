@@ -239,7 +239,12 @@ def update_google_sheet(google_sheet_config: GoogleSheetConfig, sheet_name: str,
 
 def parse_args(args: list[str])->dict | None:
     return_args = {}
-
+    market = "primary"
+    if "--north" in args:
+        return_args["market"] = "deployment"
+    else:
+        return_args["market"] = "primary"
+    return_args["history"] = False
     if len(args) == 0:
         return None
 
@@ -383,14 +388,20 @@ def parse_args(args: list[str])->dict | None:
     if "--history" in args or "--include-history" in args:
         history = True
         return_args["history"] = history
-        return return_args
-
-    display_cli_help()
-    exit()
+    
+    return return_args
 
 def main(history: bool = False):
     """Main function to process market orders, history, market stats, and doctrines"""
-    # Accept flags when invoked via console_script entrypoint
+    if len(sys.argv) > 1:
+        args = parse_args(sys.argv)
+
+    if args is not None and "history" in args:
+            history = args["history"]
+
+    market = "primary"
+    if "--north" in args:
+        market = "deployment"
 
     start_time = time.perf_counter()
 
@@ -405,22 +416,24 @@ def main(history: bool = False):
         sys.exit(1)
     logger.info("Environment validation passed")
 
-    init_databases()
+    init_databases(market=market)
     logger.info("Databases initialized")
     os.makedirs("data", exist_ok=True)
     logger.info(f"Data directory created: {os.path.abspath('data')}")
     logger.info("=" * 80)
 
-    if len(sys.argv) > 1:
-        args = parse_args(sys.argv)
 
-        if args is not None and "history" in args:
-            history = args["history"]
-        else:
-            return
 
-    esi = ESIConfig("primary")
-    db = DatabaseConfig("wcmkt")
+    esi = ESIConfig(market=market)
+    logger.info(f"ESI: {esi.alias}")
+    logger.info(f"ESI region ID: {esi.region_id}")
+    logger.info(f"ESI system ID: {esi.system_id}")
+    logger.info(f"ESI structure ID: {esi.structure_id}")
+    logger.info(f"ESI url: {esi.market_orders_url}")
+    logger.info(f"ESI history url: {esi.market_history_url}")
+    quit()
+
+    db = DatabaseConfig("wcmkt", market=market)
     logger.info(f"Database: {db.alias}")
     validation_test = db.validate_sync()
 

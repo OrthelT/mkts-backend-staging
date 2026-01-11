@@ -67,6 +67,42 @@ class MarketHistory(Base):
             f"lowest={self.lowest!r}, order_count={self.order_count!r}, timestamp={self.timestamp!r})"
         )
 
+class DeploymentMarketOrders(Base):
+    __tablename__ = "deployment_marketorders"
+    order_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    is_buy_order: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    type_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    type_name: Mapped[str] = mapped_column(String, nullable=True)
+    duration: Mapped[int] = mapped_column(Integer, nullable=True)
+    issued: Mapped[DateTime] = mapped_column(DateTime, nullable=True)
+    price: Mapped[float] = mapped_column(Float, nullable=True)
+    volume_remain: Mapped[int] = mapped_column(Integer, nullable=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"marketorders(order_id={self.order_id!r}, is_buy_order={self.is_buy_order!r}, "
+            f"type_id={self.type_id!r}, type_name={self.type_name!r}, duration={self.duration!r}, "
+            f"issued={self.issued!r}, price={self.price!r}, volume_remain={self.volume_remain!r})"
+        )
+class DeploymentMarketHistory(Base):
+    __tablename__ = "deployment_market_history"
+    date: Mapped[DateTime] = mapped_column(DateTime, primary_key=True)
+    type_id: Mapped[str] = mapped_column(String(10), primary_key=True)
+    type_name: Mapped[str] = mapped_column(String(100))
+    average: Mapped[float] = mapped_column(Float)
+    volume: Mapped[int] = mapped_column(Integer)
+    highest: Mapped[float] = mapped_column(Float)
+    lowest: Mapped[float] = mapped_column(Float)
+    order_count: Mapped[int] = mapped_column(Integer)
+    timestamp: Mapped[DateTime] = mapped_column(DateTime)
+
+    def __repr__(self) -> str:
+        return (
+            f"market_history(date={self.date!r}, type_name={self.type_name!r}, type_id={self.type_id!r}, "
+            f"average={self.average!r}, volume={self.volume!r}, highest={self.highest!r}, "
+            f"lowest={self.lowest!r}, order_count={self.order_count!r}, timestamp={self.timestamp!r})"
+        )
+
 class Doctrines(Base):
     __tablename__ = "doctrines"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -113,6 +149,21 @@ class ShipTargets(Base):
             f"ship_name={self.ship_name!r}, ship_target={self.ship_target!r}, created_at={self.created_at!r})"
         )
 
+class DeploymentShipTargets(Base):
+    __tablename__ = "deployment_ship_targets"
+    fit_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    fit_name: Mapped[str] = mapped_column(String)
+    ship_id: Mapped[int] = mapped_column(Integer)
+    ship_name: Mapped[str] = mapped_column(String)
+    ship_target: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[DateTime] = mapped_column(DateTime)
+
+    def __repr__(self) -> str:
+        return (
+            f"deployment_ship_targets(fit_id={self.fit_id!r}, fit_name={self.fit_name!r}, ship_id={self.ship_id!r}, "
+            f"ship_name={self.ship_name!r}, ship_target={self.ship_target!r}, created_at={self.created_at!r})"
+        )
+
 class DoctrineMap(Base):
     __tablename__ = "doctrine_map"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -147,7 +198,19 @@ class Watchlist(Base):
             f"watchlist(type_id={self.type_id!r}, group_id={self.group_id!r}, type_name={self.type_name!r}, "
             f"group_name={self.group_name!r}, category_id={self.category_id!r}, category_name={self.category_name!r})"
         )
-
+class DeploymentWatchlist(Base):
+    __tablename__ = "deployment_watchlist"
+    type_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    group_id: Mapped[int] = mapped_column(Integer)
+    type_name: Mapped[str] = mapped_column(String)
+    group_name: Mapped[str] = mapped_column(String)
+    category_id: Mapped[int] = mapped_column(Integer)
+    category_name: Mapped[str] = mapped_column(String)
+    def __repr__(self) -> str:
+        return (
+            f"deployment_watchlist(type_id={self.type_id!r}, group_id={self.group_id!r}, type_name={self.type_name!r}, "
+            f"group_name={self.group_name!r}, category_id={self.category_id!r}, category_name={self.category_name!r})"
+        )
 
 class DoctrineInfo(Base):
     __tablename__ = "doctrine_info"
@@ -172,7 +235,6 @@ class DoctrineFitItems(Base):
             f"ship_type_id={self.ship_type_id!r}, doctrine_id={self.doctrine_id!r}, fit_id={self.fit_id!r}, "
             f"ship_name={self.ship_name!r}, target={self.target!r})"
         )
-
 
 class UpdateLog(Base):
     __tablename__ = "updatelog"

@@ -10,14 +10,14 @@ settings = load_settings(settings_file)
 class ESIConfig:
     """ESI configuration for primary and secondary markets."""
 
-    _region_ids = {"primary_region_id": 10000003, "secondary_region_id": None}
-    _system_ids = {"primary_system_id": 30000240, "secondary_system_id": None}
-    _structure_ids = {"primary_structure_id": 1035466617946, "secondary_structure_id": None}
-    _valid_aliases = ["primary"] #primary is the default market, secondary is the secondary market, and is currently unused.
-    _shortcut_aliases = {"4h": "primary"}
-    _names = {"primary": "4-HWWF Keepstar"}
+    _region_ids = {"primary_region_id": settings["market_data"]["primary_market_region_id"], "secondary_region_id": settings["market_data"]["deployment_market_region_id"]}
+    _system_ids = {"primary_system_id": settings["market_data"]["primary_market_system_id"], "secondary_system_id": settings["market_data"]["deployment_market_system_id"]}
+    _structure_ids = {"primary_structure_id": settings["market_data"]["primary_market_structure_id"], "secondary_structure_id": settings["market_data"]["deployment_market_structure_id"]}
+    _valid_aliases = ["primary", "deployment"] #primary is the default market, deployment is the deployment market, and is currently unused.
+    _shortcut_aliases = {"4h": "primary", "deployment": "deployment"}
+    _names = {"primary": settings["market_data"]["primary_market_name"], "deployment": settings["market_data"]["deployment_market_name"]}
 
-    def __init__(self, alias: str):
+    def __init__(self, alias: str, market: str = "primary"):
         alias = alias.lower()
         if alias not in self._valid_aliases and alias not in self._shortcut_aliases:
             raise ValueError(
@@ -42,7 +42,7 @@ class ESIConfig:
     def market_orders_url(self):
         if self.alias == "primary":
             return f"https://esi.evetech.net/markets/structures/{self.structure_id}"
-        elif self.alias == "secondary":
+        elif self.alias == "deployment":
             return f"https://esi.evetech.net/markets/{self.region_id}/orders"
 
     @property
@@ -61,7 +61,7 @@ class ESIConfig:
                 "Accept": "application/json",
                 "Authorization": f"Bearer {token['access_token']}",
             }
-        elif self.alias == "secondary":
+        elif self.alias == "deployment":
             return {
                 "Accept-Language": "en",
                 "If-None-Match": etag,

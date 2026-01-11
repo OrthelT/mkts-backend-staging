@@ -14,10 +14,15 @@ import json
 from pathlib import Path
 import tomllib
 
+logger = configure_logging(__name__)
+logger.info("Loading environment variables for config")
+logger.info("=" * 80)
 load_dotenv()
+logger.info("Environment variables loaded for config")
+logger.info("=" * 80)
 settings_file = "src/mkts_backend/config/settings.toml"
 
-logger = configure_logging(__name__)
+
 
 def load_settings(file_path: str = settings_file):
     with open(file_path, "rb") as f:
@@ -31,8 +36,8 @@ class DatabaseConfig:
     _production_db_file = settings["db"]["production_database_file"]
     _testing_db_alias = settings["db"]["testing_database_alias"]
     _testing_db_file = settings["db"]["testing_database_file"]
-    _north_db_alias = settings["db"].get("north_database_alias", "wcmktnorth")
-    _north_db_file = settings["db"].get("north_database_file", "wcmktnorth2.db")
+    _deployment_db_alias = settings["db"].get("deployment_database_alias", "wcmktnorth")
+    _deployment_db_file = settings["db"].get("deployment_database_file", "wcmktnorth2.db")
 
 
     _db_paths = {
@@ -40,7 +45,7 @@ class DatabaseConfig:
         "sde": "sde.db",
         "fittings": "wcfitting.db",
         _production_db_alias: _production_db_file,
-        _north_db_alias: _north_db_file,
+        _deployment_db_alias: _deployment_db_file,
     }
 
     _db_turso_urls = {
@@ -48,7 +53,7 @@ class DatabaseConfig:
         _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_URL"),
         "sde_turso": os.getenv("TURSO_SDE_URL"),
         "fittings_turso": os.getenv("TURSO_FITTING_URL"),
-        _north_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_URL"),
+        _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_URL"),
     }
 
     _db_turso_auth_tokens = {
@@ -56,16 +61,20 @@ class DatabaseConfig:
         _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_TOKEN"),
         "sde_turso": os.getenv("TURSO_SDE_TOKEN"),
         "fittings_turso": os.getenv("TURSO_FITTING_TOKEN"),
-        _north_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_TOKEN"),
+        _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_TOKEN"),
     }
 
-    def __init__(self, alias: str, dialect: str = "sqlite+libsql"):
-        if alias == "wcmkt":
-            if self.settings["app"]["environment"] == "development":
-                alias = self._testing_db_alias
-            else:
-                alias = self._production_db_alias
-
+    def __init__(self, alias: str, dialect: str = "sqlite+libsql", market: str = "primary"):
+        if market == "primary":
+            if alias == "wcmkt":
+                if self.settings["app"]["environment"] == "development":
+                    alias = self._testing_db_alias
+                else:
+                    alias = self._production_db_alias
+        elif market == "deployment":
+            if alias == "wcmkt":
+                alias = self._deployment_db_alias
+           
         if alias not in self._db_paths:
             raise ValueError(
                 f"Unknown database alias '{alias}'. Available: {list(self._db_paths.keys())}"

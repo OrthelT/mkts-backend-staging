@@ -11,7 +11,6 @@ token_file = "file:token.json"
 
 [app]
 name = "WinterCo Markets"
-market_name = "4-HWWF"
 environment = "production"  # "production" or "development"
 log_level = "info"
 
@@ -23,16 +22,18 @@ testing_database_alias = "wcmkttest"
 testing_database_file = "wcmkttest.db"
 
 # North market (secondary production) database
-north_database_alias = "wcmktnorth"
-north_database_file = "wcmktnorth2.db"
+deployment_database_alias = "wcmktnorth"
+deployment_database_file = "wcmktnorth2.db"
 
 [market_data]
 primary_market_region_id = 10000003
-secondary_market_region_id = 'None'
+deployment_market_region_id = 10000023
 primary_market_system_id = 30000240
-secondary_market_system_id = 'None'
+deployment_market_system_id = 30002029
 primary_market_structure_id = 1035466617946
-secondary_market_structure_id = 'None'
+deployment_market_structure_id = 1046831245129
+primary_market_name = "4-HWWF Keepstar"
+deployment_market_name = "B-9C24 Keepstar"
 
 [google_sheets]
 enabled = true
