@@ -1,16 +1,39 @@
-# LLM Agent Guide: Eve Online Market Data System Setup
+# LLM Agent Guide: Eve Online Market Data System
 
-This guide helps LLM agents assist users in implementing the Eve Online Market Data Collection and Analysis System for their own market structures and regions.
+This guide provides comprehensive documentation for LLM agents working with this Eve Online Market Data Collection and Analysis System. It covers both assisting users in implementing their own system and working with the existing codebase.
+
+## Quick Start for Development
+
+**Run the main application:**
+```bash
+uv run mkts-backend
+```
+
+**Include historical data:**
+```bash
+uv run mkts-backend --history
+```
+
+**Check database tables:**
+```bash
+uv run mkts-backend --check_tables
+```
+
+**Dependencies are managed with uv:**
+```bash
+uv sync  # Install dependencies
+uv add <package>  # Add new dependency
+```
 
 ## System Overview
 
-This is a comprehensive market data system consisting of two repositories:
+This is a comprehensive Eve Online market data collection and analysis system consisting of two repositories:
 
 1. **mkts_backend** (this repo): Backend data collection, processing, and storage
-   - Fetches market data from Eve Online ESI API
-   - Processes and stores data in SQLite databases
-   - Calculates market statistics and doctrine availability
-   - Updates Google Sheets with market data
+   - Fetches market data from Eve Online ESI API for specific structures/regions
+   - Processes and stores market orders, history, and calculated statistics in SQLite databases
+   - Analyzes doctrine fits and calculates market availability for ship loadouts
+   - Tracks regional/system market data with automated Google Sheets integration
    - Supports local and remote (Turso) database sync
 
 2. **wcmkts_new** (frontend): Streamlit web application for data visualization
@@ -18,6 +41,122 @@ This is a comprehensive market data system consisting of two repositories:
    - Displays market statistics and trends
    - Shows doctrine/fitting availability
    - Provides interactive data exploration
+
+## Core Components and Architecture
+
+### Main Data Flow (`cli.py`)
+The primary orchestration file that coordinates all data collection and processing:
+- `fetch_market_orders()` - Gets current market orders from ESI API with OAuth
+- `fetch_history()` - Gets historical market data for watchlist items from primary region
+- `fetch_jita_history()` - Gets comparative historical data from The Forge region (Jita)
+- `calculate_market_stats()` - Computes statistics from orders and history
+- `calculate_doctrine_stats()` - Analyzes ship fitting availability
+- Regional order processing and system-specific market analysis
+
+### Database Layer (`dbhandler.py`)
+Manages all database operations:
+- Handles both local SQLite and remote Turso database sync
+- Functions for CRUD operations on market data tables
+- Database sync functionality for production deployment
+- ORM-based data insertion with chunking for large datasets
+
+### Data Models (`models.py`)
+SQLAlchemy ORM model definitions:
+- **Core Models:** `MarketOrders`, `MarketHistory`, `MarketStats`, `Doctrines`, `Watchlist`
+- **Regional Models:** `RegionOrders`, `JitaHistory` (comparative pricing from The Forge)
+- **Organizational Models:** `ShipTargets`, `DoctrineMap`, `DoctrineInfo`
+- All tables use primary database `wcmkt2.db`
+
+### OAuth Authentication (`ESI_OAUTH_FLOW.py` / `esi_auth.py`)
+Handles Eve Online SSO authentication:
+- Eve Online SSO authentication for ESI API access
+- Token refresh and storage in `token.json`
+- Manages OAuth flow for initial authorization
+
+### Regional Market Processing (`nakah.py`)
+Specialized regional market data handling:
+- `get_region_orders()` - Fetches all market orders for a region
+- `process_system_orders()` - Processes orders for specific systems
+- `calculate_total_market_value()` - Calculates total market value excluding blueprints/skills
+- `calculate_total_ship_count()` - Counts ships available on the market
+
+### Google Sheets Integration (`google_sheets_utils.py` / `gsheets_config.py`)
+Automated spreadsheet updates:
+- Automated Google Sheets updates with market data
+- Service account authentication
+- Configurable append/replace data modes
+
+### Data Processing (`data_processing.py`)
+Statistics and analysis calculations:
+- Market statistics calculation with 5th percentile pricing
+- Doctrine availability analysis
+- Historical data integration (30-day averages)
+
+## Key Configuration Values
+
+Current system configuration (customizable in `esi_config.py`):
+
+- **Structure ID:** `1035466617946` (4-HWWF Keepstar)
+- **Region ID:** `10000003` (The Vale of Silent)
+- **Deployment Region:** `10000001` (The Forge)
+- **Deployment System:** `30000072` (Nakah)
+- **Database:** Local SQLite (`wcmkt2.db`) with optional Turso sync
+- **Watchlist:** CSV-based item tracking in `databackup/all_watchlist.csv`
+
+## External Dependencies
+
+- **EVE Static Data Export (SDE):** `sde_info.db` - game item/type information
+- **Custom dbtools:** Local dependency at `../../tools/dbtools` for database utilities
+- **Turso/libsql:** For remote database synchronization (optional in dev)
+- **Google Sheets API:** For automated market data reporting
+
+## Data Processing Flow
+
+The complete data pipeline when running the application:
+
+1. Authenticate with Eve SSO using required scopes
+2. Fetch current market orders for configured structure
+3. Fetch historical data for watchlist items (optional with `--history` flag)
+   - Primary market history (Vale of Silent) → `MarketHistory` table
+   - Jita comparative history (The Forge) → `JitaHistory` table
+4. Calculate market statistics (price, volume, days remaining)
+5. Calculate doctrine/fitting availability based on market data
+6. Update regional orders for deployment region
+7. Process system-specific orders and calculate market value/ship count
+8. Update Google Sheets with system market data
+9. Store all results in local database with optional cloud sync
+
+## Environment Variables Required
+
+```env
+# Eve Online ESI Credentials (Required)
+CLIENT_ID=<eve_sso_client_id>
+SECRET_KEY=<eve_sso_client_secret>
+REFRESH_TOKEN=<your_refresh_token_here>
+
+# Google Sheets (Optional)
+GOOGLE_SHEET_KEY={"type":"service_account"...}  # Entire JSON key file content
+
+# Turso Remote Database (Optional)
+TURSO_URL=<optional_remote_db_url>
+TURSO_AUTH_TOKEN=<optional_remote_db_token>
+SDE_URL=<optional_sde_db_url>
+SDE_AUTH_TOKEN=<optional_sde_db_token>
+```
+
+## Additional Features
+
+- **Comparative Market Analysis:** Dual-region history tracking (primary market vs Jita) for price comparison charts
+- **Market Value Calculation:** Filters out blueprints and skills for accurate market value assessment
+- **Ship Count Tracking:** Specifically tracks ship availability on the market
+- **Google Sheets Automation:** Automatically updates spreadsheets with latest market data
+- **Multi-Region Support:** Handles both structure-specific and region-wide market data
+- **Async Processing:** High-performance concurrent API requests with rate limiting and backoff
+- **Error Handling:** Comprehensive logging and error recovery for API failures
+
+---
+
+## User Implementation Guide
 
 ## Prerequisites Checklist
 
