@@ -154,31 +154,55 @@ class DatabaseConfig:
 
     def sync(self):
         conn = self.libsql_sync_connect
-        start_info = json.loads(self.read_db_info())
+        
+        # Record db state before and after sync to monitor WAL frame generation
+        raw_info = self.read_db_info()
+        start_info = json.loads(raw_info) if raw_info else None
         if start_info is not None:
             logger.info(f"Start info: {start_info}")
         else:
-            logger.info("No start info found")
+            logger.info("No start info found (fresh database sync)")
+
+        # time the sync for performance monitoring
         sync_start_time = datetime.now()
         logger.info(f"Sync start time: {sync_start_time}")
         start_time = perf_counter()
+        
         with conn:
             conn.sync()
         conn.close()
+
         end_time = perf_counter()
         logger.info(f"Sync time: {end_time - start_time:.1f} seconds")
         logger.info(f"Sync time: {(end_time - start_time)/60:.1f} minutes")
         logger.info(f"Sync end time: {datetime.now()}")
-        end_info = json.loads(self.read_db_info())
-        generation_change = end_info["generation"] - start_info["generation"]
-        frames_synced = end_info["durable_frame_num"] - start_info["durable_frame_num"]
-        logger.info(f"Generation change: {generation_change}")
-        logger.info(f"Frames synced: {frames_synced}")
+        raw_end_info = self.read_db_info()
+        end_info = json.loads(raw_end_info) if raw_end_info else None
+        if start_info and end_info:
+            generation_change = end_info["generation"] - start_info["generation"]
+            frames_synced = end_info["durable_frame_num"] - start_info["durable_frame_num"]
+            logger.info(f"Generation change: {generation_change}")
+            logger.info(f"Frames synced: {frames_synced}")
+        elif end_info:
+            logger.info(f"Fresh sync completed. Generation: {end_info['generation']}, Frames: {end_info['durable_frame_num']}")
         logger.info("Sync complete")
         logger.info("=" * 80)
 
     def validate_sync(self) -> bool:
         logger.info(f"Validating sync for {self.alias}, url: {self.turso_url}, self.path: {self.path}")
+        
+        #check that db is initialized
+        verify_db_exists = self.verify_db_exists()
+        if not verify_db_exists:
+            logger.warning(f"Database {self.alias} is not up to date. Syncing...")
+            self.sync()
+            verify_db_exists = self.verify_db_exists()
+            if not verify_db_exists:
+                logger.error(f"Database {self.alias} is still not up to date. Exiting...")
+                return False
+        else:
+            logger.info(f"Database {self.alias} is up to date")
+
         with self.remote_engine.connect() as conn:
             result = conn.execute(text("SELECT MAX(last_update) FROM marketstats")).fetchone()
             remote_last_update = result[0]
@@ -260,14 +284,25 @@ class DatabaseConfig:
         return df
 
     def verify_db_exists(self):
-        path = pathlib.Path(self.path)
-        if not path.exists():
-            logger.warn(f"Database file does not exist: {self.path}")
+        """
+        Verifies that the database file and metadata exist. If the database
+        is in an inconsistent state, it will be nuked and synced.
+        """
+        if not self.confirm_metadata_exists():
+            logger.warning(f"Database metadata does not exist: {self.path}")
+            self.nuke_db()
             self.sync()
-        else:
-            logger.info(f"Database file exists: {self.path}")
 
-        return True
+        logger.info(f"Verifying database exists: {self.path}")
+        if self.needs_init():
+            logger.warning(f"Database file does not exist: {self.path}")
+            self.sync()
+        if not self.confirm_metadata_exists() and not self.needs_init():
+            logger.warning(f"Database metadata does not exist: {self.path}")
+            return False
+        else:
+            logger.info(f"Database metadata exists: {self.path}")
+            return True
 
     def read_db_info(self) -> str:
         info_path = f"{self.path}-info"
@@ -283,6 +318,50 @@ class DatabaseConfig:
             "turso_urls": self._db_turso_urls,
             "turso_tokens": self._db_turso_auth_tokens,
         }
+
+    def needs_init(self) -> bool:
+        """
+        Returns True if the database is missing or not initialized (schema not present).
+        Designed for CI/local bootstrap logic: if True, verify_db_exists will call db.sync().
+        """
+        db_path = Path(self.path)
+        logger.info(f"checkinh db_path")
+        # If it doesn't exist, it's definitely not initialized.
+        if not db_path.exists():
+            logger.info(f"no local db file {db_path} checking metadata")
+            if not self.confirm_metadata_exists():
+                logger.warning(f"Database metadata does not exist: {db_path}")
+                return True
+            else:
+                logger.info(f"Database metadata exists: {db_path}, but db file does not exist")
+                self.nuke_db()
+                if not self.confirm_metadata_exists():
+                    return True
+        else:
+            return False
+
+
+    def confirm_metadata_exists(self) -> bool:
+        """
+        Confirms that the database metadata is consistent with the expected schema.
+        """
+        expected_metadata = f"{self.path}-info"
+        expected_metadata = Path(expected_metadata)
+        if not expected_metadata.exists():
+            return False
+        return True
+
+    def nuke_db(self):
+        db_path = Path(self.path)
+        if db_path.exists():
+            db_path.unlink()
+            expected_metadata = Path(f"{self.path}-info")
+            if expected_metadata.exists():
+                expected_metadata.unlink()
+        else:
+            return False
+        return True
+  
 
 if __name__ == "__main__":
     pass
