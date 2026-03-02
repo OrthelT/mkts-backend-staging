@@ -1394,13 +1394,33 @@ def update_target_command(
     """
     Update the target quantity for a fit.
     """
-    if market_flag not in ["primary", "deployment", "both"]:
-        db_alias = "wcmkt"
-    elif market_flag == "both":
-        db_alias = "wcmkt"
-    elif market_flag == "deployment":
-        db_alias = "wcmktnorth"
+    if market_flag == "both":
+        primary_ok = _update_target_single(
+            fit_id, target, remote=remote, market_flag="primary", db_alias="wcmkt"
+        )
+        deploy_ok = _update_target_single(
+            fit_id, target, remote=remote, market_flag="deployment", db_alias="wcmktnorth"
+        )
+        return primary_ok and deploy_ok
 
+    if market_flag == "deployment":
+        db_alias = "wcmktnorth"
+    elif market_flag not in ["primary", "deployment"]:
+        db_alias = "wcmkt"
+
+    return _update_target_single(
+        fit_id, target, remote=remote, market_flag=market_flag, db_alias=db_alias
+    )
+
+
+def _update_target_single(
+    fit_id: int,
+    target: int,
+    remote: bool = False,
+    market_flag: str = "primary",
+    db_alias: str = "wcmkt",
+) -> bool:
+    """Update the target quantity for a fit in a single database."""
     db = DatabaseConfig(db_alias)
     engine = db.remote_engine if remote else db.engine
     try:
