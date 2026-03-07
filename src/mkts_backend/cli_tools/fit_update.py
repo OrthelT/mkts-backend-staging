@@ -138,7 +138,7 @@ def get_fits_list(db_alias: str = "wcmkt", remote: bool = False) -> List[dict]:
 
 
 def display_fits_table(fits: List[dict]) -> None:
-    """Display fits in a Rich table."""
+    """Display fits in a Rich table with per-market target columns."""
     table = Table(
         title="[bold cyan]Doctrine Fits[/bold cyan]",
         box=box.ROUNDED,
@@ -150,17 +150,15 @@ def display_fits_table(fits: List[dict]) -> None:
     table.add_column("Fit Name", style="white", min_width=30)
     table.add_column("Ship", style="cyan", min_width=20)
     table.add_column("Doctrine", style="green", min_width=20)
-    table.add_column("Target", justify="right", width=8)
-    table.add_column("Market", justify="center", width=12)
-    table.add_column("Friendly", style="yellow", width=18)
+    table.add_column("Primary", justify="right", style="green", width=9)
+    table.add_column("North", justify="right", style="yellow", width=9)
+    table.add_column("Friendly", style="dim", width=18)
 
     for fit in fits:
-        market_style = {
-            "primary": "green",
-            "deployment": "yellow",
-            "both": "blue",
-        }.get(fit["market_flag"], "white")
-
+        primary_target = fit.get("primary_target")
+        north_target = fit.get("north_target")
+        primary_str = str(primary_target) if primary_target is not None else "[dim]--[/dim]"
+        north_str = str(north_target) if north_target is not None else "[dim]--[/dim]"
         friendly = fit.get("friendly_name") or "--"
 
         table.add_row(
@@ -168,8 +166,8 @@ def display_fits_table(fits: List[dict]) -> None:
             fit["fit_name"],
             fit["ship_name"],
             fit["doctrine_name"],
-            str(fit["target"]),
-            f"[{market_style}]{fit['market_flag']}[/{market_style}]",
+            primary_str,
+            north_str,
             friendly,
         )
 
@@ -542,8 +540,21 @@ def assign_market_command(
 
 
 def list_fits_command(db_alias: str = "wcmkt", remote: bool = False) -> None:
-    """List all fits in the doctrine_fits table."""
-    fits = get_fits_list(db_alias=db_alias, remote=remote)
+    """List all fits, showing targets for both primary and north markets."""
+    primary_fits = get_fits_list(db_alias="wcmkt", remote=remote)
+    north_fits = get_fits_list(db_alias="wcmktnorth", remote=remote)
+
+    merged: dict[int, dict] = {}
+    for fit in primary_fits:
+        merged[fit["fit_id"]] = {**fit, "primary_target": fit["target"], "north_target": None}
+    for fit in north_fits:
+        fid = fit["fit_id"]
+        if fid in merged:
+            merged[fid]["north_target"] = fit["target"]
+        else:
+            merged[fid] = {**fit, "primary_target": None, "north_target": fit["target"]}
+
+    fits = sorted(merged.values(), key=lambda f: (f["ship_name"], f["fit_name"]))
     if fits:
         display_fits_table(fits)
         console.print(f"\n[dim]Total: {len(fits)} fits[/dim]")
@@ -728,7 +739,7 @@ def is_fit_in_doctrine(doctrine_id: int, fit_id: int, remote: bool = False) -> b
 
 
 def get_doctrine_fits(doctrine_id: int, remote: bool = False) -> List[int]:
-    """Get list of fit IDs already in a doctrine."""
+    """Get list of fit IDs already in a doctrine (from fittings DB link table)."""
     db = DatabaseConfig("fittings")
     engine = db.remote_engine if remote else db.engine
 
@@ -736,6 +747,26 @@ def get_doctrine_fits(doctrine_id: int, remote: bool = False) -> List[int]:
         result = conn.execute(
             text("""
             SELECT fitting_id FROM fittings_doctrine_fittings
+            WHERE doctrine_id = :doctrine_id
+        """),
+            {"doctrine_id": doctrine_id},
+        ).fetchall()
+
+    engine.dispose()
+    return [row[0] for row in result]
+
+
+def get_doctrine_fits_from_market(
+    doctrine_id: int, db_alias: str = "wcmkt", remote: bool = False
+) -> List[int]:
+    """Get list of fit IDs already in a doctrine from the market database."""
+    db = DatabaseConfig(db_alias)
+    engine = db.remote_engine if remote else db.engine
+
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("""
+            SELECT fit_id FROM doctrine_fits
             WHERE doctrine_id = :doctrine_id
         """),
             {"doctrine_id": doctrine_id},
@@ -776,6 +807,20 @@ def doctrine_add_fit_command(
     """
     # Dictionary to hold per-fit targets
     fit_targets: dict[int, int] = {}
+
+    # Determine target market databases up front (used for both validation and writes)
+    if market_flag == "both":
+        target_aliases = ["wcmkt", "wcmktnorth"]
+    else:
+        target_aliases = [db_alias]
+
+    # A fit is "already added" only if it is present in ALL target market databases
+    def _get_existing_fit_ids_for_doctrine(doctrine_id: int) -> set[int]:
+        fits_per_alias = [
+            set(get_doctrine_fits_from_market(doctrine_id, alias, remote=remote))
+            for alias in target_aliases
+        ]
+        return set.intersection(*fits_per_alias) if fits_per_alias else set()
 
     if interactive:
         console.print(
@@ -821,8 +866,8 @@ def doctrine_add_fit_command(
         console.print(
             f"\n[cyan]Selected doctrine:[/cyan] {doctrine_info['name']}")
 
-        # Show fits already in this doctrine
-        existing_fit_ids = get_doctrine_fits(doctrine_id, remote=remote)
+        # Show fits already in this doctrine (check market db, not fittings link table)
+        existing_fit_ids = _get_existing_fit_ids_for_doctrine(doctrine_id)
         if existing_fit_ids:
             console.print(
                 f"[dim]Currently has {len(existing_fit_ids)} fit(s): {
@@ -971,7 +1016,7 @@ def doctrine_add_fit_command(
                           doctrine_id} not found[/red]")
             return False
 
-        existing_fit_ids = get_doctrine_fits(doctrine_id, remote=remote)
+        existing_fit_ids = _get_existing_fit_ids_for_doctrine(doctrine_id)
 
         # Validate fits
         valid_fits = []
@@ -1009,12 +1054,6 @@ def doctrine_add_fit_command(
             else:
                 # Use provided target or default
                 fit_targets[fit["fit_id"]] = target
-
-    # Determine which databases to update
-    if market_flag == "both":
-        target_aliases = ["wcmkt", "wcmktnorth"]
-    else:
-        target_aliases = [db_alias]
 
     # Process all valid fits
     success_count = 0
