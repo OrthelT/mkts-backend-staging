@@ -275,7 +275,7 @@ class DatabaseConfig:
 
     def get_status(self):
         status_dict = {}
-        tables = self.get_table_list()
+        tables = self.get_table_list(local_only=False)
         for table in tables:
             with self.remote_engine.connect() as conn:
                 result = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).fetchone()
