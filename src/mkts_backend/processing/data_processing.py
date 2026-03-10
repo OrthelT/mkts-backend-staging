@@ -81,7 +81,7 @@ def calculate_market_stats(market_ctx: Optional["MarketContext"] = None) -> pd.D
     SELECT
         type_id,
         AVG(average) as avg_price,
-        AVG(volume) as avg_volume
+        SUM(volume)/30 as avg_volume
     FROM market_history
     WHERE date >= DATE('now', '-30 day') AND average > 0 AND volume > 0
     GROUP BY type_id
