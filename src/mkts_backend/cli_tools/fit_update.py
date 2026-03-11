@@ -201,6 +201,7 @@ def display_doctrines_table(doctrines: List[dict]) -> None:
 
 def interactive_add_fit(
     fit_file: str = None,
+    eft_text: str = None,
     remote: bool = False,
     dry_run: bool = False,
     target_alias: str = "wcmkt",
@@ -211,6 +212,7 @@ def interactive_add_fit(
 
     Args:
         fit_file: Path to EFT fit file (optional; None when using paste mode)
+        eft_text: Raw EFT text from paste mode (used when fit_file is None)
         remote: Use remote database
         dry_run: Preview without committing
         target_alias: Target database alias
@@ -219,10 +221,15 @@ def interactive_add_fit(
     Returns:
         True if successful
     """
-    # Parse the fit file first
+    # Parse the fit file or pasted text
     try:
         if fit_file:
             parse_result = parse_eft_file(fit_file)
+        elif eft_text:
+            parse_result = parse_eft_string(eft_text)
+        else:
+            console.print("[red]Error: No fit file or pasted text provided[/red]")
+            return False
     except FileNotFoundError:
         console.print(f"[red]Error: File not found: {fit_file}[/red]")
         return False
@@ -437,6 +444,17 @@ def interactive_add_fit(
         json.dump(metadata, f)
         meta_path = f.name
 
+    # If paste mode, write EFT text to a temp file for the downstream pipeline
+    eft_temp_path = None
+    if not fit_file and eft_text:
+        eft_temp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False
+        )
+        eft_temp.write(eft_text)
+        eft_temp.close()
+        eft_temp_path = eft_temp.name
+        fit_file = eft_temp_path
+
     try:
         # Determine which databases to update
         if market_flag == "both":
@@ -474,6 +492,8 @@ def interactive_add_fit(
 
     finally:
         os.unlink(meta_path)
+        if eft_temp_path:
+            os.unlink(eft_temp_path)
 
 
 def assign_market_command(
@@ -1666,13 +1686,14 @@ def fit_update_command(
         )
 
     elif subcommand == "add":
+        eft_text = None
         if not file_path:
             eft_text = get_multiline_input()
-            file_path = None
 
         if interactive:
             return interactive_add_fit(
                 fit_file=file_path,
+                eft_text=eft_text,
                 remote=use_remote,
                 dry_run=dry_run,
                 target_alias=target_alias,
