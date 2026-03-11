@@ -384,6 +384,100 @@ def remove_doctrine_map(
         return False
 
 
+def remove_ship_target(
+    fit_id: int,
+    remote: bool = False,
+    db_alias: str = "wcmkt"
+) -> bool:
+    """
+    Remove the ship_targets row for a fit.
+
+    Args:
+        fit_id: The fit ID to remove
+        remote: Whether to use remote database
+        db_alias: Database alias to use
+
+    Returns:
+        True if a row was deleted, False if no matching row found
+    """
+    engine = _get_engine(db_alias, remote)
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("DELETE FROM ship_targets WHERE fit_id = :fit_id"),
+            {"fit_id": fit_id},
+        )
+        conn.commit()
+        rows_affected = result.rowcount
+    engine.dispose()
+
+    if rows_affected > 0:
+        logger.info(f"Removed ship_targets row for fit_id {fit_id} ({db_alias})")
+        return True
+    else:
+        logger.warning(f"No ship_targets row found for fit_id {fit_id} ({db_alias})")
+        return False
+
+
+def remove_all_doctrine_fits_for_fit(
+    fit_id: int,
+    remote: bool = False,
+    db_alias: str = "wcmkt"
+) -> int:
+    """
+    Remove ALL doctrine_fits rows for a fit across all doctrines.
+
+    Args:
+        fit_id: The fit ID to remove
+        remote: Whether to use remote database
+        db_alias: Database alias to use
+
+    Returns:
+        Number of rows deleted
+    """
+    engine = _get_engine(db_alias, remote)
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("DELETE FROM doctrine_fits WHERE fit_id = :fit_id"),
+            {"fit_id": fit_id},
+        )
+        conn.commit()
+        rows_affected = result.rowcount
+    engine.dispose()
+
+    logger.info(f"Removed {rows_affected} doctrine_fits rows for fit_id {fit_id} ({db_alias})")
+    return rows_affected
+
+
+def remove_all_doctrine_map_for_fit(
+    fit_id: int,
+    remote: bool = False,
+    db_alias: str = "wcmkt"
+) -> int:
+    """
+    Remove ALL doctrine_map rows for a fit across all doctrines.
+
+    Args:
+        fit_id: The fit ID (fitting_id in doctrine_map)
+        remote: Whether to use remote database
+        db_alias: Database alias to use
+
+    Returns:
+        Number of rows deleted
+    """
+    engine = _get_engine(db_alias, remote)
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("DELETE FROM doctrine_map WHERE fitting_id = :fit_id"),
+            {"fit_id": fit_id},
+        )
+        conn.commit()
+        rows_affected = result.rowcount
+    engine.dispose()
+
+    logger.info(f"Removed {rows_affected} doctrine_map rows for fit_id {fit_id} ({db_alias})")
+    return rows_affected
+
+
 def remove_doctrines_for_fit(
     fit_id: int,
     remote: bool = False,
@@ -572,6 +666,110 @@ def add_fit_to_doctrines_table(DoctrineFit: DoctrineFitItems):
         print("Fit added to doctrines table")
     conn.close()
     engine.dispose()
+
+def upsert_lead_ship(
+    doctrine_id: int,
+    doctrine_name: str,
+    fit_id: int,
+    ship_type_id: int,
+    remote: bool = False,
+    db_alias: str = "wcmkt",
+) -> bool:
+    """
+    Insert a lead_ships row for a doctrine if one doesn't already exist.
+
+    The lead ship is the primary/representative ship for a doctrine,
+    set to the first fit added.
+
+    Args:
+        doctrine_id: The doctrine ID
+        doctrine_name: The doctrine name
+        fit_id: The fit ID to set as lead
+        ship_type_id: The ship type ID (lead_ship column)
+        remote: Whether to use remote database
+        db_alias: Database alias to use
+
+    Returns:
+        True if a row was inserted, False if one already exists
+    """
+    engine = _get_engine(db_alias, remote)
+    with engine.connect() as conn:
+        existing = conn.execute(
+            text("SELECT 1 FROM lead_ships WHERE doctrine_id = :doctrine_id"),
+            {"doctrine_id": doctrine_id},
+        ).fetchone()
+        if existing:
+            logger.info(f"lead_ships already has entry for doctrine_id {doctrine_id}, skipping")
+            engine.dispose()
+            return False
+
+        conn.execute(
+            text(
+                "INSERT INTO lead_ships (doctrine_name, doctrine_id, lead_ship, fit_id) "
+                "VALUES (:doctrine_name, :doctrine_id, :lead_ship, :fit_id)"
+            ),
+            {
+                "doctrine_name": doctrine_name,
+                "doctrine_id": doctrine_id,
+                "lead_ship": ship_type_id,
+                "fit_id": fit_id,
+            },
+        )
+        conn.commit()
+    engine.dispose()
+    logger.info(f"Added lead_ship for doctrine_id {doctrine_id}: fit_id={fit_id}, ship={ship_type_id}")
+    return True
+
+
+def set_lead_ship(
+    doctrine_id: int,
+    doctrine_name: str,
+    fit_id: int,
+    ship_type_id: int,
+    remote: bool = False,
+    db_alias: str = "wcmkt",
+) -> bool:
+    """
+    Set or replace the lead ship for a doctrine.
+
+    Unlike upsert_lead_ship (which only inserts if missing), this
+    always overwrites an existing row.
+
+    Args:
+        doctrine_id: The doctrine ID
+        doctrine_name: The doctrine name
+        fit_id: The fit ID to set as lead
+        ship_type_id: The ship type ID (lead_ship column)
+        remote: Whether to use remote database
+        db_alias: Database alias to use
+
+    Returns:
+        True on success
+    """
+    engine = _get_engine(db_alias, remote)
+    with engine.connect() as conn:
+        # Delete any existing row, then insert fresh
+        conn.execute(
+            text("DELETE FROM lead_ships WHERE doctrine_id = :doctrine_id"),
+            {"doctrine_id": doctrine_id},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO lead_ships (doctrine_name, doctrine_id, lead_ship, fit_id) "
+                "VALUES (:doctrine_name, :doctrine_id, :lead_ship, :fit_id)"
+            ),
+            {
+                "doctrine_name": doctrine_name,
+                "doctrine_id": doctrine_id,
+                "lead_ship": ship_type_id,
+                "fit_id": fit_id,
+            },
+        )
+        conn.commit()
+    engine.dispose()
+    logger.info(f"Set lead_ship for doctrine_id {doctrine_id}: fit_id={fit_id}, ship={ship_type_id}")
+    return True
+
 
 def add_lead_ship():
     hfi = LeadShips(doctrine_name=doctrine_name, doctrine_id=84, lead_ship=ship_id, fit_id=doctrine_fit_id)

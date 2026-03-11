@@ -648,6 +648,59 @@ def remove_doctrine_link(doctrine_id: int, fit_id: int, remote: bool = False) ->
         return False
 
 
+def remove_all_doctrine_links_for_fit(fit_id: int, remote: bool = False) -> int:
+    """
+    Remove ALL fittings_doctrine_fittings rows for a fit across all doctrines.
+
+    Args:
+        fit_id: The fit ID to unlink from all doctrines
+        remote: Whether to use remote database
+
+    Returns:
+        Number of rows deleted
+    """
+    engine = _get_engine("fittings", remote)
+    with engine.connect() as conn:
+        result = conn.execute(
+            text(
+                "DELETE FROM fittings_doctrine_fittings WHERE fitting_id = :fit_id"
+            ),
+            {"fit_id": fit_id},
+        )
+        conn.commit()
+        rows_affected = result.rowcount
+    engine.dispose()
+
+    logger.info(
+        f"Removed {rows_affected} fittings_doctrine_fittings rows for fit_id {fit_id}"
+    )
+    return rows_affected
+
+
+def get_doctrine_ids_for_fit(fit_id: int, remote: bool = False) -> List[int]:
+    """
+    Get all doctrine IDs that contain a given fit.
+
+    Args:
+        fit_id: The fit ID to look up
+        remote: Whether to use remote database
+
+    Returns:
+        List of doctrine IDs
+    """
+    engine = _get_engine("fittings", remote)
+    with engine.connect() as conn:
+        result = conn.execute(
+            text(
+                "SELECT doctrine_id FROM fittings_doctrine_fittings WHERE fitting_id = :fit_id"
+            ),
+            {"fit_id": fit_id},
+        ).fetchall()
+    engine.dispose()
+
+    return [row[0] for row in result]
+
+
 def update_fit_workflow(
     fit_id: int,
     fit_file: str,

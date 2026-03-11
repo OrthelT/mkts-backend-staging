@@ -155,11 +155,13 @@ SUBCOMMANDS:
     Fit Management:
     add              Add a NEW fit from an EFT file and assign to doctrine(s)
     update           Update an existing fit's items from an EFT file
+    remove           Remove a fit from ALL doctrines and targets
     assign-market    Change the market assignment for an existing fit
     list-fits        List all fits in the doctrine tracking system
 
     Target Management:
     update-target    Update the target quantity for a fit
+    update-lead-ship Set or change the lead ship for a doctrine
 
     Friendly Name Management:
     update-friendly-name      Set the friendly display name for a fit
@@ -216,11 +218,20 @@ EXAMPLES:
     # Update existing fit's items
     mkts-backend fit-update update --fit-id=123 --file=fits/updated.txt --meta-file=meta.json
 
+    # Remove fit from all doctrines (primary market)
+    mkts-backend fit-update remove --fit-id=123
+
+    # Remove fit from deployment market
+    mkts-backend fit-update remove --fit-id=123 --market=deployment
+
     # Assign fit to deployment market
     mkts-backend fit-update assign-market --fit-id=123 --market=deployment
 
     # Update target for fit
     mkts-backend fit-update update --fit-id=550 --target=300
+
+    # Set or change the lead ship for a doctrine
+    mkts-backend fit-update update-lead-ship --doctrine-id=21 --fit-id=550
 
     # Set a doctrine's friendly name
     mkts-backend fit-update update-friendly-name --doctrine-id=21 --name="Hurricane"

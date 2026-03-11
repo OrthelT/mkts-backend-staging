@@ -4,6 +4,7 @@ Fit Update CLI commands.
 Interactive tools for managing fits and doctrines:
 - add: Add a new fit from an EFT file or pasted text
 - update: Update an existing fit's items from file or pasted text
+- remove: Completely remove a fit from all doctrines and targets
 - assign-market: Assign market flags to fits
 - list-fits: List all fits
 - list-doctrines: List all doctrines
@@ -37,6 +38,11 @@ from mkts_backend.utils.doctrine_update import (
     remove_doctrine_fits,
     remove_doctrine_map,
     remove_doctrines_for_fit,
+    remove_ship_target,
+    remove_all_doctrine_fits_for_fit,
+    remove_all_doctrine_map_for_fit,
+    upsert_lead_ship,
+    set_lead_ship,
     DoctrineFit,
     ensure_friendly_name_column,
     update_doctrine_friendly_name,
@@ -50,6 +56,8 @@ from mkts_backend.utils.parse_fits import (
     get_next_doctrine_id,
     ensure_doctrine_link,
     remove_doctrine_link,
+    remove_all_doctrine_links_for_fit,
+    get_doctrine_ids_for_fit,
 )
 from mkts_backend.cli_tools.prompter import get_multiline_input
 
@@ -276,6 +284,8 @@ def interactive_add_fit(
 
     doctrines = get_available_doctrines(remote=remote)
     doctrine_ids = []
+    # Track doctrine names for lead_ship population (includes newly created)
+    doctrine_name_map = {d["id"]: d["name"] for d in doctrines} if doctrines else {}
 
     if doctrines:
         console.print("\n[cyan]Existing doctrines:[/cyan]")
@@ -339,6 +349,7 @@ def interactive_add_fit(
                     }[/green]"
                 )
                 doctrine_ids = [new_doctrine_id]
+                doctrine_name_map[new_doctrine_id] = new_doctrine_name
             else:
                 console.print(
                     f"[yellow]Doctrine {
@@ -379,6 +390,7 @@ def interactive_add_fit(
                     }[/green]"
                 )
                 doctrine_ids = [new_doctrine_id]
+                doctrine_name_map[new_doctrine_id] = new_doctrine_name
             else:
                 console.print(f"[red]Failed to create doctrine[/red]")
                 return False
@@ -482,6 +494,23 @@ def interactive_add_fit(
             console.print(
                 f"[green]Successfully added fit {fit_id} to {alias}[/green]"
             )
+
+            # Populate lead_ship for each doctrine (first fit becomes default)
+            for did in doctrine_ids:
+                d_name = doctrine_name_map.get(did, "")
+                inserted = upsert_lead_ship(
+                    doctrine_id=did,
+                    doctrine_name=d_name,
+                    fit_id=fit_id,
+                    ship_type_id=parse_result.ship_type_id,
+                    remote=remote,
+                    db_alias=alias,
+                )
+                if inserted:
+                    console.print(
+                        f"[green]Set lead ship for doctrine {did}: "
+                        f"{parse_result.ship_name}[/green]"
+                    )
 
         return True
 
@@ -1171,6 +1200,207 @@ def doctrine_add_fit_command(
     return True
 
 
+def remove_fit_command(
+    fit_id: int,
+    remote: bool = False,
+    db_alias: str = "wcmkt",
+) -> bool:
+    """
+    Completely remove a fit from the system.
+
+    This is the inverse of the add command — it removes the fit from ALL
+    doctrines, ship_targets, and market data tables.
+
+    Tables affected:
+        1. doctrines       - market analysis rows for this fit
+        2. doctrine_map    - doctrine-to-fit mappings (all doctrines)
+        3. doctrine_fits   - fit tracking entries (all doctrines)
+        4. fittings_doctrine_fittings - doctrine link table (all doctrines)
+        5. ship_targets    - target quantity for this fit
+
+    Args:
+        fit_id: The fit ID to remove
+        remote: Use remote database
+        db_alias: Target market database alias
+
+    Returns:
+        True if the fit was successfully removed
+    """
+    # Get fit info for display
+    fit_info = get_fit_info(fit_id, remote=remote)
+    if not fit_info:
+        console.print(f"[red]Error: Fit {fit_id} not found in fittings database[/red]")
+        return False
+
+    # Find all doctrines containing this fit
+    doctrine_ids = get_doctrine_ids_for_fit(fit_id, remote=remote)
+
+    # Get doctrine names for display
+    all_doctrines = get_available_doctrines(remote=remote)
+    doctrine_names = {}
+    for d in all_doctrines:
+        doctrine_names[d["id"]] = d["name"]
+
+    # Display what will be removed
+    console.print(
+        Panel(
+            "[bold]Remove fit from ALL doctrines[/bold]\n\n"
+            "This completely removes a fit from the system:\n"
+            "  - Removes from all doctrines\n"
+            "  - Removes ship target\n"
+            "  - Removes market analysis data\n\n"
+            "[bold red]This cannot be undone.[/bold red]",
+            title="[bold cyan]Remove Fit[/bold cyan]",
+            border_style="red",
+        )
+    )
+
+    console.print()
+    info_table = Table(box=box.SIMPLE, show_header=False)
+    info_table.add_column("Field", style="dim")
+    info_table.add_column("Value", style="white")
+    info_table.add_row("Fit ID", str(fit_info["fit_id"]))
+    info_table.add_row("Fit Name", fit_info["fit_name"])
+    info_table.add_row("Ship", fit_info["ship_name"])
+    info_table.add_row("Market DB", db_alias)
+
+    if doctrine_ids:
+        doctrine_list = ", ".join(
+            f"{did} ({doctrine_names.get(did, '?')})" for did in doctrine_ids
+        )
+        info_table.add_row("Doctrines", doctrine_list)
+    else:
+        info_table.add_row("Doctrines", "[dim]None[/dim]")
+
+    console.print(info_table)
+    console.print()
+
+    if not Confirm.ask(
+        f"[bold red]Remove fit {fit_id} ({fit_info['fit_name']}) from {db_alias}?[/bold red]"
+    ):
+        console.print("[yellow]Cancelled[/yellow]")
+        return False
+
+    # Execute removal in reverse order of creation
+    try:
+        # Step 1: Remove from doctrines table (market data)
+        doctrines_removed = remove_doctrines_for_fit(
+            fit_id, remote=remote, db_alias=db_alias
+        )
+        console.print(f"  [dim]doctrines:[/dim] {doctrines_removed} rows removed")
+
+        # Step 2: Remove from doctrine_map (all doctrines)
+        map_removed = remove_all_doctrine_map_for_fit(
+            fit_id, remote=remote, db_alias=db_alias
+        )
+        console.print(f"  [dim]doctrine_map:[/dim] {map_removed} rows removed")
+
+        # Step 3: Remove from doctrine_fits (all doctrines)
+        fits_removed = remove_all_doctrine_fits_for_fit(
+            fit_id, remote=remote, db_alias=db_alias
+        )
+        console.print(f"  [dim]doctrine_fits:[/dim] {fits_removed} rows removed")
+
+        # Step 4: Remove from fittings_doctrine_fittings (all doctrines)
+        links_removed = remove_all_doctrine_links_for_fit(fit_id, remote=remote)
+        console.print(
+            f"  [dim]fittings_doctrine_fittings:[/dim] {links_removed} rows removed"
+        )
+
+        # Step 5: Remove from ship_targets
+        target_removed = remove_ship_target(
+            fit_id, remote=remote, db_alias=db_alias
+        )
+        console.print(
+            f"  [dim]ship_targets:[/dim] {'removed' if target_removed else 'not found'}"
+        )
+
+        console.print()
+        console.print(
+            f"[green]✓ Fit {fit_id} ({fit_info['fit_name']}) completely removed[/green]"
+        )
+        return True
+
+    except Exception as e:
+        console.print(f"[red]✗ Error removing fit {fit_id}: {e}[/red]")
+        logger.exception(f"Error in remove_fit_command for fit_id {fit_id}")
+        return False
+
+
+def update_lead_ship_command(
+    doctrine_id: int,
+    fit_id: int,
+    remote: bool = False,
+    db_alias: str = "wcmkt",
+) -> bool:
+    """
+    Set or change the lead ship for a doctrine.
+
+    Args:
+        doctrine_id: The doctrine to update
+        fit_id: The fit whose ship becomes the lead
+        remote: Use remote database
+        db_alias: Target market database alias
+
+    Returns:
+        True if successful
+    """
+    # Validate doctrine exists
+    doctrines = get_available_doctrines(remote=remote)
+    doctrine_info = None
+    for d in doctrines:
+        if d["id"] == doctrine_id:
+            doctrine_info = d
+            break
+    if not doctrine_info:
+        console.print(f"[red]Error: Doctrine {doctrine_id} not found[/red]")
+        return False
+
+    # Validate fit exists and get ship info
+    fit_info = get_fit_info(fit_id, remote=remote)
+    if not fit_info:
+        console.print(f"[red]Error: Fit {fit_id} not found[/red]")
+        return False
+
+    # Show what will happen
+    console.print()
+    info_table = Table(box=box.SIMPLE, show_header=False)
+    info_table.add_column("Field", style="dim")
+    info_table.add_column("Value", style="white")
+    info_table.add_row("Doctrine", f"{doctrine_info['name']} (ID: {doctrine_id})")
+    info_table.add_row("Fit", f"{fit_info['fit_name']} (ID: {fit_id})")
+    info_table.add_row("Lead Ship", f"{fit_info['ship_name']} ({fit_info['ship_type_id']})")
+    info_table.add_row("Market DB", db_alias)
+    console.print(info_table)
+    console.print()
+
+    if not Confirm.ask(
+        f"Set lead ship for doctrine {doctrine_id} to {fit_info['ship_name']}?"
+    ):
+        console.print("[yellow]Cancelled[/yellow]")
+        return False
+
+    try:
+        set_lead_ship(
+            doctrine_id=doctrine_id,
+            doctrine_name=doctrine_info["name"],
+            fit_id=fit_id,
+            ship_type_id=fit_info["ship_type_id"],
+            remote=remote,
+            db_alias=db_alias,
+        )
+        console.print(
+            f"[green]✓ Lead ship for doctrine {doctrine_id} set to "
+            f"{fit_info['ship_name']} (fit {fit_id})[/green]"
+        )
+        return True
+
+    except Exception as e:
+        console.print(f"[red]✗ Error: {e}[/red]")
+        logger.exception(f"Error in update_lead_ship_command")
+        return False
+
+
 def doctrine_remove_fit_command(
     doctrine_id: Optional[int] = None,
     fit_ids: Optional[List[int]] = None,
@@ -1625,6 +1855,7 @@ def fit_update_command(
     Subcommands:
         add                  - Add a NEW fit from an EFT file and assign to doctrine(s)
         update               - Update an existing fit's items from an EFT file
+        remove               - Completely remove a fit from ALL doctrines and targets
         assign-market        - Change the market assignment for an existing fit
         list-fits            - List all fits in the doctrine tracking system
         list-doctrines       - List all available doctrines
@@ -1632,6 +1863,7 @@ def fit_update_command(
         doctrine-add-fit     - Add existing fit(s) to a doctrine (supports multiple)
         doctrine-remove-fit  - Remove fit(s) from a doctrine (supports multiple)
         update-target             - Update the target quantity for a fit
+        update-lead-ship          - Set or change the lead ship for a doctrine
         update-friendly-name      - Set the friendly display name for a fit
         populate-friendly-names   - Bulk populate friendly names from JSON
 
@@ -1828,6 +2060,29 @@ def fit_update_command(
             skip_targets=skip_targets,
         )
 
+    elif subcommand == "remove":
+        if fit_id is None:
+            console.print(
+                "[red]Error: --fit-id is required for remove command[/red]"
+            )
+            return False
+        # Default to both markets unless a specific market was given
+        if market_flag in ("both", "primary"):
+            # "primary" is the default when no --market flag is passed,
+            # so treat it the same as "both" for remove.
+            aliases = ["wcmkt", "wcmktnorth"]
+        else:
+            aliases = [target_alias]
+        success = True
+        for alias in aliases:
+            if not remove_fit_command(
+                fit_id=fit_id,
+                remote=use_remote,
+                db_alias=alias,
+            ):
+                success = False
+        return success
+
     elif subcommand == "doctrine-remove-fit":
         # Use fit_ids if provided (comma-separated), otherwise wrap single fit_id
         if fit_ids is not None:
@@ -1862,6 +2117,20 @@ def fit_update_command(
             remote=use_remote,
             db_alias=target_alias,
         )
+    elif subcommand == "update-lead-ship":
+        if doctrine_id is None:
+            console.print("[red]Error: --doctrine-id is required for update-lead-ship[/red]")
+            return False
+        if fit_id is None:
+            console.print("[red]Error: --fit-id is required for update-lead-ship[/red]")
+            return False
+        return update_lead_ship_command(
+            doctrine_id=doctrine_id,
+            fit_id=fit_id,
+            remote=use_remote,
+            db_alias=target_alias,
+        )
+
     elif subcommand == "update-friendly-name":
         if doctrine_id is None:
             console.print("[red]Error: --doctrine-id is required for update-friendly-name[/red]")
@@ -1881,9 +2150,9 @@ def fit_update_command(
     else:
         console.print(f"[red]Unknown subcommand: {subcommand}[/red]")
         console.print(
-            "[dim]Available: add, update, assign-market, list-fits, list-doctrines, "
+            "[dim]Available: add, update, remove, assign-market, list-fits, list-doctrines, "
             "create-doctrine, doctrine-add-fit, doctrine-remove-fit, update-target, "
-            "update-friendly-name, populate-friendly-names[/dim]"
+            "update-lead-ship, update-friendly-name, populate-friendly-names[/dim]"
         )
         console.print(
             "[dim]Use --help for more information about a command.[/dim]")
