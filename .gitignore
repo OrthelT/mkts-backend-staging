@@ -61,3 +61,4 @@ sde26.db
 factionmap.sql
 docs/find-equiv.md
 .claude/
+src/mkts_backend/utils/doctrine_fit_ids.py
