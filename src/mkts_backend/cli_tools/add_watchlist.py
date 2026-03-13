@@ -1,3 +1,5 @@
+import csv
+
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.utils.db_utils import add_missing_items_to_watchlist
 from mkts_backend.cli_tools.market_args import MARKET_DB_MAP
@@ -5,24 +7,58 @@ from mkts_backend.cli_tools.market_args import MARKET_DB_MAP
 logger = configure_logging(__name__)
 
 
+def _read_type_ids_from_csv(path: str) -> list[int]:
+    """Read type IDs from a CSV file. Expects a 'type_ids' column."""
+    type_ids = []
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            val = row.get("type_ids", "").strip()
+            if val:
+                type_ids.append(int(val))
+    return type_ids
+
+
 def add_watchlist(args: list[str], market_alias: str = "primary") -> None:
     """Add items to the watchlist for the specified market(s).
 
     Args:
-        args: Raw CLI arguments (used to extract --type_id and --local).
+        args: Raw CLI arguments (used to extract --type_id, --file, and --local).
         market_alias: Normalized market alias from parse_market_args
                       ("primary", "deployment", or "both").
     """
-    # Find the --type_id parameter
+    # Find --type_id or --file parameter
     type_ids_str = None
+    file_path = None
     for arg in args:
         if arg.startswith("--type_id="):
             type_ids_str = arg.split("=", 1)[1]
-            break
+        elif arg.startswith("--file="):
+            file_path = arg.split("=", 1)[1]
+
+    if type_ids_str and file_path:
+        print("Error: --type_id and --file are mutually exclusive")
+        return None
+
+    if file_path:
+        try:
+            type_ids = _read_type_ids_from_csv(file_path)
+            if not type_ids:
+                print(f"Error: No type IDs found in {file_path}")
+                return None
+            type_ids_str = ",".join(str(tid) for tid in type_ids)
+            print(f"Loaded {len(type_ids)} type IDs from {file_path}")
+        except FileNotFoundError:
+            print(f"Error: File not found: {file_path}")
+            return None
+        except (ValueError, KeyError) as e:
+            print(f"Error reading CSV: {e}")
+            return None
 
     if not type_ids_str:
-        print("Error: --type_id parameter is required for add_watchlist command")
+        print("Error: --type_id or --file parameter is required for add_watchlist command")
         print("Usage: mkts-backend add_watchlist --type_id=12345,67890")
+        print("       mkts-backend add_watchlist --file=data/expanded_typeids.csv")
         print("       mkts-backend add_watchlist --type_id=12345 --deployment")
         print("       mkts-backend add_watchlist --type_id=12345 --both")
         return None

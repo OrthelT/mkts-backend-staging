@@ -17,13 +17,24 @@ request_count = 0
 _DEFAULT_HEADERS = None
 
 def _get_headers(market_ctx: Optional["MarketContext"] = None) -> dict:
-    """Get headers with user agent, optionally using market context."""
+    """Get headers with user agent and ESI best-practice fields."""
     global _DEFAULT_HEADERS
     if market_ctx is not None:
         esi = ESIConfig(market_context=market_ctx)
-        return {"User-Agent": esi.user_agent}
+        return {
+            "User-Agent": esi.user_agent,
+            "Accept": "application/json",
+            "X-Compatibility-Date": esi.compatibility_date,
+            "X-Tenant": "tranquility",
+        }
     if _DEFAULT_HEADERS is None:
-        _DEFAULT_HEADERS = {"User-Agent": ESIConfig("primary").user_agent}
+        esi = ESIConfig("primary")
+        _DEFAULT_HEADERS = {
+            "User-Agent": esi.user_agent,
+            "Accept": "application/json",
+            "X-Compatibility-Date": esi.compatibility_date,
+            "X-Tenant": "tranquility",
+        }
     return _DEFAULT_HEADERS
 
 
