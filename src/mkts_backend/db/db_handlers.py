@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 load_dotenv()
 logger = configure_logging(__name__)
+QUIET = os.environ.get("MKTS_QUIET", "0") == "1"
 
 # Lazy initialization - these will be initialized on first use or via market_ctx
 _db = None
@@ -183,9 +184,10 @@ def upsert_database(
                     chunk = data[idx : idx + chunk_size]
                     stmt = insert(t).values(chunk)
                     session.execute(stmt)
-                    logger.info(
-                        f"  • chunk {idx // chunk_size + 1}, {len(chunk)} rows"
-                    )
+                    if not QUIET:
+                        logger.info(
+                            f"  • chunk {idx // chunk_size + 1}, {len(chunk)} rows"
+                        )
 
                 count = session.execute(select(func.count()).select_from(t)).scalar_one()
                 if count != len(data):
