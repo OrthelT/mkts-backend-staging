@@ -104,8 +104,10 @@ async def call_one(
                 except (ValueError, TypeError):
                     pass
 
-            # Handle 304 Not Modified
+            # Handle 304 Not Modified — refund rate-limit token since ESI
+            # does not count conditional hits against the caller's budget.
             if r.status_code == 304:
+                limiter._level = max(0, limiter._level - 1)
                 return {
                     "type_id": type_id,
                     "data": None,
