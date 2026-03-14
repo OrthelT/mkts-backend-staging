@@ -1,3 +1,5 @@
+import os
+
 from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.config.logging_config import configure_logging
 import requests
@@ -7,6 +9,10 @@ import pandas as pd
 import millify
 
 logger = configure_logging(__name__)
+
+# Check if terminal output (progress prints) should be suppressed.
+# Set MKTS_QUIET=1 in CI/GitHub Actions to disable progress output.
+QUIET = os.environ.get("MKTS_QUIET", "0") == "1"
 
 
 def fetch_market_orders(
@@ -85,7 +91,8 @@ def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
         return None
     else:
         logger.info("Watchlist found")
-        print(f"Watchlist found: {len(watchlist)} items")
+        if not QUIET:
+            print(f"Watchlist found: {len(watchlist)} items")
 
     type_ids = watchlist["type_id"].tolist()
     logger.info(f"Fetching history for {len(type_ids)} types")
@@ -104,11 +111,12 @@ def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
         querystring = {"type_id": type_id}
         request_count += 1
         try:
-            print(
-                f"\rFetching history for ({request_count}/{watchlist_length})",
-                end="",
-                flush=True,
-            )
+            if not QUIET:
+                print(
+                    f"\rFetching history for ({request_count}/{watchlist_length})",
+                    end="",
+                    flush=True,
+                )
             t1 = time.perf_counter()
             response = requests.get(
                 url, headers=headers, timeout=10, params=querystring
@@ -153,9 +161,10 @@ def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
         )
         if time_taken < 0.25:
             time.sleep(0.5)
-            print(
-                f"sleeping for 0.5 seconds to avoid rate limiting. Time: {time_taken}s"
-            )
+            if not QUIET:
+                print(
+                    f"sleeping for 0.5 seconds to avoid rate limiting. Time: {time_taken}s"
+                )
     if history:
         logger.info(f"Successfully fetched {len(history)} total history records")
         with open("data/market_history.json", "w") as f:
@@ -188,15 +197,15 @@ def fetch_region_orders(region_id: int, order_type: str = "sell") -> list[dict]:
             elapsed = millify(response.elapsed.total_seconds(), precision=2)
             status_code = response.status_code
         except requests.exceptions.Timeout as TimeoutError:
-            print(TimeoutError)
+            logger.error(f"Timeout: {TimeoutError}")
             elapsed = millify(time.time() - start_time, precision=2)
             logger.error(f"Timeout: {page} of {max_pages} | {elapsed}s")
         except requests.exceptions.ConnectionError as ConnectionError:
-            print(ConnectionError)
+            logger.error(f"Connection Error: {ConnectionError}")
             elapsed = millify(time.time() - start_time, precision=2)
             logger.error(f"Connection Error: {page} of {max_pages} | {elapsed}s")
         except requests.exceptions.RequestException as RequestException:
-            print(RequestException)
+            logger.error(f"Request Error: {RequestException}")
             elapsed = millify(time.time() - start_time, precision=2)
             logger.error(f"Request Error: {page} of {max_pages} | {elapsed}s")
 
@@ -206,7 +215,7 @@ def fetch_region_orders(region_id: int, order_type: str = "sell") -> list[dict]:
             )
             error_count += 1
             if error_count > 5:
-                print("error", status_code)
+                logger.error(f"Error: {status_code}")
                 logger.error(f"Error: {status_code}")
                 raise Exception(f"Too many errors: {error_count}")
             time.sleep(1)
@@ -272,16 +281,16 @@ def fetch_region_item_history(region_id: int, type_id: int) -> list[dict]:
         if response.status_code == 200:
             return response.json()
         else:
-            print(f"    HTTP {response.status_code} for type_id {type_id}")
+            logger.error(f"HTTP {response.status_code} for type_id {type_id}")
             return []
     except requests.exceptions.Timeout:
-        print(f"    Timeout for type_id {type_id}")
+        logger.error(f"Timeout for type_id {type_id}")
         return []
     except requests.exceptions.RequestException as e:
-        print(f"    Request error for type_id {type_id}: {e}")
+        logger.error(f"Request error for type_id {type_id}: {e}")
         return []
     except Exception as e:
-        print(f"    Unexpected error for type_id {type_id}: {e}")
+        logger.error(f"Unexpected error for type_id {type_id}: {e}")
         return []
 
 

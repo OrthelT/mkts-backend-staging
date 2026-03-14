@@ -151,6 +151,8 @@ jobs:
         echo "TURSO_WCMKTNORTH_TOKEN is set: $([ -n "$TURSO_WCMKTNORTH_TOKEN" ] && echo "YES" || echo "NO")"
 
     - name: Run market data collection
+      env:
+        MKTS_QUIET: "1"
       run: |
         HISTORY_FLAG=""
         if [ "${{ github.event.inputs.include_history }}" = "true" ]; then

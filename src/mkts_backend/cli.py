@@ -4,6 +4,9 @@ import time
 import os
 from typing import Optional
 
+# Check if terminal output (progress prints) should be suppressed.
+QUIET = os.environ.get("MKTS_QUIET", "0") == "1"
+
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.db.db_queries import get_table_length
 from mkts_backend.db.db_handlers import (
@@ -272,9 +275,10 @@ def _run_market_pipeline(
             logger.error("database validation failed")
             raise Exception(f"database validation failed for {db.alias}")
 
-    print("=" * 80)
-    print(f"Fetching market orders for {market_ctx.name}")
-    print("=" * 80)
+    if not QUIET:
+        print("=" * 80)
+        print(f"Fetching market orders for {market_ctx.name}")
+        print("=" * 80)
 
     # Process market orders
     status = process_market_orders(
@@ -355,12 +359,11 @@ def main(history: bool = False, market_alias: str = "primary"):
     validation_result = validate_all()
     if not validation_result["is_valid"]:
         logger.error(validation_result["message"])
-        print(validation_result["message"])
         if validation_result["missing_required"]:
-            print(
+            logger.error(
                 f"Missing required credentials: {', '.join(validation_result['missing_required'])}"
             )
-            print("Please check your .env file or environment variables.")
+            logger.error("Please check your .env file or environment variables.")
         sys.exit(1)
     logger.info("Environment validation passed")
 
@@ -392,8 +395,8 @@ def main(history: bool = False, market_alias: str = "primary"):
             logger.info(f"MarketContext: {market_ctx}")
         except ValueError as e:
             logger.error(f"Invalid market: {e}")
-            print(f"Error: {e}")
-            print(f"Available markets: {', '.join(MarketContext.list_available())}")
+            logger.error(f"Error: {e}")
+            logger.error(f"Available markets: {', '.join(MarketContext.list_available())}")
             sys.exit(1)
 
         _run_market_pipeline(market_ctx, history=history)
