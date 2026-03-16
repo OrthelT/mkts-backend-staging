@@ -43,7 +43,18 @@ def fetch_market_orders(
 
         if response.status_code == 200:
             logger.info(f"response successful: {response.status_code}")
-            data = response.json()
+            try:
+                data = response.json()
+            except requests.exceptions.JSONDecodeError:
+                logger.warning(
+                    f"Malformed JSON on page {page}, retrying once..."
+                )
+                time.sleep(1)
+                response = requests.get(
+                    url, headers=headers, params=querystring, timeout=10
+                )
+                response.raise_for_status()
+                data = response.json()
 
             if test_mode:
                 max_pages = 5
@@ -244,7 +255,18 @@ def fetch_region_orders(region_id: int, order_type: str = "sell") -> list[dict]:
             else:
                 max_pages = 1
 
-            order_page = response.json()
+            try:
+                order_page = response.json()
+            except requests.exceptions.JSONDecodeError:
+                logger.warning(
+                    f"Malformed JSON on page {page} of {max_pages}, retrying once..."
+                )
+                time.sleep(1)
+                response = requests.get(base_url, headers=headers, timeout=10)
+                if response.status_code != 200:
+                    error_count += 1
+                    continue
+                order_page = response.json()
         else:
             continue
 
