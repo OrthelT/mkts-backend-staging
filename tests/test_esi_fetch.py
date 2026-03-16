@@ -32,54 +32,69 @@ class TestFetchMarketOrders:
             {"order_id": 1, "type_id": 34, "price": 5.0},
             {"order_id": 2, "type_id": 35, "price": 10.0},
         ]
-        resp = _make_response(json_data=orders, headers={"X-Pages": "1"})
+        resp = _make_response(json_data=orders, headers={"X-Pages": "1", "ETag": '"abc"', "Expires": "Thu, 01 Jan 2026 00:00:00 GMT"})
 
         with patch("mkts_backend.esi.esi_requests.requests.get", return_value=resp):
             from mkts_backend.esi.esi_requests import fetch_market_orders
             result = fetch_market_orders(mock_esi_config)
 
-        assert len(result) == 2
-        assert result[0]["order_id"] == 1
+        assert result["status"] == 200
+        assert len(result["data"]) == 2
+        assert result["data"][0]["order_id"] == 1
 
     def test_pagination(self, mock_esi_config):
         """Multi-page responses should concatenate orders from all pages."""
         page1 = [{"order_id": i, "type_id": 34, "price": 5.0} for i in range(10)]
         page2 = [{"order_id": i + 10, "type_id": 35, "price": 10.0} for i in range(5)]
 
-        resp1 = _make_response(json_data=page1, headers={"X-Pages": "2"})
-        resp2 = _make_response(json_data=page2, headers={"X-Pages": "2"})
+        resp1 = _make_response(json_data=page1, headers={"X-Pages": "2", "ETag": '"e1"', "Expires": "Thu, 01 Jan 2026 00:00:00 GMT"})
+        resp2 = _make_response(json_data=page2, headers={"X-Pages": "2", "ETag": '"e2"'})
 
         with patch("mkts_backend.esi.esi_requests.requests.get", side_effect=[resp1, resp2]):
             from mkts_backend.esi.esi_requests import fetch_market_orders
             result = fetch_market_orders(mock_esi_config)
 
-        assert len(result) == 15
+        assert result["status"] == 200
+        assert len(result["data"]) == 15
 
     def test_test_mode_caps_pages(self, mock_esi_config):
         """test_mode=True should cap at 5 pages regardless of X-Pages header."""
         pages_data = [[{"order_id": i}] for i in range(5)]
         responses = [
-            _make_response(json_data=data, headers={"X-Pages": "100"})
-            for data in pages_data
+            _make_response(json_data=data, headers={"X-Pages": "100", "ETag": f'"e{i}"', "Expires": "Thu, 01 Jan 2026 00:00:00 GMT"})
+            for i, data in enumerate(pages_data)
         ]
 
         with patch("mkts_backend.esi.esi_requests.requests.get", side_effect=responses):
             from mkts_backend.esi.esi_requests import fetch_market_orders
             result = fetch_market_orders(mock_esi_config, test_mode=True)
 
-        assert len(result) == 5
+        assert result["status"] == 200
+        assert len(result["data"]) == 5
 
     def test_empty_page_stops(self, mock_esi_config):
         """An empty data page should stop fetching and return collected orders."""
         page1 = [{"order_id": 1}]
-        resp1 = _make_response(json_data=page1, headers={"X-Pages": "3"})
+        resp1 = _make_response(json_data=page1, headers={"X-Pages": "3", "ETag": '"e1"', "Expires": "Thu, 01 Jan 2026 00:00:00 GMT"})
         resp2 = _make_response(json_data=[], headers={"X-Pages": "3"})
 
         with patch("mkts_backend.esi.esi_requests.requests.get", side_effect=[resp1, resp2]):
             from mkts_backend.esi.esi_requests import fetch_market_orders
             result = fetch_market_orders(mock_esi_config)
 
-        assert len(result) == 1
+        assert result["status"] == 200
+        assert len(result["data"]) == 1
+
+    def test_all_304_returns_not_modified(self, mock_esi_config):
+        """When all pages return 304, result should indicate no changes."""
+        resp = _make_response(status_code=304, headers={})
+        resp.raise_for_status.return_value = None
+
+        with patch("mkts_backend.esi.esi_requests.requests.get", return_value=resp):
+            from mkts_backend.esi.esi_requests import fetch_market_orders
+            result = fetch_market_orders(mock_esi_config, page_etags={1: '"old_etag"'})
+
+        assert result["status"] == 304
 
 
 # ===== fetch_history ========================================================

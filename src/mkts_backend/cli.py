@@ -44,9 +44,48 @@ def process_market_orders(
     test_mode: bool = False,
     market_ctx: Optional[MarketContext] = None,
 ) -> bool:
-    """Fetches market orders from ESI and updates the database."""
+    """Fetches market orders from ESI and updates the database.
+
+    Uses two-layer caching:
+    1. Expires header — skip fetch entirely if within ESI cache window
+    2. Per-page etags — skip DB write if all pages return 304
+    """
+    from mkts_backend.db.db_handlers import load_orders_cache, save_orders_cache
+    from datetime import datetime, timezone
+    from email.utils import parsedate_to_datetime
+
+    structure_id = market_ctx.structure_id if market_ctx else esi.structure_id
+    cache = load_orders_cache(structure_id, market_ctx=market_ctx)
+
+    # Layer 1: Expires check — skip fetch entirely if within cache window
+    expires_str = cache.get("expires")
+    if expires_str:
+        try:
+            expires_dt = parsedate_to_datetime(expires_str)
+            if datetime.now(timezone.utc) < expires_dt:
+                logger.info(f"Market orders cache valid until {expires_str}, skipping fetch")
+                return True
+        except (ValueError, TypeError):
+            pass  # Invalid date, proceed with fetch
+
+    # Layer 2: Per-page etag check
+    page_etags = cache.get("pages", {})
+    result = fetch_market_orders(
+        esi, order_type=order_type, page_etags=page_etags if page_etags else None,
+        test_mode=test_mode,
+    )
+
+    if result is None:
+        logger.error("no data returned from ESI call.")
+        return False
+
+    if result["status"] == 304:
+        logger.info("Market orders unchanged (all pages 304), skipping DB update")
+        return True
+
+    # 200 — process new data
+    data = result["data"]
     save_path = "data/market_orders_new.json"
-    data = fetch_market_orders(esi, order_type=order_type, test_mode=test_mode)
     if data:
         with open(save_path, "w") as f:
             json.dump(data, f)
@@ -56,6 +95,13 @@ def process_market_orders(
             log_update("marketorders", remote=True, market_ctx=market_ctx)
             logger.info(
                 f"Orders updated:{get_table_length('marketorders', market_ctx=market_ctx)} items"
+            )
+            # Save new cache entries
+            save_orders_cache(
+                structure_id,
+                expires=result.get("expires"),
+                page_etags=result.get("page_etags", {}),
+                market_ctx=market_ctx,
             )
             return True
         else:

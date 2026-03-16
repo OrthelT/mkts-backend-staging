@@ -590,5 +590,118 @@ def save_esi_cache(results: list[dict], region_id: int, market_ctx: Optional["Ma
         engine.dispose()
 
 
+def load_orders_cache(structure_id: int, market_ctx: Optional["MarketContext"] = None) -> dict:
+    """Load cached etags and expires for structure market orders.
+
+    Uses negative type_id sentinels in esi_request_cache:
+      type_id = 0  → Expires timestamp stored in last_modified
+      type_id = -N → per-page etag for page N
+
+    Returns:
+        {"expires": "HTTP-date string or None",
+         "pages": {1: "etag", 2: "etag", ...}}
+    """
+    db = _get_db(market_ctx)
+    engine = db.engine
+    try:
+        ensure_cache_table(engine)
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text("SELECT type_id, etag, last_modified FROM esi_request_cache WHERE region_id = :sid AND type_id <= 0"),
+                {"sid": structure_id},
+            ).fetchall()
+
+        result: dict = {"expires": None, "pages": {}}
+        for row in rows:
+            tid, etag, last_modified = row[0], row[1], row[2]
+            if tid == 0:
+                result["expires"] = last_modified
+            else:
+                # tid is -page_number
+                result["pages"][abs(tid)] = etag
+        return result
+    except Exception as e:
+        logger.warning(f"Failed to load orders cache: {e}")
+        return {"expires": None, "pages": {}}
+    finally:
+        engine.dispose()
+
+
+def save_orders_cache(
+    structure_id: int,
+    expires: str | None,
+    page_etags: dict[int, str],
+    market_ctx: Optional["MarketContext"] = None,
+):
+    """Save etags and expires for structure market orders.
+
+    Wipes old entries for this structure (type_id <= 0) and writes fresh ones.
+    """
+    db = _get_db(market_ctx)
+    engine = db.remote_engine
+    try:
+        ensure_cache_table(engine)
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            # Wipe old entries
+            conn.execute(
+                text("DELETE FROM esi_request_cache WHERE region_id = :sid AND type_id <= 0"),
+                {"sid": structure_id},
+            )
+
+            entries = []
+            # type_id=0 stores the Expires header
+            if expires:
+                entries.append({
+                    "type_id": 0,
+                    "region_id": structure_id,
+                    "etag": None,
+                    "last_modified": expires,
+                    "last_checked": datetime.now(timezone.utc).isoformat(),
+                })
+
+            # type_id=-N stores per-page etags
+            for page_num, etag in page_etags.items():
+                entries.append({
+                    "type_id": -page_num,
+                    "region_id": structure_id,
+                    "etag": etag,
+                    "last_modified": None,
+                    "last_checked": datetime.now(timezone.utc).isoformat(),
+                })
+
+            if entries:
+                chunk_size = 100
+                for i in range(0, len(entries), chunk_size):
+                    chunk = entries[i : i + chunk_size]
+                    value_clauses = []
+                    params = {}
+                    for j, entry in enumerate(chunk):
+                        suffix = f"_{j}"
+                        value_clauses.append(
+                            f"(:type_id{suffix}, :region_id{suffix}, :etag{suffix}, "
+                            f":last_modified{suffix}, :last_checked{suffix})"
+                        )
+                        for key, val in entry.items():
+                            params[f"{key}{suffix}"] = val
+
+                    sql = f"""
+                        INSERT INTO esi_request_cache (type_id, region_id, etag, last_modified, last_checked)
+                        VALUES {', '.join(value_clauses)}
+                        ON CONFLICT(type_id, region_id) DO UPDATE SET
+                            etag = excluded.etag,
+                            last_modified = excluded.last_modified,
+                            last_checked = excluded.last_checked
+                    """
+                    conn.execute(text(sql), params)
+                conn.commit()
+            logger.info(f"Saved orders cache for structure {structure_id}: expires={expires}, {len(page_etags)} page etags")
+    except Exception as e:
+        logger.warning(f"Failed to save orders cache: {e}")
+    finally:
+        engine.dispose()
+
+
 if __name__ == "__main__":
     pass
