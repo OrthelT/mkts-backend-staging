@@ -15,7 +15,7 @@ from mkts_backend.db.db_handlers import (
     update_market_orders,
     log_update,
 )
-from mkts_backend.db.models import MarketStats, Doctrines
+from mkts_backend.db.models import MarketStats, Doctrines, JitaPrices
 from mkts_backend.utils.utils import (
     validate_columns,
     convert_datetime_columns,
@@ -240,6 +240,48 @@ def update_google_sheet(
 
 
 
+def process_jita_prices(market_contexts: list[MarketContext]) -> bool:
+    """Fetch Jita prices once, write to all market databases."""
+    import pandas as pd
+    from mkts_backend.utils.jita import fetch_jita_price_data
+    from mkts_backend.db.db_queries import get_watchlist_ids
+
+    # Union watchlist type_ids from all market databases
+    all_type_ids = set()
+    for ctx in market_contexts:
+        try:
+            ids = get_watchlist_ids(market_ctx=ctx)
+            all_type_ids.update(ids)
+        except Exception as e:
+            logger.warning(f"Failed to get watchlist for {ctx.alias}: {e}")
+
+    if not all_type_ids:
+        logger.warning("No watchlist items found for Jita price fetch")
+        return False
+
+    logger.info(f"Fetching Jita prices for {len(all_type_ids)} unique items")
+    price_data = fetch_jita_price_data(list(all_type_ids))
+
+    if not price_data:
+        logger.warning("No Jita price data returned")
+        return False
+
+    df = pd.DataFrame(price_data)
+
+    for ctx in market_contexts:
+        try:
+            status = upsert_database(JitaPrices, df, market_ctx=ctx)
+            if status:
+                log_update("jita_prices", remote=True, market_ctx=ctx)
+                logger.info(f"Jita prices updated for {ctx.alias}: {len(df)} items")
+            else:
+                logger.error(f"Failed to update Jita prices for {ctx.alias}")
+        except Exception as e:
+            logger.error(f"Failed to update Jita prices for {ctx.alias}: {e}")
+
+    return True
+
+
 def _run_market_pipeline(
     market_ctx: MarketContext,
     history: bool = False,
@@ -389,16 +431,22 @@ def main(history: bool = False, market_alias: str = "primary"):
     else:
         market_aliases = [market_alias]
 
+    # Build all market contexts up front
+    all_contexts = []
     for alias in market_aliases:
         try:
             market_ctx = MarketContext.from_settings(alias)
             logger.info(f"MarketContext: {market_ctx}")
+            all_contexts.append(market_ctx)
         except ValueError as e:
             logger.error(f"Invalid market: {e}")
-            logger.error(f"Error: {e}")
             logger.error(f"Available markets: {', '.join(MarketContext.list_available())}")
             sys.exit(1)
 
+    # Fetch Jita prices once and write to all market databases
+    process_jita_prices(all_contexts)
+
+    for market_ctx in all_contexts:
         _run_market_pipeline(market_ctx, history=history)
 
     logger.info("=" * 80)

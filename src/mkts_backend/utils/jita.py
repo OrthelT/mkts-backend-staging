@@ -104,6 +104,110 @@ def fetch_jita_prices(type_ids: List[int]) -> Dict[int, Optional[float]]:
     return results
 
 
+def fetch_jita_price_data(type_ids: List[int]) -> List[dict]:
+    """Fetch full Jita price data (sell + buy) for DB storage.
+
+    Uses Fuzzwork as primary source, Janice as fallback for failed items.
+
+    Returns:
+        List of dicts: [{"type_id": ..., "sell_price": ..., "buy_price": ..., "last_updated": ...}]
+    """
+    if not type_ids:
+        return []
+
+    from datetime import datetime, timezone
+    import os
+
+    now = datetime.now(timezone.utc).isoformat()
+    results = {}
+    failed_ids = []
+
+    # --- Primary: Fuzzwork ---
+    type_ids_str = ",".join(str(tid) for tid in type_ids)
+    headers = {
+        'User-Agent': 'wcmkts_backend/2.1, orthel.toralen@gmail.com',
+        'Accept': 'application/json',
+    }
+
+    try:
+        params = {
+            'region': JITA_REGION_ID,
+            'types': type_ids_str,
+        }
+        response = requests.get(FUZZWORK_API_URL, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        for type_id in type_ids:
+            type_id_str = str(type_id)
+            if type_id_str not in data:
+                failed_ids.append(type_id)
+                continue
+            try:
+                price_data = data[type_id_str]
+                sell_price = float(price_data['sell']['percentile'])
+                buy_price = float(price_data['buy']['percentile'])
+                if sell_price > 0 or buy_price > 0:
+                    results[type_id] = {
+                        "type_id": type_id,
+                        "sell_price": sell_price,
+                        "buy_price": buy_price,
+                        "last_updated": now,
+                    }
+                else:
+                    failed_ids.append(type_id)
+            except (KeyError, ValueError, TypeError):
+                failed_ids.append(type_id)
+
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"Fuzzwork API failed: {e}")
+        failed_ids = list(type_ids)
+
+    # --- Fallback: Janice for failed items ---
+    janice_key = os.environ.get("JANICE_KEY")
+    if failed_ids and janice_key:
+        logger.info(f"Trying Janice fallback for {len(failed_ids)} items")
+        janice_url = "https://janice.e-351.com/api/rest/v2/pricer"
+        janice_headers = {
+            'X-ApiKey': janice_key,
+            'accept': 'application/json',
+            'Content-Type': 'text/plain',
+        }
+        try:
+            body = '\n'.join(str(tid) for tid in failed_ids)
+            resp = requests.post(
+                janice_url,
+                data=body,
+                headers=janice_headers,
+                params={'market': '2'},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            janice_data = resp.json()
+
+            for item in janice_data:
+                type_id = item.get('typeID')
+                if type_id is None:
+                    continue
+                prices = item.get('top5AveragePrices', {})
+                sell_price = float(prices.get('sellPrice', 0) or 0)
+                buy_price = float(prices.get('buyPrice', 0) or 0)
+                if sell_price > 0 or buy_price > 0:
+                    results[type_id] = {
+                        "type_id": type_id,
+                        "sell_price": sell_price,
+                        "buy_price": buy_price,
+                        "last_updated": now,
+                    }
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Janice API failed: {e}")
+    elif failed_ids and not janice_key:
+        logger.info(f"No JANICE_KEY set, skipping Janice fallback for {len(failed_ids)} items")
+
+    logger.info(f"Jita price data: {len(results)} items fetched ({len(type_ids)} requested)")
+    return list(results.values())
+
+
 def get_overpriced_items(
     market_data: List[Dict],
     threshold: float = 1.2,
