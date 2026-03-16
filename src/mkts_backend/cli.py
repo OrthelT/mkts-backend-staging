@@ -240,6 +240,26 @@ def update_google_sheet(
 
 
 
+def _ensure_jita_prices_table(market_ctx: MarketContext) -> None:
+    """Create the jita_prices table on the remote DB if it doesn't exist."""
+    from sqlalchemy import text
+    db = DatabaseConfig(market_context=market_ctx)
+    engine = db.remote_engine
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS jita_prices (
+                    type_id INTEGER PRIMARY KEY,
+                    sell_price REAL,
+                    buy_price REAL,
+                    last_updated TEXT
+                )
+            """))
+            conn.commit()
+    finally:
+        engine.dispose()
+
+
 def process_jita_prices(market_contexts: list[MarketContext]) -> bool:
     """Fetch Jita prices once, write to all market databases."""
     import pandas as pd
@@ -270,6 +290,8 @@ def process_jita_prices(market_contexts: list[MarketContext]) -> bool:
 
     for ctx in market_contexts:
         try:
+            # Ensure table exists on remote (first run won't have it)
+            _ensure_jita_prices_table(ctx)
             status = upsert_database(JitaPrices, df, market_ctx=ctx)
             if status:
                 log_update("jita_prices", remote=True, market_ctx=ctx)

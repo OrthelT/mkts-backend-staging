@@ -122,46 +122,50 @@ def fetch_jita_price_data(type_ids: List[int]) -> List[dict]:
     results = {}
     failed_ids = []
 
-    # --- Primary: Fuzzwork ---
-    type_ids_str = ",".join(str(tid) for tid in type_ids)
+    # --- Primary: Fuzzwork (batched to avoid 414 URI Too Large) ---
+    BATCH_SIZE = 250
     headers = {
         'User-Agent': 'wcmkts_backend/2.1, orthel.toralen@gmail.com',
         'Accept': 'application/json',
     }
+    chunks = [type_ids[i:i + BATCH_SIZE] for i in range(0, len(type_ids), BATCH_SIZE)]
 
-    try:
-        params = {
-            'region': JITA_REGION_ID,
-            'types': type_ids_str,
-        }
-        response = requests.get(FUZZWORK_API_URL, headers=headers, params=params, timeout=30)
-        response.raise_for_status()
-        data = response.json()
+    for chunk_idx, chunk in enumerate(chunks):
+        type_ids_str = ",".join(str(tid) for tid in chunk)
+        try:
+            params = {
+                'region': JITA_REGION_ID,
+                'types': type_ids_str,
+            }
+            response = requests.get(FUZZWORK_API_URL, headers=headers, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            logger.info(f"Fuzzwork chunk {chunk_idx + 1}/{len(chunks)}: {len(data)} items")
 
-        for type_id in type_ids:
-            type_id_str = str(type_id)
-            if type_id_str not in data:
-                failed_ids.append(type_id)
-                continue
-            try:
-                price_data = data[type_id_str]
-                sell_price = float(price_data['sell']['percentile'])
-                buy_price = float(price_data['buy']['percentile'])
-                if sell_price > 0 or buy_price > 0:
-                    results[type_id] = {
-                        "type_id": type_id,
-                        "sell_price": sell_price,
-                        "buy_price": buy_price,
-                        "last_updated": now,
-                    }
-                else:
+            for type_id in chunk:
+                type_id_str = str(type_id)
+                if type_id_str not in data:
                     failed_ids.append(type_id)
-            except (KeyError, ValueError, TypeError):
-                failed_ids.append(type_id)
+                    continue
+                try:
+                    price_data = data[type_id_str]
+                    sell_price = float(price_data['sell']['percentile'])
+                    buy_price = float(price_data['buy']['percentile'])
+                    if sell_price > 0 or buy_price > 0:
+                        results[type_id] = {
+                            "type_id": type_id,
+                            "sell_price": sell_price,
+                            "buy_price": buy_price,
+                            "last_updated": now,
+                        }
+                    else:
+                        failed_ids.append(type_id)
+                except (KeyError, ValueError, TypeError):
+                    failed_ids.append(type_id)
 
-    except requests.exceptions.RequestException as e:
-        logger.warning(f"Fuzzwork API failed: {e}")
-        failed_ids = list(type_ids)
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Fuzzwork chunk {chunk_idx + 1}/{len(chunks)} failed: {e}")
+            failed_ids.extend(chunk)
 
     # --- Fallback: Janice for failed items ---
     janice_key = os.environ.get("JANICE_KEY")
