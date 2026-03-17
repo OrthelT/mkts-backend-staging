@@ -118,7 +118,7 @@ def fetch_jita_price_data(type_ids: List[int]) -> List[dict]:
     from datetime import datetime, timezone
     import os
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     results = {}
     failed_ids = []
 
@@ -160,11 +160,13 @@ def fetch_jita_price_data(type_ids: List[int]) -> List[dict]:
                         }
                     else:
                         failed_ids.append(type_id)
-                except (KeyError, ValueError, TypeError):
+                except (KeyError, ValueError, TypeError) as e:
                     failed_ids.append(type_id)
+                    if len(failed_ids) <= 3:
+                        logger.warning(f"Failed to parse Fuzzwork price for type_id {type_id}: {e}")
 
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Fuzzwork chunk {chunk_idx + 1}/{len(chunks)} failed: {e}")
+            logger.error(f"Fuzzwork chunk {chunk_idx + 1}/{len(chunks)} failed ({len(chunk)} items lost): {e}")
             failed_ids.extend(chunk)
 
     # --- Fallback: Janice for failed items ---
@@ -204,7 +206,7 @@ def fetch_jita_price_data(type_ids: List[int]) -> List[dict]:
                         "last_updated": now,
                     }
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Janice API failed: {e}")
+            logger.error(f"Janice API failed: {e}")
     elif failed_ids and not janice_key:
         logger.info(f"No JANICE_KEY set, skipping Janice fallback for {len(failed_ids)} items")
 

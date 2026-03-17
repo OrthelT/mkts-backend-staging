@@ -20,6 +20,7 @@ def fetch_market_orders(
     order_type: str = "all",
     page_etags: dict[int, str] | None = None,
     test_mode: bool = False,
+    _clean_retry: bool = False,
 ) -> dict:
     """Fetch market orders with per-page etag support.
 
@@ -30,7 +31,9 @@ def fetch_market_orders(
     """
     logger.info("Fetching market orders")
     page = 1
-    max_pages = 1
+    # Seed max_pages from cached page count so 304s can iterate all known pages.
+    # A 200 response will update max_pages from X-Pages header.
+    max_pages = max(page_etags.keys()) if page_etags else 1
     orders = []
     error_count = 0
     request_count = 0
@@ -64,11 +67,8 @@ def fetch_market_orders(
         if response.status_code == 304:
             logger.info(f"Page {page} returned 304 Not Modified")
             got_any_304 = True
-            # Still need to know max_pages — use cached count or advance
             if test_mode:
                 max_pages = 5
-            # If we don't know max_pages yet, we can't paginate further on 304 alone
-            # But ESI doesn't return X-Pages on 304, so use what we already know
             page += 1
             continue
 
@@ -108,7 +108,10 @@ def fetch_market_orders(
                     f"test_mode: max_pages set to {max_pages}. current page: {page}/{max_pages}"
                 )
             else:
-                max_pages = int(response.headers.get("X-Pages"))
+                x_pages = response.headers.get("X-Pages")
+                if x_pages:
+                    max_pages = int(x_pages)
+                # No X-Pages header: keep iterating until empty data stops us
                 logger.info(f"page: {page}, max_pages: {max_pages}")
         else:
             logger.error(f"Error fetching market orders: {response.status_code}")
@@ -134,8 +137,14 @@ def fetch_market_orders(
     # If any page returned 200 while others returned 304, page boundaries may have
     # shifted. Re-fetch all pages clean (without etags) to get a consistent dataset.
     if got_any_200 and got_any_304:
-        logger.info("Mixed 200/304 responses detected — re-fetching all pages clean")
-        return fetch_market_orders(esi, order_type=order_type, page_etags=None, test_mode=test_mode)
+        if _clean_retry:
+            logger.error("Mixed 200/304 on clean re-fetch; returning available data as-is")
+        else:
+            logger.info("Mixed 200/304 responses detected — re-fetching all pages clean")
+            return fetch_market_orders(
+                esi, order_type=order_type, page_etags=None,
+                test_mode=test_mode, _clean_retry=True,
+            )
 
     # All pages returned 304 — nothing changed
     if got_any_304 and not got_any_200:

@@ -602,7 +602,7 @@ def load_orders_cache(structure_id: int, market_ctx: Optional["MarketContext"] =
          "pages": {1: "etag", 2: "etag", ...}}
     """
     db = _get_db(market_ctx)
-    engine = db.engine
+    engine = db.remote_engine
     try:
         ensure_cache_table(engine)
         from sqlalchemy import text
@@ -621,8 +621,8 @@ def load_orders_cache(structure_id: int, market_ctx: Optional["MarketContext"] =
                 # tid is -page_number
                 result["pages"][abs(tid)] = etag
         return result
-    except Exception as e:
-        logger.warning(f"Failed to load orders cache: {e}")
+    except SQLAlchemyError as e:
+        logger.error(f"Failed to load orders cache: {e}")
         return {"expires": None, "pages": {}}
     finally:
         engine.dispose()
@@ -697,8 +697,8 @@ def save_orders_cache(
                     conn.execute(text(sql), params)
                 conn.commit()
             logger.info(f"Saved orders cache for structure {structure_id}: expires={expires}, {len(page_etags)} page etags")
-    except Exception as e:
-        logger.warning(f"Failed to save orders cache: {e}")
+    except SQLAlchemyError as e:
+        logger.error(f"Failed to save orders cache: {e}")
     finally:
         engine.dispose()
 

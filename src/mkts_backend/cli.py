@@ -65,8 +65,8 @@ def process_market_orders(
             if datetime.now(timezone.utc) < expires_dt:
                 logger.info(f"Market orders cache valid until {expires_str}, skipping fetch")
                 return True
-        except (ValueError, TypeError):
-            pass  # Invalid date, proceed with fetch
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid Expires value in orders cache: {expires_str!r} ({e}), proceeding with fetch")
 
     # Layer 2: Per-page etag check
     page_etags = cache.get("pages", {})
@@ -288,20 +288,10 @@ def update_google_sheet(
 
 def _ensure_jita_prices_table(market_ctx: MarketContext) -> None:
     """Create the jita_prices table on the remote DB if it doesn't exist."""
-    from sqlalchemy import text
     db = DatabaseConfig(market_context=market_ctx)
     engine = db.remote_engine
     try:
-        with engine.connect() as conn:
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS jita_prices (
-                    type_id INTEGER PRIMARY KEY,
-                    sell_price REAL,
-                    buy_price REAL,
-                    last_updated TEXT
-                )
-            """))
-            conn.commit()
+        JitaPrices.__table__.create(engine, checkfirst=True)
     finally:
         engine.dispose()
 
@@ -309,6 +299,7 @@ def _ensure_jita_prices_table(market_ctx: MarketContext) -> None:
 def process_jita_prices(market_contexts: list[MarketContext]) -> bool:
     """Fetch Jita prices once, write to all market databases."""
     import pandas as pd
+    from sqlalchemy.exc import SQLAlchemyError
     from mkts_backend.utils.jita import fetch_jita_price_data
     from mkts_backend.db.db_queries import get_watchlist_ids
 
@@ -318,8 +309,8 @@ def process_jita_prices(market_contexts: list[MarketContext]) -> bool:
         try:
             ids = get_watchlist_ids(market_ctx=ctx)
             all_type_ids.update(ids)
-        except Exception as e:
-            logger.warning(f"Failed to get watchlist for {ctx.alias}: {e}")
+        except SQLAlchemyError as e:
+            logger.warning(f"Failed to get watchlist for {ctx.alias} (DB error): {e}")
 
     if not all_type_ids:
         logger.warning("No watchlist items found for Jita price fetch")
@@ -334,6 +325,7 @@ def process_jita_prices(market_contexts: list[MarketContext]) -> bool:
 
     df = pd.DataFrame(price_data)
 
+    any_success = False
     for ctx in market_contexts:
         try:
             # Ensure table exists on remote (first run won't have it)
@@ -342,12 +334,13 @@ def process_jita_prices(market_contexts: list[MarketContext]) -> bool:
             if status:
                 log_update("jita_prices", remote=True, market_ctx=ctx)
                 logger.info(f"Jita prices updated for {ctx.alias}: {len(df)} items")
+                any_success = True
             else:
                 logger.error(f"Failed to update Jita prices for {ctx.alias}")
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"Failed to update Jita prices for {ctx.alias}: {e}")
 
-    return True
+    return any_success
 
 
 def _run_market_pipeline(
@@ -512,7 +505,9 @@ def main(history: bool = False, market_alias: str = "primary"):
             sys.exit(1)
 
     # Fetch Jita prices once and write to all market databases
-    process_jita_prices(all_contexts)
+    jita_ok = process_jita_prices(all_contexts)
+    if not jita_ok:
+        logger.warning("Jita price update failed; downstream stats will lack Jita comparisons")
 
     for market_ctx in all_contexts:
         _run_market_pipeline(market_ctx, history=history)
