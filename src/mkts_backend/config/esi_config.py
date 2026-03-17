@@ -83,15 +83,14 @@ class ESIConfig:
         return f"https://esi.evetech.net/markets/{self.region_id}/history"
 
     @property
-    def headers(self, etag: str = None) -> dict:
+    def headers(self) -> dict:
         """HTTP headers for ESI requests (includes OAuth for structure markets)."""
-        # Both primary and deployment use structure markets requiring authentication
         token = self.token()
         return {
             "Accept-Language": "en",
-            "If-None-Match": f"{etag}",
             "X-Compatibility-Date": self.compatibility_date,
             "X-Tenant": "tranquility",
             "Accept": "application/json",
             "Authorization": f"Bearer {token['access_token']}",
+            "User-Agent": self.user_agent,
         }

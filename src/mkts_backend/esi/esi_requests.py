@@ -2,6 +2,7 @@ import os
 
 from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.config.logging_config import configure_logging
+from mkts_backend.config.config import load_settings, settings_file
 import requests
 import time
 import json
@@ -10,20 +11,40 @@ import millify
 
 logger = configure_logging(__name__)
 
+_settings = load_settings(settings_file)
+_USER_AGENT = _settings["esi"]["user_agent"]
+
 # Check if terminal output (progress prints) should be suppressed.
 # Set MKTS_QUIET=1 in CI/GitHub Actions to disable progress output.
 QUIET = os.environ.get("MKTS_QUIET", "0") == "1"
 
 
 def fetch_market_orders(
-    esi: ESIConfig, order_type: str = "all", etag: str = None, test_mode: bool = False
-) -> list[dict]:
+    esi: ESIConfig,
+    order_type: str = "all",
+    page_etags: dict[int, str] | None = None,
+    test_mode: bool = False,
+    _clean_retry: bool = False,
+) -> dict:
+    """Fetch market orders with per-page etag support.
+
+    Returns:
+        {"status": 200, "data": [...], "page_etags": {1: "etag", ...}, "expires": "..."}
+        {"status": 304}  — all pages unchanged
+        None on fatal error
+    """
     logger.info("Fetching market orders")
     page = 1
-    max_pages = 1
+    # Seed max_pages from cached page count so 304s can iterate all known pages.
+    # A 200 response will update max_pages from X-Pages header.
+    max_pages = max(page_etags.keys()) if page_etags else 1
     orders = []
     error_count = 0
     request_count = 0
+    new_page_etags: dict[int, str] = {}
+    expires_value: str | None = None
+    got_any_200 = False
+    got_any_304 = False
 
     url = esi.market_orders_url
     headers = esi.headers
@@ -34,15 +55,47 @@ def fetch_market_orders(
             f"NEW REQUEST: request_count: {request_count}, page: {page}, max_pages: {max_pages}"
         )
 
-        # Both primary and deployment use structure markets with same query format
         querystring = {"page": str(page)}
-        logger.info(f"querystring: {querystring}")
 
-        response = requests.get(url, headers=headers, params=querystring, timeout=10)
+        # Add per-page etag if available
+        page_headers = dict(headers)
+        if page_etags and page in page_etags:
+            page_headers["If-None-Match"] = page_etags[page]
+            logger.debug(f"Page {page} request If-None-Match: {page_etags[page]}")
+        else:
+            # Remove any stale If-None-Match from base headers
+            page_headers.pop("If-None-Match", None)
+            logger.debug(f"Page {page} request: no etag (fresh request)")
+
+        logger.debug(f"Page {page} request headers: {page_headers}")
+        response = requests.get(url, headers=page_headers, params=querystring, timeout=10)
+        logger.debug(
+            f"Page {page} response: status={response.status_code}, "
+            f"ETag={response.headers.get('ETag')}, "
+            f"Expires={response.headers.get('Expires')}"
+        )
+
+        if response.status_code == 304:
+            logger.info(f"Page {page} returned 304 Not Modified")
+            got_any_304 = True
+            if test_mode:
+                max_pages = 5
+            page += 1
+            continue
+
         response.raise_for_status()
 
         if response.status_code == 200:
             logger.info(f"response successful: {response.status_code}")
+            got_any_200 = True
+
+            # Capture Expires and ETag headers
+            if expires_value is None:
+                expires_value = response.headers.get("Expires")
+            resp_etag = response.headers.get("ETag")
+            if resp_etag:
+                new_page_etags[page] = resp_etag
+
             try:
                 data = response.json()
             except requests.exceptions.JSONDecodeError:
@@ -51,10 +104,14 @@ def fetch_market_orders(
                 )
                 time.sleep(1)
                 response = requests.get(
-                    url, headers=headers, params=querystring, timeout=10
+                    url, headers=page_headers, params=querystring, timeout=10
                 )
                 response.raise_for_status()
                 data = response.json()
+                # Capture etag from retry too
+                resp_etag = response.headers.get("ETag")
+                if resp_etag:
+                    new_page_etags[page] = resp_etag
 
             if test_mode:
                 max_pages = 5
@@ -62,7 +119,10 @@ def fetch_market_orders(
                     f"test_mode: max_pages set to {max_pages}. current page: {page}/{max_pages}"
                 )
             else:
-                max_pages = int(response.headers.get("X-Pages"))
+                x_pages = response.headers.get("X-Pages")
+                if x_pages:
+                    max_pages = int(x_pages)
+                # No X-Pages header: keep iterating until empty data stops us
                 logger.info(f"page: {page}, max_pages: {max_pages}")
         else:
             logger.error(f"Error fetching market orders: {response.status_code}")
@@ -73,6 +133,8 @@ def fetch_market_orders(
             else:
                 logger.error(f"Retrying... {error_count} attempts")
                 time.sleep(5)
+                continue
+
         if data:
             orders.extend(data)
             page += 1
@@ -80,14 +142,36 @@ def fetch_market_orders(
             logger.info(
                 f"Data retrieved for {page}/{max_pages}. total orders: {len(orders)}"
             )
-            return orders
+            break
         logger.info("-" * 60)
 
+    # If any page returned 200 while others returned 304, page boundaries may have
+    # shifted. Re-fetch all pages clean (without etags) to get a consistent dataset.
+    if got_any_200 and got_any_304:
+        if _clean_retry:
+            logger.error("Mixed 200/304 on clean re-fetch; returning available data as-is")
+        else:
+            logger.info("Mixed 200/304 responses detected — re-fetching all pages clean")
+            return fetch_market_orders(
+                esi, order_type=order_type, page_etags=None,
+                test_mode=test_mode, _clean_retry=True,
+            )
+
+    # All pages returned 304 — nothing changed
+    if got_any_304 and not got_any_200:
+        logger.info("All pages returned 304 Not Modified")
+        return {"status": 304}
+
     logger.info(
-        f"market_orders complete:{page}/{max_pages} pages. total orders: {len(orders)} orders"
+        f"market_orders complete: {max_pages} pages. total orders: {len(orders)} orders"
     )
     logger.info("+=" * 40)
-    return orders
+    return {
+        "status": 200,
+        "data": orders,
+        "page_etags": new_page_etags,
+        "expires": expires_value,
+    }
 
 
 def fetch_history(watchlist: pd.DataFrame) -> list[dict]:
@@ -198,7 +282,7 @@ def fetch_region_orders(region_id: int, order_type: str = "sell") -> list[dict]:
         status_code = None
 
         headers = {
-            "User-Agent": "wcmkts_backend/1.0, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)",
+            "User-Agent": _USER_AGENT,
             "Accept": "application/json",
         }
         base_url = f"https://esi.evetech.net/latest/markets/{region_id}/orders/?datasource=tranquility&order_type={order_type}&page={page}"
@@ -296,6 +380,7 @@ def fetch_region_item_history(region_id: int, type_id: int) -> list[dict]:
         "X-Compatibility-Date": "2020-01-01",
         "X-Tenant": "tranquility",
         "Accept": "application/json",
+        "User-Agent": _USER_AGENT,
     }
 
     try:
