@@ -214,6 +214,69 @@ TURSO_FITTING_TOKEN=<fitting_db_token>
 - For local-only operation, Turso credentials are optional
 - `GOOGLE_SHEET_KEY` can be the entire JSON content or the system will fall back to a file
 
+## ESI Request Caching (Conditional Requests)
+
+Market order fetching uses a two-layer caching system to avoid redundant ESI requests and unnecessary database writes. Cache state is stored in the `esi_request_cache` table on the **remote** (Turso) database so it persists across runs and environments.
+
+### Cache Layers
+
+**Layer 1 — Expires header:** If the cached `Expires` timestamp hasn't passed, the fetch is skipped entirely. ESI typically sets Expires ~5 minutes ahead for structure market endpoints.
+
+**Layer 2 — Per-page ETags:** If the Expires window has passed, `fetch_market_orders` sends `If-None-Match` headers with cached ETags for each page. ESI returns `304 Not Modified` for unchanged pages. If all pages return 304, the database write is skipped.
+
+### Cache Storage (Sentinel Scheme)
+
+Page-level cache data is stored in the existing `esi_request_cache` table by repurposing the `type_id` column with sentinel values. The table's composite primary key is `(type_id, region_id)`.
+
+| `type_id` | `region_id` | Purpose | Data stored |
+|-----------|-------------|---------|-------------|
+| `0` | `structure_id` | Expires timestamp | `last_modified` = HTTP Expires header value |
+| `-1` | `structure_id` | Page 1 ETag | `etag` = ETag header from page 1 |
+| `-2` | `structure_id` | Page 2 ETag | `etag` = ETag header from page 2 |
+| `-N` | `structure_id` | Page N ETag | `etag` = ETag header from page N |
+| `> 0` | `region_id` | Normal per-item cache | (unrelated — used by history fetching) |
+
+The `region_id` column doubles as `structure_id` for sentinel rows. Queries filter on `type_id <= 0` to isolate page cache entries from normal per-item cache rows.
+
+### Data Flow
+
+```
+process_market_orders (cli.py)
+  │
+  ├─ load_orders_cache(structure_id)     ← reads sentinels from remote DB
+  │    returns {"expires": "...", "pages": {1: "etag1", 2: "etag2", ...}}
+  │
+  ├─ Layer 1: check expires → skip fetch if within cache window
+  │
+  ├─ fetch_market_orders(esi, page_etags=...)   ← sends If-None-Match per page
+  │    │
+  │    ├─ max_pages seeded from max(page_etags.keys()) so 304s iterate all known pages
+  │    ├─ Per page: 304 → skip; 200 → collect data + new etag
+  │    ├─ Mixed 200/304 → discard partial data, re-fetch all pages clean (no etags)
+  │    └─ returns {"status": 200/304, "data": [...], "page_etags": {...}, "expires": "..."}
+  │
+  ├─ status 304 → skip DB write entirely
+  │
+  ├─ status 200 → upsert orders into marketorders table
+  │
+  └─ save_orders_cache(structure_id, expires, page_etags)  ← writes sentinels to remote DB
+```
+
+### Key Implementation Details
+
+- **Headers:** `ESIConfig.headers` provides base headers (auth, user-agent, etc.) without `If-None-Match`. The `fetch_market_orders` loop manages `If-None-Match` per-page, setting it from `page_etags` or removing it for fresh requests.
+- **User-Agent:** Loaded from `settings.toml` (`[esi] user_agent`), never hard-coded.
+- **Mixed responses:** If some pages return 304 and others 200, page boundaries may have shifted (ESI rebalances pages). The function discards partial results and re-fetches all pages without etags to get a consistent dataset. A `_clean_retry` flag prevents infinite recursion.
+- **Cache read/write engines:** Both `load_orders_cache` and `save_orders_cache` use `db.remote_engine` (direct Turso HTTP) so cache state persists independently of local sync timing.
+
+### Related Files
+
+- `src/mkts_backend/cli.py` — `process_market_orders()`: orchestrates cache check → fetch → save
+- `src/mkts_backend/esi/esi_requests.py` — `fetch_market_orders()`: HTTP requests with conditional headers
+- `src/mkts_backend/db/db_handlers.py` — `load_orders_cache()`, `save_orders_cache()`: sentinel read/write
+- `src/mkts_backend/config/esi_config.py` — `ESIConfig.headers`: base request headers
+- `src/mkts_backend/config/settings.toml` — `[esi] user_agent`: configurable User-Agent string
+
 ## Additional Features
 
 - **Multi-Market Support:** Configure and process multiple markets independently via `--market` flag

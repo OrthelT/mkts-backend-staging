@@ -177,7 +177,7 @@ def upsert_database(
                 logger.info(
                     f"Wiping and replacing {len(data)} rows into {table.__tablename__}"
                 )
-                session.query(table).delete()
+                session.execute(delete(t))
                 logger.info(f"Wiped data from {table.__tablename__}")
 
                 for idx in range(0, len(data), chunk_size):

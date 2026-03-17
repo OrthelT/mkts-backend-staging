@@ -96,6 +96,57 @@ class TestFetchMarketOrders:
 
         assert result["status"] == 304
 
+    def test_all_304_multi_page(self, mock_esi_config):
+        """All cached pages returning 304 should probe every page, not just page 1."""
+        resp_304 = _make_response(status_code=304, headers={})
+
+        with patch("mkts_backend.esi.esi_requests.requests.get", return_value=resp_304) as mock_get:
+            from mkts_backend.esi.esi_requests import fetch_market_orders
+            result = fetch_market_orders(
+                mock_esi_config,
+                page_etags={1: '"e1"', 2: '"e2"', 3: '"e3"'},
+            )
+
+        assert result["status"] == 304
+        # Must have probed all 3 cached pages, not stopped after page 1
+        assert mock_get.call_count == 3
+
+    def test_mixed_200_304_triggers_clean_refetch(self, mock_esi_config):
+        """When some pages return 304 and others 200, a clean re-fetch fires."""
+        # First call: page 1 returns 304, page 2 returns 200 (mixed)
+        resp_304 = _make_response(status_code=304, headers={})
+        page2_data = [{"order_id": 10, "type_id": 34, "price": 5.0}]
+        resp_200_p2 = _make_response(
+            json_data=page2_data,
+            headers={"X-Pages": "2", "ETag": '"e2_new"', "Expires": "Thu, 01 Jan 2026 00:00:00 GMT"},
+        )
+
+        # Clean re-fetch (no etags): both pages return 200
+        page1_data = [{"order_id": 1, "type_id": 34, "price": 4.0}]
+        resp_clean_p1 = _make_response(
+            json_data=page1_data,
+            headers={"X-Pages": "2", "ETag": '"e1_clean"', "Expires": "Thu, 01 Jan 2026 00:00:00 GMT"},
+        )
+        resp_clean_p2 = _make_response(
+            json_data=page2_data,
+            headers={"X-Pages": "2", "ETag": '"e2_clean"'},
+        )
+
+        responses = [resp_304, resp_200_p2, resp_clean_p1, resp_clean_p2]
+
+        with patch("mkts_backend.esi.esi_requests.requests.get", side_effect=responses):
+            from mkts_backend.esi.esi_requests import fetch_market_orders
+            result = fetch_market_orders(
+                mock_esi_config,
+                page_etags={1: '"e1"', 2: '"e2"'},
+            )
+
+        # Clean re-fetch should return consistent 200 data from both pages
+        assert result["status"] == 200
+        assert len(result["data"]) == 2
+        assert result["data"][0]["order_id"] == 1
+        assert result["data"][1]["order_id"] == 10
+
 
 # ===== fetch_history ========================================================
 

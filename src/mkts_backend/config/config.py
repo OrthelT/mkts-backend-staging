@@ -132,6 +132,7 @@ class DatabaseConfig:
                 connect_args={
                     "auth_token": auth_token,
                 },
+                pool_pre_ping=True,
             )
         return self._remote_engine
 

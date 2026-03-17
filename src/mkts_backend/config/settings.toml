@@ -2,7 +2,7 @@
 # This file configures the market data collection system for multiple markets.
 
 [esi]
-user_agent = "wcmkts_backend/2.1dev, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)"
+user_agent = "wcmkts_backend/0.1.1, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)"
 compatibility_date = "2025-08-26"
 
 [auth]
@@ -12,7 +12,7 @@ callback_url = "http://localhost:8000/callback"
 token_file = "file:token.json"
 
 [app]
-name = "WinterCo Markets"
+name = "WinterCo Markets Backend"
 environment = "production" # "production" or "development"
 log_level = "INFO" # INFO or DEBUG
 

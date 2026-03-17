@@ -2,6 +2,7 @@ import os
 
 from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.config.logging_config import configure_logging
+from mkts_backend.config.config import load_settings, settings_file
 import requests
 import time
 import json
@@ -9,6 +10,9 @@ import pandas as pd
 import millify
 
 logger = configure_logging(__name__)
+
+_settings = load_settings(settings_file)
+_USER_AGENT = _settings["esi"]["user_agent"]
 
 # Check if terminal output (progress prints) should be suppressed.
 # Set MKTS_QUIET=1 in CI/GitHub Actions to disable progress output.
@@ -57,12 +61,19 @@ def fetch_market_orders(
         page_headers = dict(headers)
         if page_etags and page in page_etags:
             page_headers["If-None-Match"] = page_etags[page]
-            logger.info(f"Sending etag for page {page}")
+            logger.debug(f"Page {page} request If-None-Match: {page_etags[page]}")
         else:
             # Remove any stale If-None-Match from base headers
             page_headers.pop("If-None-Match", None)
+            logger.debug(f"Page {page} request: no etag (fresh request)")
 
+        logger.debug(f"Page {page} request headers: {page_headers}")
         response = requests.get(url, headers=page_headers, params=querystring, timeout=10)
+        logger.debug(
+            f"Page {page} response: status={response.status_code}, "
+            f"ETag={response.headers.get('ETag')}, "
+            f"Expires={response.headers.get('Expires')}"
+        )
 
         if response.status_code == 304:
             logger.info(f"Page {page} returned 304 Not Modified")
@@ -271,7 +282,7 @@ def fetch_region_orders(region_id: int, order_type: str = "sell") -> list[dict]:
         status_code = None
 
         headers = {
-            "User-Agent": "wcmkts_backend/1.0, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)",
+            "User-Agent": _USER_AGENT,
             "Accept": "application/json",
         }
         base_url = f"https://esi.evetech.net/latest/markets/{region_id}/orders/?datasource=tranquility&order_type={order_type}&page={page}"
@@ -369,6 +380,7 @@ def fetch_region_item_history(region_id: int, type_id: int) -> list[dict]:
         "X-Compatibility-Date": "2020-01-01",
         "X-Tenant": "tranquility",
         "Accept": "application/json",
+        "User-Agent": _USER_AGENT,
     }
 
     try:

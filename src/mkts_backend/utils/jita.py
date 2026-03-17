@@ -124,7 +124,6 @@ def fetch_jita_price_data(type_ids: List[int]) -> List[dict]:
     # --- Primary: Fuzzwork (batched to avoid 414 URI Too Large) ---
     BATCH_SIZE = 250
     headers = {
-        'User-Agent': 'wcmkts_backend/2.1, orthel.toralen@gmail.com',
         'Accept': 'application/json',
     }
     chunks = [type_ids[i:i + BATCH_SIZE] for i in range(0, len(type_ids), BATCH_SIZE)]
