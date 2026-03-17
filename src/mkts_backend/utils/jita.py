@@ -62,7 +62,6 @@ def fetch_jita_prices(type_ids: List[int]) -> Dict[int, Optional[float]]:
     type_ids_str = ",".join(str(tid) for tid in type_ids)
 
     headers = {
-        'User-Agent': 'wcmkts_backend/2.1, orthel.toralen@gmail.com',
         'Accept': 'application/json',
     }
 
