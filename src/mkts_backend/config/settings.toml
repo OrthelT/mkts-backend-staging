@@ -34,7 +34,9 @@ database_alias = "wcmktprod"
 database_file = "wcmktprod.db"
 turso_url_env = "TURSO_WCMKTPROD_URL"
 turso_token_env = "TURSO_WCMKTPROD_TOKEN"
-gsheets_url = "https://docs.google.com/spreadsheets/d/1sLr5VaUsHKfwZV_CA1K1o2bfywwzl4w-FGYWVnKmwKA/edit"
+#gsheets_url = "https://docs.google.com/spreadsheets/d/1sLr5VaUsHKfwZV_CA1K1o2bfywwzl4w-FGYWVnKmwKA/edit"
+gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit"
+
 
 [markets.primary.gsheets_worksheets]
 market_orders = "market_orders_4h"
