@@ -1889,7 +1889,7 @@ def fit_update_command(
     # Determine remote flag
     use_remote = remote and not local_only
 
-    if paste_mode:
+    if paste_mode and subcommand not in ("add", "update"):
         eft_text = get_multiline_input()
         if eft_text:
             print("EFT text input registered")
@@ -1986,27 +1986,67 @@ def fit_update_command(
                 "[red]Error: --fit-id is required for update command[/red]")
             return False
 
-        if not file_path and paste_mode:
+        if not file_path:
             eft_text = get_multiline_input()
-            file_path = eft_text_to_file(eft_text)
+            if eft_text:
+                file_path = eft_text_to_file(eft_text)
 
-        if not file_path and not target:
+        if not file_path:
             console.print(
-                "[red]Error: --file is required for update command[/red]")
+                "[red]Error: --file or pasted EFT text is required for update command[/red]")
             return False
-        # For update, we need a metadata file
+
+        # Look up existing metadata from doctrine_fits (source of truth)
+        meta_data_dict = None
         if not meta_file:
-            meta_data_dict = collect_fit_metadata_interactive(
-                fit_id=fit_id, fit_file=file_path, remote=remote
-            )
+            # Query doctrine_fits from wcmkt (primary source of truth)
+            db = DatabaseConfig("wcmkt")
+            mkt_engine = db.remote_engine if use_remote else db.engine
+            with mkt_engine.connect() as conn:
+                rows = conn.execute(
+                    text("SELECT doctrine_id, fit_name, ship_name, target FROM doctrine_fits WHERE fit_id = :fit_id"),
+                    {"fit_id": fit_id},
+                ).fetchall()
+            mkt_engine.dispose()
+
+            if not rows:
+                # Fallback: check wcmktnorth
+                db_north = DatabaseConfig("wcmktnorth")
+                north_engine = db_north.remote_engine if use_remote else db_north.engine
+                with north_engine.connect() as conn:
+                    rows = conn.execute(
+                        text("SELECT doctrine_id, fit_name, ship_name, target FROM doctrine_fits WHERE fit_id = :fit_id"),
+                        {"fit_id": fit_id},
+                    ).fetchall()
+                north_engine.dispose()
+
+            if not rows:
+                console.print(f"[red]Error: fit {fit_id} not found in doctrine_fits[/red]")
+                return False
+
+            existing_doctrine_ids = list({row[0] for row in rows})
+            fit_name = rows[0][1] or f"Fit {fit_id}"
+            fit_target = rows[0][3] if rows[0][3] is not None else 100
+
+            meta_data_dict = {
+                "fit_id": fit_id,
+                "name": fit_name,
+                "description": f"{fit_name} doctrine fit",
+                "doctrine_id": existing_doctrine_ids,
+                "target": fit_target,
+            }
 
         try:
-            # Determine which databases to update
-            if market_flag == "both":
-                aliases = ["wcmkt", "wcmktnorth"]
-            else:
+            # Update all markets where the fit currently exists
+            aliases = []
+            for alias in ["wcmkt", "wcmktnorth"]:
+                existing = get_fit_target(fit_id, remote=use_remote, db_alias=alias)
+                if existing is not None:
+                    aliases.append(alias)
+            if not aliases:
                 aliases = [target_alias]
 
+            result = None
             for alias in aliases:
                 result = update_fit_workflow(
                     fit_id=fit_id,
@@ -2019,14 +2059,19 @@ def fit_update_command(
                     metadata_override=meta_data_dict,
                 )
 
-            if dry_run:
+            if dry_run and result:
                 console.print("[yellow]DRY RUN complete[/yellow]")
                 console.print(f"Ship: {result['ship_name']} ({
                               result['ship_type_id']})")
                 console.print(f"Items: {len(result['items'])}")
             else:
+                display_names = []
+                for a in aliases:
+                    resolved = DatabaseConfig(a).alias
+                    label = "primary" if a == "wcmkt" else "deployment"
+                    display_names.append(f"{resolved} ({label})")
                 console.print(f"[green]Successfully updated fit {
-                              fit_id}[/green]")
+                              fit_id} on {', '.join(display_names)}[/green]")
 
             return True
 
