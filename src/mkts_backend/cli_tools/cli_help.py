@@ -157,6 +157,7 @@ SUBCOMMANDS:
     update           Update an existing fit's items from an EFT file
     remove           Remove a fit from ALL doctrines and targets
     assign-market    Change the market assignment for an existing fit
+    unassign-market  Remove a fit or doctrine from a specific market
     list-fits        List all fits in the doctrine tracking system
 
     Target Management:
@@ -185,7 +186,7 @@ OPTIONS:
     --db-alias=<alias>   Target database: wcmkt, wcmktnorth
     --north              Shorthand for --db-alias=wcmktnorth
     --name=<name>        Friendly display name (for update-friendly-name)
-    --doctrine-id=<id>   Doctrine ID (for update-friendly-name)
+    --doctrine-id=<id>   Doctrine ID (for unassign-market, update-friendly-name, etc.)
     --target=<qty>       Default target quantity for new fits (default: 100)
     --skip-targets       Preserve existing targets, skip target prompts
     --help               Show this help message
@@ -226,6 +227,15 @@ EXAMPLES:
 
     # Assign fit to deployment market
     mkts-backend fit-update assign-market --fit-id=123 --market=deployment
+
+    # Remove a single fit from deployment market
+    mkts-backend fit-update unassign-market --fit-id=123 --market=deployment
+
+    # Remove entire doctrine from deployment market
+    mkts-backend fit-update unassign-market --doctrine-id=21 --market=deployment
+
+    # Remove doctrine from both markets (requires confirmation)
+    mkts-backend fit-update unassign-market --doctrine-id=21 --market=both
 
     # Update target for fit
     mkts-backend fit-update update --fit-id=550 --target=300

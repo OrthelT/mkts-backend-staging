@@ -588,6 +588,333 @@ def assign_market_command(
         return False
 
 
+def _check_fit_orphaned(
+    fit_id: int,
+    db_alias: str = "wcmkt",
+    remote: bool = False,
+) -> bool:
+    """Return True if fit_id has no remaining doctrine_fits rows."""
+    db = DatabaseConfig(db_alias)
+    engine = db.remote_engine if remote else db.engine
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("SELECT COUNT(*) FROM doctrine_fits WHERE fit_id = :fit_id"),
+            {"fit_id": fit_id},
+        ).fetchone()
+    engine.dispose()
+    return result[0] == 0
+
+
+def _get_doctrine_fits_rows(
+    fit_id: int,
+    db_alias: str = "wcmkt",
+    remote: bool = False,
+    doctrine_id: Optional[int] = None,
+) -> List[dict]:
+    """Get doctrine_fits rows for a fit, optionally filtered by doctrine_id."""
+    db = DatabaseConfig(db_alias)
+    engine = db.remote_engine if remote else db.engine
+    with engine.connect() as conn:
+        if doctrine_id is not None:
+            result = conn.execute(
+                text(
+                    "SELECT doctrine_id, fit_id, market_flag, doctrine_name, "
+                    "fit_name, ship_name "
+                    "FROM doctrine_fits WHERE fit_id = :fit_id AND doctrine_id = :doctrine_id"
+                ),
+                {"fit_id": fit_id, "doctrine_id": doctrine_id},
+            ).fetchall()
+        else:
+            result = conn.execute(
+                text(
+                    "SELECT doctrine_id, fit_id, market_flag, doctrine_name, "
+                    "fit_name, ship_name "
+                    "FROM doctrine_fits WHERE fit_id = :fit_id"
+                ),
+                {"fit_id": fit_id},
+            ).fetchall()
+    engine.dispose()
+    return [
+        {
+            "doctrine_id": r[0], "fit_id": r[1], "market_flag": r[2],
+            "doctrine_name": r[3], "fit_name": r[4], "ship_name": r[5],
+        }
+        for r in result
+    ]
+
+
+def _cleanup_orphaned_fit(fit_id: int, db_alias: str, remote: bool) -> None:
+    """Remove doctrines and ship_targets rows for a fit that has no remaining doctrine_fits."""
+    removed = remove_doctrines_for_fit(fit_id, remote=remote, db_alias=db_alias)
+    if removed:
+        console.print(f"  [dim]Cleaned up {removed} orphaned doctrines rows for fit {fit_id}[/dim]")
+    remove_ship_target(fit_id, remote=remote, db_alias=db_alias)
+    console.print(f"  [dim]Cleaned up ship_targets for fit {fit_id}[/dim]")
+
+
+def _plan_unassign_action(row: dict, market_to_remove: str) -> dict:
+    """Compute the planned action for a single doctrine_fits row.
+
+    Returns a dict with the original row data plus:
+        action: "update", "remove", or "skip"
+        new_flag: the new market_flag (for "update" action only)
+        reason: human-readable explanation
+    """
+    current_flag = row["market_flag"]
+    plan = {**row}
+
+    if market_to_remove == "both":
+        plan["action"] = "remove"
+        plan["new_flag"] = None
+        plan["reason"] = "Remove from both markets"
+    elif current_flag == "both":
+        new_flag = "deployment" if market_to_remove == "primary" else "primary"
+        plan["action"] = "update"
+        plan["new_flag"] = new_flag
+        plan["reason"] = f"Change '{current_flag}' → '{new_flag}'"
+    elif current_flag == market_to_remove:
+        plan["action"] = "remove"
+        plan["new_flag"] = None
+        plan["reason"] = f"Remove — only on '{current_flag}'"
+    else:
+        plan["action"] = "skip"
+        plan["new_flag"] = current_flag
+        plan["reason"] = f"Not on '{market_to_remove}' (is '{current_flag}')"
+
+    return plan
+
+
+def _display_unassign_preview(
+    plans: List[dict],
+    market_to_remove: str,
+    doctrine_name: Optional[str] = None,
+) -> None:
+    """Display a Rich table previewing what each fit will experience."""
+    title = "[bold cyan]Unassign Preview[/bold cyan]"
+    if doctrine_name:
+        title += f" — {doctrine_name}"
+
+    table = Table(title=title, box=box.ROUNDED, show_header=True, header_style="bold magenta")
+    table.add_column("Fit ID", style="dim", justify="right", width=8)
+    table.add_column("Fit Name", style="white", min_width=20)
+    table.add_column("Ship", style="cyan", min_width=14)
+    table.add_column("Current", justify="center", width=12)
+    table.add_column("Action", justify="center", width=10)
+    table.add_column("Result", min_width=20)
+
+    action_styles = {"update": "green", "remove": "red", "skip": "dim"}
+
+    for p in plans:
+        action_style = action_styles.get(p["action"], "white")
+        table.add_row(
+            str(p["fit_id"]),
+            p.get("fit_name") or "?",
+            p.get("ship_name") or "?",
+            p["market_flag"],
+            f"[{action_style}]{p['action'].upper()}[/{action_style}]",
+            p["reason"],
+        )
+
+    console.print(table)
+
+    # Summary line
+    counts = {}
+    for p in plans:
+        counts[p["action"]] = counts.get(p["action"], 0) + 1
+    parts = []
+    if counts.get("update"):
+        parts.append(f"[green]{counts['update']} update[/green]")
+    if counts.get("remove"):
+        parts.append(f"[red]{counts['remove']} remove[/red]")
+    if counts.get("skip"):
+        parts.append(f"[dim]{counts['skip']} skip[/dim]")
+    console.print(f"  Planned: {', '.join(parts)}\n")
+
+
+def _execute_unassign_plan(
+    plans: List[dict],
+    remote: bool,
+    db_alias: str,
+) -> dict:
+    """Execute a list of planned unassign actions. Returns aggregate counts."""
+    updated = 0
+    deleted = 0
+    skipped = 0
+    deleted_fit_ids = set()
+
+    for p in plans:
+        fit_id = p["fit_id"]
+        row_doctrine_id = p["doctrine_id"]
+
+        if p["action"] == "update":
+            update_fit_market_flag(
+                fit_id, p["new_flag"], remote=remote, db_alias=db_alias,
+                doctrine_id=row_doctrine_id,
+            )
+            updated += 1
+            console.print(
+                f"  [green]Updated[/green] fit {fit_id}: "
+                f"market_flag '{p['market_flag']}' → '{p['new_flag']}'"
+            )
+        elif p["action"] == "remove":
+            remove_doctrine_fits(row_doctrine_id, fit_id, remote=remote, db_alias=db_alias)
+            remove_doctrine_map(row_doctrine_id, fit_id, remote=remote, db_alias=db_alias)
+            deleted += 1
+            deleted_fit_ids.add(fit_id)
+            console.print(
+                f"  [red]Removed[/red] fit {fit_id} from doctrine {row_doctrine_id} "
+                f"({p.get('doctrine_name', '?')})"
+            )
+        else:
+            skipped += 1
+
+    # Orphan cleanup for any deleted fits
+    for fit_id in deleted_fit_ids:
+        if _check_fit_orphaned(fit_id, db_alias, remote):
+            _cleanup_orphaned_fit(fit_id, db_alias, remote)
+
+    return {"updated": updated, "deleted": deleted, "skipped": skipped}
+
+
+def unassign_market_command(
+    fit_id: int,
+    market_to_remove: str,
+    remote: bool = False,
+    db_alias: str = "wcmkt",
+    doctrine_id: Optional[int] = None,
+    skip_confirm: bool = False,
+) -> dict:
+    """
+    Remove a fit from a specific market (or both).
+
+    When doctrine_id is provided, only the specific doctrine_fits row is affected.
+    Without doctrine_id, ALL doctrine_fits rows for the fit are processed.
+
+    Args:
+        fit_id: The fit ID to unassign
+        market_to_remove: Market to remove from ('primary', 'deployment', or 'both')
+        remote: Use remote database
+        db_alias: Database alias
+        doctrine_id: Optionally target a specific doctrine row only
+        skip_confirm: Skip the confirmation prompt (used when called from
+            unassign_doctrine_market which does its own confirmation)
+
+    Returns:
+        Dict with counts: {"updated": int, "deleted": int, "skipped": int}
+        Empty dict on error or cancellation.
+    """
+    if market_to_remove not in ("primary", "deployment", "both"):
+        console.print(
+            f"[red]Error: invalid market '{market_to_remove}'. "
+            "Must be 'primary', 'deployment', or 'both'[/red]"
+        )
+        return {}
+
+    try:
+        rows = _get_doctrine_fits_rows(fit_id, db_alias, remote, doctrine_id)
+        if not rows:
+            console.print(f"[yellow]No doctrine_fits rows found for fit {fit_id}"
+                           + (f" in doctrine {doctrine_id}" if doctrine_id else "") + "[/yellow]")
+            return {}
+
+        # Plan phase — compute what will happen to each row
+        plans = [_plan_unassign_action(row, market_to_remove) for row in rows]
+
+        # Preview and confirm
+        if not skip_confirm:
+            _display_unassign_preview(plans, market_to_remove)
+            if not Confirm.ask("[bold]Proceed with these changes?[/bold]"):
+                console.print("[yellow]Cancelled[/yellow]")
+                return {}
+
+        # Execute
+        return _execute_unassign_plan(plans, remote, db_alias)
+
+    except Exception as e:
+        console.print(f"[red]Error in unassign-market: {e}[/red]")
+        logger.exception("Error in unassign_market_command")
+        return {}
+
+
+def unassign_doctrine_market(
+    doctrine_id: int,
+    market_to_remove: str,
+    remote: bool = False,
+    db_alias: str = "wcmkt",
+) -> bool:
+    """
+    Remove an entire doctrine from a specific market (or both).
+
+    Args:
+        doctrine_id: The doctrine to unassign
+        market_to_remove: 'primary', 'deployment', or 'both'
+        remote: Use remote database
+        db_alias: Database alias
+    """
+    if market_to_remove not in ("primary", "deployment", "both"):
+        console.print(
+            f"[red]Error: invalid market '{market_to_remove}'. "
+            "Must be 'primary', 'deployment', or 'both'[/red]"
+        )
+        return False
+
+    fit_ids = get_doctrine_fits_from_market(doctrine_id, db_alias, remote)
+    if not fit_ids:
+        console.print(f"[yellow]No fits found for doctrine {doctrine_id} in {db_alias}[/yellow]")
+        return False
+
+    # Get doctrine name for display
+    all_doctrines = get_available_doctrines(remote=remote)
+    doctrine_name = next(
+        (d["name"] for d in all_doctrines if d["id"] == doctrine_id), f"ID {doctrine_id}"
+    )
+
+    # Gather all rows and build the full plan
+    all_plans = []
+    for fid in fit_ids:
+        rows = _get_doctrine_fits_rows(fid, db_alias, remote, doctrine_id)
+        for row in rows:
+            all_plans.append(_plan_unassign_action(row, market_to_remove))
+
+    if not all_plans:
+        console.print(f"[yellow]No doctrine_fits rows found for doctrine {doctrine_id}[/yellow]")
+        return False
+
+    # Preview table showing every fit and its planned action
+    _display_unassign_preview(all_plans, market_to_remove, doctrine_name=doctrine_name)
+
+    # Confirmation
+    action_counts = {}
+    for p in all_plans:
+        action_counts[p["action"]] = action_counts.get(p["action"], 0) + 1
+
+    if market_to_remove == "both":
+        prompt_msg = (
+            f"[bold red]Remove doctrine '{doctrine_name}' from BOTH markets? "
+            "This cannot be undone.[/bold red]"
+        )
+    else:
+        prompt_msg = (
+            f"[bold]Remove doctrine '{doctrine_name}' from "
+            f"'{market_to_remove}' market?[/bold]"
+        )
+
+    if not Confirm.ask(prompt_msg):
+        console.print("[yellow]Cancelled[/yellow]")
+        return False
+
+    console.print()
+
+    # Execute — skip per-fit confirmation since we just confirmed the whole batch
+    result = _execute_unassign_plan(all_plans, remote, db_alias)
+
+    console.print(
+        f"\n[bold]Summary:[/bold] {result['updated']} updated, "
+        f"{result['deleted']} removed, {result['skipped']} skipped"
+    )
+    return result["updated"] > 0 or result["deleted"] > 0
+
+
 def list_fits_command(db_alias: str = "wcmkt", remote: bool = False) -> None:
     """List all fits, showing targets for both primary and north markets."""
     primary_fits = get_fits_list(db_alias="wcmkt", remote=remote)
@@ -1857,6 +2184,7 @@ def fit_update_command(
         update               - Update an existing fit's items from an EFT file
         remove               - Completely remove a fit from ALL doctrines and targets
         assign-market        - Change the market assignment for an existing fit
+        unassign-market      - Remove a fit or doctrine from a specific market
         list-fits            - List all fits in the doctrine tracking system
         list-doctrines       - List all available doctrines
         create-doctrine      - Create a new doctrine (group of fits)
@@ -1916,6 +2244,21 @@ def fit_update_command(
         return assign_market_command(
             fit_id, market_flag, remote=use_remote, db_alias=target_alias
         )
+
+    elif subcommand == "unassign-market":
+        if doctrine_id is not None:
+            return unassign_doctrine_market(
+                doctrine_id, market_flag, remote=use_remote, db_alias=target_alias
+            )
+        if fit_id is None:
+            console.print(
+                "[red]Error: --fit-id or --doctrine-id is required for unassign-market[/red]"
+            )
+            return False
+        result = unassign_market_command(
+            fit_id, market_flag, remote=use_remote, db_alias=target_alias
+        )
+        return bool(result.get("updated", 0) or result.get("deleted", 0))
 
     elif subcommand == "add":
         eft_text = None
@@ -2195,9 +2538,9 @@ def fit_update_command(
     else:
         console.print(f"[red]Unknown subcommand: {subcommand}[/red]")
         console.print(
-            "[dim]Available: add, update, remove, assign-market, list-fits, list-doctrines, "
-            "create-doctrine, doctrine-add-fit, doctrine-remove-fit, update-target, "
-            "update-lead-ship, update-friendly-name, populate-friendly-names[/dim]"
+            "[dim]Available: add, update, remove, assign-market, unassign-market, list-fits, "
+            "list-doctrines, create-doctrine, doctrine-add-fit, doctrine-remove-fit, "
+            "update-target, update-lead-ship, update-friendly-name, populate-friendly-names[/dim]"
         )
         console.print(
             "[dim]Use --help for more information about a command.[/dim]")

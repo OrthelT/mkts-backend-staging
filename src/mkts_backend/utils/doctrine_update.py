@@ -200,7 +200,8 @@ def update_fit_market_flag(
     fit_id: int,
     market_flag: str,
     remote: bool = False,
-    db_alias: str = "wcmkt"
+    db_alias: str = "wcmkt",
+    doctrine_id: int | None = None,
 ) -> bool:
     """
     Update the market_flag for a fit.
@@ -210,6 +211,8 @@ def update_fit_market_flag(
         market_flag: New market assignment ('primary', 'deployment', or 'both')
         remote: Whether to use remote database
         db_alias: Database alias to use
+        doctrine_id: If provided, only update the row for this doctrine
+            (otherwise updates ALL doctrine_fits rows for the fit)
 
     Returns:
         True if update succeeded, False if fit not found
@@ -219,10 +222,19 @@ def update_fit_market_flag(
 
     engine = _get_engine(db_alias, remote)
     with engine.connect() as conn:
-        result = conn.execute(
-            text("UPDATE doctrine_fits SET market_flag = :market_flag WHERE fit_id = :fit_id"),
-            {"fit_id": fit_id, "market_flag": market_flag},
-        )
+        if doctrine_id is not None:
+            result = conn.execute(
+                text(
+                    "UPDATE doctrine_fits SET market_flag = :market_flag "
+                    "WHERE fit_id = :fit_id AND doctrine_id = :doctrine_id"
+                ),
+                {"fit_id": fit_id, "market_flag": market_flag, "doctrine_id": doctrine_id},
+            )
+        else:
+            result = conn.execute(
+                text("UPDATE doctrine_fits SET market_flag = :market_flag WHERE fit_id = :fit_id"),
+                {"fit_id": fit_id, "market_flag": market_flag},
+            )
         conn.commit()
         rows_affected = result.rowcount
 
