@@ -34,13 +34,14 @@ database_alias = "wcmktprod"
 database_file = "wcmktprod.db"
 turso_url_env = "TURSO_WCMKTPROD_URL"
 turso_token_env = "TURSO_WCMKTPROD_TOKEN"
-#gsheets_url = "https://docs.google.com/spreadsheets/d/1sLr5VaUsHKfwZV_CA1K1o2bfywwzl4w-FGYWVnKmwKA/edit"
-gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit"
+#gsheets_url = "https://docs.google.com/spreadsheets/d/1sLr5VaUsHKfwZV_CA1K1o2bfywwzl4w-FGYWVnKmwKA/edit" #USER
+gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit" # wc_northern_supply
 
 
 [markets.primary.gsheets_worksheets]
 market_orders = "market_orders_4h"
 market_data = "market_data_4h"
+doctrines = "doctrines_mkt_4H"
 
 [markets.deployment]
 name = "B-9C24 Keepstar"
@@ -54,9 +55,9 @@ turso_token_env = "TURSO_WCMKTNORTH_TOKEN"
 gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit"
 
 [markets.deployment.gsheets_worksheets]
-market_orders = "market_orders"
-market_data = "market_data"
-doctrines = "doctrines_mkt"
+market_orders = "market_orders_b9"
+market_data = "market_data_b9"
+doctrines = "doctrines_mkt_b9"
 
 # ============================================================================
 # LEGACY MARKET DATA (for backward compatibility)
