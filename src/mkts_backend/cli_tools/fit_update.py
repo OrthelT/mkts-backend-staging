@@ -530,62 +530,133 @@ def assign_market_command(
     market_flag: str,
     remote: bool = False,
     db_alias: str = "wcmkt",
-) -> bool:
+    doctrine_id: Optional[int] = None,
+    skip_confirm: bool = False,
+) -> dict:
     """
-    Assign a market flag to a fit.
+    Assign a market flag to a fit with preview and confirmation.
 
-    Updates both wcmkt and wcmktnorth databases when remote=True.
+    When doctrine_id is provided, only the specific doctrine_fits row is affected.
+    Without doctrine_id, ALL doctrine_fits rows for the fit are processed.
 
     Args:
-        fit_id: The fit ID to update
-        market_flag: New market assignment
+        fit_id: The fit ID to assign
+        market_flag: Market to assign ('primary', 'deployment', or 'both')
         remote: Use remote database
         db_alias: Database alias
+        doctrine_id: Optionally target a specific doctrine row only
+        skip_confirm: Skip the confirmation prompt
 
     Returns:
-        True if successful
+        Dict with counts: {"updated": int, "skipped": int}
+        Empty dict on error or cancellation.
     """
-    try:
-        # Always update the primary (local) database
-        success = update_fit_market_flag(
-            fit_id, market_flag, remote=False, db_alias=db_alias
+    if market_flag not in ("primary", "deployment", "both"):
+        console.print(
+            f"[red]Error: invalid market '{market_flag}'. "
+            "Must be 'primary', 'deployment', or 'both'[/red]"
         )
-        if success:
-            console.print(
-                f"[green]Updated fit {fit_id} to market '{market_flag}' (local {db_alias})[/green]"
-            )
-        else:
-            console.print(f"[yellow]No fit found with ID {fit_id}[/yellow]")
-            return False
+        return {}
 
-        # When remote, push to both remote databases
-        if remote:
-            for target in ("wcmkt", "wcmktnorth"):
-                try:
-                    remote_ok = update_fit_market_flag(
-                        fit_id, market_flag, remote=True, db_alias=target
-                    )
-                    if remote_ok:
-                        console.print(
-                            f"[green]Updated market flag on remote ({target})[/green]"
-                        )
-                    else:
-                        console.print(
-                            f"[yellow]No remote rows for fit {fit_id} on {target}[/yellow]"
-                        )
-                except Exception as e:
-                    console.print(
-                        f"[yellow]Remote update skipped for {target}: {e}[/yellow]"
-                    )
+    try:
+        rows = _get_doctrine_fits_rows(fit_id, db_alias, False, doctrine_id)
+        if not rows:
+            console.print(f"[yellow]No doctrine_fits rows found for fit {fit_id}"
+                           + (f" in doctrine {doctrine_id}" if doctrine_id else "") + "[/yellow]")
+            return {}
 
-        return success
-    except ValueError as e:
-        console.print(f"[red]Error: {e}[/red]")
-        return False
+        # Plan phase — check remote flags when remote=True
+        plans = []
+        for row in rows:
+            rf = _get_remote_market_flags(row["fit_id"], row["doctrine_id"]) if remote else None
+            plans.append(_plan_market_action(row, market_flag, mode="assign", remote_flags=rf))
+
+        # Preview and confirm
+        if not skip_confirm:
+            _display_market_preview(plans, market_flag, mode="assign")
+            if not Confirm.ask("[bold]Proceed with these changes?[/bold]"):
+                console.print("[yellow]Cancelled[/yellow]")
+                return {}
+
+        # Execute
+        return _execute_market_plan(plans, remote, db_alias)
+
     except Exception as e:
-        console.print(f"[red]Error updating market flag: {e}[/red]")
+        console.print(f"[red]Error in assign-market: {e}[/red]")
         logger.exception("Error in assign_market_command")
+        return {}
+
+
+def assign_doctrine_market(
+    doctrine_id: int,
+    market_flag: str,
+    remote: bool = False,
+    db_alias: str = "wcmkt",
+) -> bool:
+    """
+    Assign a market flag to all fits in a doctrine.
+
+    Args:
+        doctrine_id: The doctrine to assign
+        market_flag: Market to assign ('primary', 'deployment', or 'both')
+        remote: Use remote database
+        db_alias: Database alias
+    """
+    if market_flag not in ("primary", "deployment", "both"):
+        console.print(
+            f"[red]Error: invalid market '{market_flag}'. "
+            "Must be 'primary', 'deployment', or 'both'[/red]"
+        )
         return False
+
+    fit_ids = get_doctrine_fits_from_market(doctrine_id, db_alias, remote)
+    if not fit_ids:
+        console.print(
+            f"[yellow]No fits found for doctrine {doctrine_id} in {db_alias}[/yellow]"
+        )
+        return False
+
+    # Get doctrine name for display
+    all_doctrines = get_available_doctrines(remote=remote)
+    doctrine_name = next(
+        (d["name"] for d in all_doctrines if d["id"] == doctrine_id),
+        f"ID {doctrine_id}",
+    )
+
+    # Gather all rows and build the full plan
+    all_plans = []
+    for fid in fit_ids:
+        rows = _get_doctrine_fits_rows(fid, db_alias, False, doctrine_id)
+        for row in rows:
+            rf = _get_remote_market_flags(row["fit_id"], row["doctrine_id"]) if remote else None
+            all_plans.append(_plan_market_action(row, market_flag, mode="assign", remote_flags=rf))
+
+    if not all_plans:
+        console.print(f"[yellow]No doctrine_fits rows found for doctrine {doctrine_id}[/yellow]")
+        return False
+
+    # Preview table showing every fit and its planned action
+    _display_market_preview(all_plans, market_flag, mode="assign", doctrine_name=doctrine_name)
+
+    # Confirmation
+    prompt_msg = (
+        f"[bold]Assign doctrine '{doctrine_name}' to "
+        f"'{market_flag}' market?[/bold]"
+    )
+    if not Confirm.ask(prompt_msg):
+        console.print("[yellow]Cancelled[/yellow]")
+        return False
+
+    console.print()
+
+    # Execute — skip per-fit confirmation since we just confirmed the whole batch
+    result = _execute_market_plan(all_plans, remote, db_alias)
+
+    console.print(
+        f"\n[bold]Summary:[/bold] {result['updated']} updated, "
+        f"{result['skipped']} skipped"
+    )
+    return result["updated"] > 0
 
 
 def _check_fit_orphaned(
@@ -643,6 +714,35 @@ def _get_doctrine_fits_rows(
     ]
 
 
+def _get_remote_market_flags(
+    fit_id: int,
+    doctrine_id: int,
+) -> List[str]:
+    """Fetch market_flag for a (fit_id, doctrine_id) from both remote databases.
+
+    Returns a list of flag values found (0-2 entries).
+    """
+    flags = []
+    for target in ("wcmkt", "wcmktnorth"):
+        try:
+            db = DatabaseConfig(target)
+            engine = db.remote_engine
+            with engine.connect() as conn:
+                result = conn.execute(
+                    text(
+                        "SELECT market_flag FROM doctrine_fits "
+                        "WHERE fit_id = :fit_id AND doctrine_id = :doctrine_id"
+                    ),
+                    {"fit_id": fit_id, "doctrine_id": doctrine_id},
+                ).fetchone()
+            engine.dispose()
+            if result:
+                flags.append(result[0])
+        except Exception:
+            pass  # remote unavailable — will be handled at execute time
+    return flags
+
+
 def _cleanup_orphaned_fit(fit_id: int, db_alias: str, remote: bool) -> None:
     """Remove doctrines and ship_targets rows for a fit that has no remaining doctrine_fits."""
     removed = remove_doctrines_for_fit(fit_id, remote=remote, db_alias=db_alias)
@@ -652,45 +752,81 @@ def _cleanup_orphaned_fit(fit_id: int, db_alias: str, remote: bool) -> None:
     console.print(f"  [dim]Cleaned up ship_targets for fit {fit_id}[/dim]")
 
 
-def _plan_unassign_action(row: dict, market_to_remove: str) -> dict:
+def _plan_market_action(
+    row: dict,
+    target_market: str,
+    mode: str = "unassign",
+    remote_flags: Optional[List[str]] = None,
+) -> dict:
     """Compute the planned action for a single doctrine_fits row.
+
+    Works for both assign and unassign operations.
+
+    Args:
+        row: doctrine_fits row dict
+        target_market: 'primary', 'deployment', or 'both'
+        mode: "assign" or "unassign"
+        remote_flags: market_flag values from remote databases (assign only).
+            When provided, a row is only skipped if local AND all remotes
+            already match the target.
 
     Returns a dict with the original row data plus:
         action: "update", "remove", or "skip"
-        new_flag: the new market_flag (for "update" action only)
+        new_flag: the resulting market_flag
         reason: human-readable explanation
     """
     current_flag = row["market_flag"]
     plan = {**row}
 
-    if market_to_remove == "both":
-        plan["action"] = "remove"
-        plan["new_flag"] = None
-        plan["reason"] = "Remove from both markets"
-    elif current_flag == "both":
-        new_flag = "deployment" if market_to_remove == "primary" else "primary"
-        plan["action"] = "update"
-        plan["new_flag"] = new_flag
-        plan["reason"] = f"Change '{current_flag}' → '{new_flag}'"
-    elif current_flag == market_to_remove:
-        plan["action"] = "remove"
-        plan["new_flag"] = None
-        plan["reason"] = f"Remove — only on '{current_flag}'"
+    if mode == "assign":
+        all_flags = [current_flag] + (remote_flags or [])
+        all_match = all(f == target_market for f in all_flags)
+        if all_match:
+            plan["action"] = "skip"
+            plan["new_flag"] = current_flag
+            plan["reason"] = f"Already '{current_flag}'"
+        else:
+            mismatched = [f for f in all_flags if f != target_market]
+            plan["action"] = "update"
+            plan["new_flag"] = target_market
+            plan["reason"] = f"Change '{current_flag}' → '{target_market}'"
+            if remote_flags and current_flag == target_market:
+                plan["reason"] = (
+                    f"Local '{current_flag}' OK, "
+                    f"remote {'/' .join(mismatched)} → '{target_market}'"
+                )
     else:
-        plan["action"] = "skip"
-        plan["new_flag"] = current_flag
-        plan["reason"] = f"Not on '{market_to_remove}' (is '{current_flag}')"
+        # unassign logic (unchanged)
+        if target_market == "both":
+            plan["action"] = "remove"
+            plan["new_flag"] = None
+            plan["reason"] = "Remove from both markets"
+        elif current_flag == "both":
+            new_flag = "deployment" if target_market == "primary" else "primary"
+            plan["action"] = "update"
+            plan["new_flag"] = new_flag
+            plan["reason"] = f"Change '{current_flag}' → '{new_flag}'"
+        elif current_flag == target_market:
+            plan["action"] = "remove"
+            plan["new_flag"] = None
+            plan["reason"] = f"Remove — only on '{current_flag}'"
+        else:
+            plan["action"] = "skip"
+            plan["new_flag"] = current_flag
+            plan["reason"] = f"Not on '{target_market}' (is '{current_flag}')"
 
     return plan
 
 
-def _display_unassign_preview(
+def _display_market_preview(
     plans: List[dict],
-    market_to_remove: str,
+    target_market: str,
+    mode: str = "unassign",
     doctrine_name: Optional[str] = None,
 ) -> None:
     """Display a Rich table previewing what each fit will experience."""
-    title = "[bold cyan]Unassign Preview[/bold cyan]"
+    label = "Assign" if mode == "assign" else "Unassign"
+    title = f"[bold cyan]{label} Preview[/bold cyan]"
     if doctrine_name:
         title += f" — {doctrine_name}"
 
@@ -731,12 +867,19 @@ def _display_unassign_preview(
     console.print(f"  Planned: {', '.join(parts)}\n")
 
 
-def _execute_unassign_plan(
+def _execute_market_plan(
     plans: List[dict],
     remote: bool,
     db_alias: str,
 ) -> dict:
-    """Execute a list of planned unassign actions. Returns aggregate counts."""
+    """Execute a list of planned assign or unassign actions.
+
+    Always writes to the local database first.  When remote=True, mirrors
+    every change to both remote databases (wcmkt, wcmktnorth) so the
+    market_flag stays identical across all three.
+
+    Returns aggregate counts: {"updated": int, "deleted": int, "skipped": int}
+    """
     updated = 0
     deleted = 0
     skipped = 0
@@ -747,18 +890,43 @@ def _execute_unassign_plan(
         row_doctrine_id = p["doctrine_id"]
 
         if p["action"] == "update":
+            # Local
             update_fit_market_flag(
-                fit_id, p["new_flag"], remote=remote, db_alias=db_alias,
+                fit_id, p["new_flag"], remote=False, db_alias=db_alias,
                 doctrine_id=row_doctrine_id,
             )
+            # Remote
+            if remote:
+                for target in ("wcmkt", "wcmktnorth"):
+                    try:
+                        update_fit_market_flag(
+                            fit_id, p["new_flag"], remote=True, db_alias=target,
+                            doctrine_id=row_doctrine_id,
+                        )
+                    except Exception as e:
+                        console.print(
+                            f"[yellow]Remote update skipped for {target}: {e}[/yellow]"
+                        )
             updated += 1
             console.print(
                 f"  [green]Updated[/green] fit {fit_id}: "
                 f"market_flag '{p['market_flag']}' → '{p['new_flag']}'"
             )
+
         elif p["action"] == "remove":
-            remove_doctrine_fits(row_doctrine_id, fit_id, remote=remote, db_alias=db_alias)
-            remove_doctrine_map(row_doctrine_id, fit_id, remote=remote, db_alias=db_alias)
+            # Local
+            remove_doctrine_fits(row_doctrine_id, fit_id, remote=False, db_alias=db_alias)
+            remove_doctrine_map(row_doctrine_id, fit_id, remote=False, db_alias=db_alias)
+            # Remote
+            if remote:
+                for target in ("wcmkt", "wcmktnorth"):
+                    try:
+                        remove_doctrine_fits(row_doctrine_id, fit_id, remote=True, db_alias=target)
+                        remove_doctrine_map(row_doctrine_id, fit_id, remote=True, db_alias=target)
+                    except Exception as e:
+                        console.print(
+                            f"[yellow]Remote remove skipped for {target}: {e}[/yellow]"
+                        )
             deleted += 1
             deleted_fit_ids.add(fit_id)
             console.print(
@@ -770,8 +938,17 @@ def _execute_unassign_plan(
 
     # Orphan cleanup for any deleted fits
     for fit_id in deleted_fit_ids:
-        if _check_fit_orphaned(fit_id, db_alias, remote):
-            _cleanup_orphaned_fit(fit_id, db_alias, remote)
+        if _check_fit_orphaned(fit_id, db_alias, remote=False):
+            _cleanup_orphaned_fit(fit_id, db_alias, remote=False)
+        if remote:
+            for target in ("wcmkt", "wcmktnorth"):
+                try:
+                    if _check_fit_orphaned(fit_id, target, remote=True):
+                        _cleanup_orphaned_fit(fit_id, target, remote=True)
+                except Exception as e:
+                    console.print(
+                        f"[yellow]Remote orphan cleanup skipped for {target}: {e}[/yellow]"
+                    )
 
     return {"updated": updated, "deleted": deleted, "skipped": skipped}
 
@@ -818,17 +995,17 @@ def unassign_market_command(
             return {}
 
         # Plan phase — compute what will happen to each row
-        plans = [_plan_unassign_action(row, market_to_remove) for row in rows]
+        plans = [_plan_market_action(row, market_to_remove, mode="unassign") for row in rows]
 
         # Preview and confirm
         if not skip_confirm:
-            _display_unassign_preview(plans, market_to_remove)
+            _display_market_preview(plans, market_to_remove)
             if not Confirm.ask("[bold]Proceed with these changes?[/bold]"):
                 console.print("[yellow]Cancelled[/yellow]")
                 return {}
 
         # Execute
-        return _execute_unassign_plan(plans, remote, db_alias)
+        return _execute_market_plan(plans, remote, db_alias)
 
     except Exception as e:
         console.print(f"[red]Error in unassign-market: {e}[/red]")
@@ -874,14 +1051,14 @@ def unassign_doctrine_market(
     for fid in fit_ids:
         rows = _get_doctrine_fits_rows(fid, db_alias, remote, doctrine_id)
         for row in rows:
-            all_plans.append(_plan_unassign_action(row, market_to_remove))
+            all_plans.append(_plan_market_action(row, market_to_remove, mode="unassign"))
 
     if not all_plans:
         console.print(f"[yellow]No doctrine_fits rows found for doctrine {doctrine_id}[/yellow]")
         return False
 
     # Preview table showing every fit and its planned action
-    _display_unassign_preview(all_plans, market_to_remove, doctrine_name=doctrine_name)
+    _display_market_preview(all_plans, market_to_remove, doctrine_name=doctrine_name)
 
     # Confirmation
     action_counts = {}
@@ -906,7 +1083,7 @@ def unassign_doctrine_market(
     console.print()
 
     # Execute — skip per-fit confirmation since we just confirmed the whole batch
-    result = _execute_unassign_plan(all_plans, remote, db_alias)
+    result = _execute_market_plan(all_plans, remote, db_alias)
 
     console.print(
         f"\n[bold]Summary:[/bold] {result['updated']} updated, "
@@ -2036,7 +2213,12 @@ def _update_target_single(
     market_flag: str = "primary",
     db_alias: str = "wcmkt",
 ) -> bool:
-    """Update the target quantity for a fit in a single database."""
+    """Update the target quantity for a fit in a single database.
+
+    Updates both doctrine_fits.target and ship_targets.ship_target.
+    If the fit does not exist in ship_targets, creates the record using
+    metadata from doctrine_fits.
+    """
     db = DatabaseConfig(db_alias)
     engine = db.remote_engine if remote else db.engine
     try:
@@ -2044,62 +2226,52 @@ def _update_target_single(
             fit_id, remote=remote, db_alias=db_alias)
         if existing_target is None:
             console.print(
-                f"[red]Fit {fit_id} not present for {db_alias} database[/red]"
+                f"[red]Fit {fit_id} not present in doctrine_fits for {db_alias} database[/red]"
             )
             return False
-        stmt = text(
-            "UPDATE ship_targets SET ship_target = :target WHERE fit_id = :fit_id"
-        )
-        stmt2 = text(
-            "UPDATE doctrine_fits SET target = :target, market_flag = :market_flag WHERE fit_id = :fit_id"
-        )
+
+        # Get fit metadata from doctrine_fits for ship_targets upsert
         with engine.connect() as conn:
-            conn.execute(stmt, {"target": target, "fit_id": fit_id})
+            row = conn.execute(
+                text(
+                    "SELECT fit_name, ship_type_id, ship_name "
+                    "FROM doctrine_fits WHERE fit_id = :fit_id LIMIT 1"
+                ),
+                {"fit_id": fit_id},
+            ).fetchone()
+
+        if not row:
+            console.print(f"[red]Fit {fit_id} not found in doctrine_fits[/red]")
+            return False
+
+        fit_name, ship_id, ship_name = row[0], row[1], row[2]
+
+        # Update doctrine_fits
+        with engine.connect() as conn:
             conn.execute(
-                stmt2, {"target": target,
-                        "market_flag": market_flag, "fit_id": fit_id}
+                text(
+                    "UPDATE doctrine_fits SET target = :target, market_flag = :market_flag "
+                    "WHERE fit_id = :fit_id"
+                ),
+                {"target": target, "market_flag": market_flag, "fit_id": fit_id},
             )
             conn.commit()
-            console.print("**************************************************")
-            console.print(
-                f"[green]Successfully updated target for fit {fit_id} from [yellow]{
-                    existing_target
-                }[/yellow] to [yellow]{target}[/yellow] for database {
-                    db_alias
-                } (remote: {remote})[/green]"
-            )
-            console.print("**************************************************")
-            return True
-    except Exception as e:
-        console.print(
-            f"[red]Failed to update target for fit {
-                fit_id} to {target}: {e}[/red]"
+
+        # Upsert ship_targets (creates if missing)
+        upsert_ship_target(
+            fit_id, fit_name, ship_id, ship_name, target,
+            remote=remote, db_alias=db_alias,
         )
-        try:
-            stmt = text(
-                "SELECT fit_id FROM ship_targets WHERE fit_id = :fit_id")
-            with engine.connect() as conn:
-                result = conn.execute(stmt, {"fit_id": fit_id}).fetchone()
-                if not result:
-                    console.print(
-                        f"[orange]fit {fit_id} not present for {
-                            market_flag
-                        } market[/orange]. Add it before updating target."
-                    )
-                    return False
-                else:
-                    console.print(
-                        f"[red]Failed to add fit {fit_id} to {market_flag} market: {
-                            e
-                        }[/red]"
-                    )
-                    return False
-        except Exception as e:
-            console.print(
-                f"[red]Failed to update target for fit {
-                    fit_id} to {target}: {e}[/red]"
-            )
-            return False
+
+        console.print(
+            f"[green]Updated target for fit {fit_id} from [yellow]{existing_target}[/yellow] "
+            f"to [yellow]{target}[/yellow] for {db_alias} (remote: {remote})[/green]"
+        )
+        return True
+    except Exception as e:
+        console.print(f"[red]Failed to update target for fit {fit_id} to {target}: {e}[/red]")
+        logger.exception("Error in _update_target_single")
+        return False
 
 
 def update_friendly_name_command(
@@ -2237,13 +2409,19 @@ def fit_update_command(
         return True
 
     elif subcommand == "assign-market":
+        if doctrine_id is not None:
+            return assign_doctrine_market(
+                doctrine_id, market_flag, remote=use_remote, db_alias=target_alias
+            )
         if fit_id is None:
             console.print(
-                "[red]Error: --fit-id is required for assign-market[/red]")
+                "[red]Error: --fit-id or --doctrine-id is required for assign-market[/red]"
+            )
             return False
-        return assign_market_command(
+        result = assign_market_command(
             fit_id, market_flag, remote=use_remote, db_alias=target_alias
         )
+        return bool(result.get("updated", 0))
 
     elif subcommand == "unassign-market":
         if doctrine_id is not None:
