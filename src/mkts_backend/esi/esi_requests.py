@@ -51,7 +51,7 @@ def fetch_market_orders(
 
     while page <= max_pages:
         request_count += 1
-        logger.info(
+        logger.debug(
             f"NEW REQUEST: request_count: {request_count}, page: {page}, max_pages: {max_pages}"
         )
 
@@ -76,7 +76,7 @@ def fetch_market_orders(
         )
 
         if response.status_code == 304:
-            logger.info(f"Page {page} returned 304 Not Modified")
+            logger.debug(f"Page {page} returned 304 Not Modified")
             got_any_304 = True
             if test_mode:
                 max_pages = 5
@@ -86,7 +86,7 @@ def fetch_market_orders(
         response.raise_for_status()
 
         if response.status_code == 200:
-            logger.info(f"response successful: {response.status_code}")
+            logger.debug(f"response successful: {response.status_code}")
             got_any_200 = True
 
             # Capture Expires and ETag headers
@@ -123,7 +123,7 @@ def fetch_market_orders(
                 if x_pages:
                     max_pages = int(x_pages)
                 # No X-Pages header: keep iterating until empty data stops us
-                logger.info(f"page: {page}, max_pages: {max_pages}")
+                logger.debug(f"page: {page}, max_pages: {max_pages}")
         else:
             logger.error(f"Error fetching market orders: {response.status_code}")
             error_count += 1
@@ -139,11 +139,11 @@ def fetch_market_orders(
             orders.extend(data)
             page += 1
         else:
-            logger.info(
+            logger.debug(
                 f"Data retrieved for {page}/{max_pages}. total orders: {len(orders)}"
             )
             break
-        logger.info("-" * 60)
+        logger.debug("-" * 60)
 
     # If any page returned 200 while others returned 304, page boundaries may have
     # shifted. Re-fetch all pages clean (without etags) to get a consistent dataset.
