@@ -49,6 +49,19 @@ class DoctrineFit:
         self.ship_type_id = self.get_ship_type_id()
         self.ship_name = self.get_ship_name()
 
+    @classmethod
+    def from_resolved(cls, *, doctrine_id, fit_id, target, doctrine_name, fit_name, ship_type_id, ship_name):
+        """Create a DoctrineFit with pre-resolved values, bypassing DB lookups."""
+        obj = object.__new__(cls)
+        obj.doctrine_id = doctrine_id
+        obj.fit_id = fit_id
+        obj.target = target
+        obj.doctrine_name = doctrine_name
+        obj.fit_name = fit_name
+        obj.ship_type_id = ship_type_id
+        obj.ship_name = ship_name
+        return obj
+
     def get_doctrine_name(self):
         db = DatabaseConfig("fittings")
         engine = db.engine

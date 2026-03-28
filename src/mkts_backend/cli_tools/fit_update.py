@@ -659,6 +659,17 @@ def assign_doctrine_market(
     return result["updated"] > 0
 
 
+def _flag_to_aliases(flag: str) -> set[str]:
+    """Return the set of explicit database aliases a market_flag implies."""
+    if flag == "primary":
+        return {"wcmktprod"}
+    if flag == "deployment":
+        return {"wcmktnorth"}
+    if flag == "both":
+        return {"wcmktprod", "wcmktnorth"}
+    return set()
+
+
 def _check_fit_orphaned(
     fit_id: int,
     db_alias: str = "wcmkt",
@@ -690,7 +701,7 @@ def _get_doctrine_fits_rows(
             result = conn.execute(
                 text(
                     "SELECT doctrine_id, fit_id, market_flag, doctrine_name, "
-                    "fit_name, ship_name "
+                    "fit_name, ship_name, ship_type_id, target "
                     "FROM doctrine_fits WHERE fit_id = :fit_id AND doctrine_id = :doctrine_id"
                 ),
                 {"fit_id": fit_id, "doctrine_id": doctrine_id},
@@ -699,7 +710,7 @@ def _get_doctrine_fits_rows(
             result = conn.execute(
                 text(
                     "SELECT doctrine_id, fit_id, market_flag, doctrine_name, "
-                    "fit_name, ship_name "
+                    "fit_name, ship_name, ship_type_id, target "
                     "FROM doctrine_fits WHERE fit_id = :fit_id"
                 ),
                 {"fit_id": fit_id},
@@ -709,6 +720,7 @@ def _get_doctrine_fits_rows(
         {
             "doctrine_id": r[0], "fit_id": r[1], "market_flag": r[2],
             "doctrine_name": r[3], "fit_name": r[4], "ship_name": r[5],
+            "ship_type_id": r[6], "target": r[7],
         }
         for r in result
     ]
@@ -867,6 +879,48 @@ def _display_market_preview(
     console.print(f"  Planned: {', '.join(parts)}\n")
 
 
+def _provision_market_db(
+    p: dict,
+    alias: str,
+    new_flag: str,
+    remote: bool,
+) -> None:
+    """Provision all tables for a fit in a newly-assigned market database."""
+    doctrine_fit = DoctrineFit.from_resolved(
+        doctrine_id=p["doctrine_id"],
+        fit_id=p["fit_id"],
+        target=p["target"],
+        doctrine_name=p["doctrine_name"],
+        fit_name=p["fit_name"],
+        ship_type_id=p["ship_type_id"],
+        ship_name=p["ship_name"],
+    )
+    upsert_doctrine_fits(doctrine_fit, remote=remote, db_alias=alias, market_flag=new_flag)
+    upsert_doctrine_map(p["doctrine_id"], p["fit_id"], remote=remote, db_alias=alias)
+    upsert_ship_target(
+        p["fit_id"], p["fit_name"], p["ship_type_id"], p["ship_name"],
+        p["target"], remote=remote, db_alias=alias,
+    )
+    refresh_doctrines_for_fit(
+        p["fit_id"], p["ship_type_id"], p["ship_name"],
+        remote=remote, db_alias=alias,
+    )
+
+
+def _cleanup_market_db(
+    fit_id: int,
+    doctrine_id: int,
+    alias: str,
+    remote: bool,
+) -> None:
+    """Remove a fit's doctrine_fits/doctrine_map from a market database,
+    then clean up doctrines/ship_targets if the fit is orphaned."""
+    remove_doctrine_fits(doctrine_id, fit_id, remote=remote, db_alias=alias)
+    remove_doctrine_map(doctrine_id, fit_id, remote=remote, db_alias=alias)
+    if _check_fit_orphaned(fit_id, alias, remote=remote):
+        _cleanup_orphaned_fit(fit_id, alias, remote=remote)
+
+
 def _execute_market_plan(
     plans: List[dict],
     remote: bool,
@@ -874,9 +928,11 @@ def _execute_market_plan(
 ) -> dict:
     """Execute a list of planned assign or unassign actions.
 
+    For "update" actions, computes which databases are newly added, removed,
+    or unchanged by the flag transition, then provisions/cleans up accordingly.
+
     Always writes to the local database first.  When remote=True, mirrors
-    every change to both remote databases (wcmkt, wcmktnorth) so the
-    market_flag stays identical across all three.
+    every change to both remote databases (wcmktprod, wcmktnorth).
 
     Returns aggregate counts: {"updated": int, "deleted": int, "skipped": int}
     """
@@ -890,27 +946,51 @@ def _execute_market_plan(
         row_doctrine_id = p["doctrine_id"]
 
         if p["action"] == "update":
-            # Local
-            update_fit_market_flag(
-                fit_id, p["new_flag"], remote=False, db_alias=db_alias,
-                doctrine_id=row_doctrine_id,
-            )
-            # Remote
+            old_flag = p["market_flag"]
+            new_flag = p["new_flag"]
+            old_aliases = _flag_to_aliases(old_flag)
+            new_aliases = _flag_to_aliases(new_flag)
+            newly_added = new_aliases - old_aliases
+            newly_removed = old_aliases - new_aliases
+            unchanged = old_aliases & new_aliases
+
+            # Update flag in databases that remain active
+            for alias in unchanged:
+                update_fit_market_flag(
+                    fit_id, new_flag, remote=False, db_alias=alias,
+                    doctrine_id=row_doctrine_id,
+                )
+
+            # Full provisioning in newly-added databases
+            for alias in newly_added:
+                _provision_market_db(p, alias, new_flag, remote=False)
+
+            # Full cleanup in newly-removed databases
+            for alias in newly_removed:
+                _cleanup_market_db(fit_id, row_doctrine_id, alias, remote=False)
+
+            # Remote mirroring
             if remote:
-                for target in ("wcmkt", "wcmktnorth"):
+                for target in ("wcmktprod", "wcmktnorth"):
                     try:
-                        update_fit_market_flag(
-                            fit_id, p["new_flag"], remote=True, db_alias=target,
-                            doctrine_id=row_doctrine_id,
-                        )
+                        if target in unchanged:
+                            update_fit_market_flag(
+                                fit_id, new_flag, remote=True, db_alias=target,
+                                doctrine_id=row_doctrine_id,
+                            )
+                        if target in newly_added:
+                            _provision_market_db(p, target, new_flag, remote=True)
+                        if target in newly_removed:
+                            _cleanup_market_db(fit_id, row_doctrine_id, target, remote=True)
                     except Exception as e:
                         console.print(
                             f"[yellow]Remote update skipped for {target}: {e}[/yellow]"
                         )
+
             updated += 1
             console.print(
                 f"  [green]Updated[/green] fit {fit_id}: "
-                f"market_flag '{p['market_flag']}' → '{p['new_flag']}'"
+                f"market_flag '{old_flag}' -> '{new_flag}'"
             )
 
         elif p["action"] == "remove":
@@ -919,7 +999,7 @@ def _execute_market_plan(
             remove_doctrine_map(row_doctrine_id, fit_id, remote=False, db_alias=db_alias)
             # Remote
             if remote:
-                for target in ("wcmkt", "wcmktnorth"):
+                for target in ("wcmktprod", "wcmktnorth"):
                     try:
                         remove_doctrine_fits(row_doctrine_id, fit_id, remote=True, db_alias=target)
                         remove_doctrine_map(row_doctrine_id, fit_id, remote=True, db_alias=target)
@@ -941,7 +1021,7 @@ def _execute_market_plan(
         if _check_fit_orphaned(fit_id, db_alias, remote=False):
             _cleanup_orphaned_fit(fit_id, db_alias, remote=False)
         if remote:
-            for target in ("wcmkt", "wcmktnorth"):
+            for target in ("wcmktprod", "wcmktnorth"):
                 try:
                     if _check_fit_orphaned(fit_id, target, remote=True):
                         _cleanup_orphaned_fit(fit_id, target, remote=True)
