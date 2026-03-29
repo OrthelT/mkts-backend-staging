@@ -670,20 +670,46 @@ def _flag_to_aliases(flag: str) -> set[str]:
     return set()
 
 
+def _needs_provisioning(
+    fit_id: int,
+    db_alias: str,
+    remote: bool = False,
+) -> bool:
+    """Return True if a fit is missing doctrines or ship_targets rows in a database."""
+    db = DatabaseConfig(db_alias)
+    engine = db.remote_engine if remote else db.engine
+    with engine.connect() as conn:
+        doc_count = conn.execute(
+            text("SELECT COUNT(*) FROM doctrines WHERE fit_id = :fit_id"),
+            {"fit_id": fit_id},
+        ).fetchone()[0]
+        st = conn.execute(
+            text("SELECT 1 FROM ship_targets WHERE fit_id = :fit_id"),
+            {"fit_id": fit_id},
+        ).fetchone()
+    engine.dispose()
+    return doc_count == 0 or st is None
+
+
 def _check_fit_orphaned(
     fit_id: int,
     db_alias: str = "wcmkt",
     remote: bool = False,
+    engine=None,
 ) -> bool:
     """Return True if fit_id has no remaining doctrine_fits rows."""
-    db = DatabaseConfig(db_alias)
-    engine = db.remote_engine if remote else db.engine
-    with engine.connect() as conn:
+    if engine is None:
+        db = DatabaseConfig(db_alias)
+        _engine = db.remote_engine if remote else db.engine
+    else:
+        _engine = engine
+    with _engine.connect() as conn:
         result = conn.execute(
             text("SELECT COUNT(*) FROM doctrine_fits WHERE fit_id = :fit_id"),
             {"fit_id": fit_id},
         ).fetchone()
-    engine.dispose()
+    if engine is None:
+        _engine.dispose()
     return result[0] == 0
 
 
@@ -755,12 +781,12 @@ def _get_remote_market_flags(
     return flags
 
 
-def _cleanup_orphaned_fit(fit_id: int, db_alias: str, remote: bool) -> None:
+def _cleanup_orphaned_fit(fit_id: int, db_alias: str, remote: bool, engine=None) -> None:
     """Remove doctrines and ship_targets rows for a fit that has no remaining doctrine_fits."""
-    removed = remove_doctrines_for_fit(fit_id, remote=remote, db_alias=db_alias)
+    removed = remove_doctrines_for_fit(fit_id, remote=remote, db_alias=db_alias, engine=engine)
     if removed:
         console.print(f"  [dim]Cleaned up {removed} orphaned doctrines rows for fit {fit_id}[/dim]")
-    remove_ship_target(fit_id, remote=remote, db_alias=db_alias)
+    remove_ship_target(fit_id, remote=remote, db_alias=db_alias, engine=engine)
     console.print(f"  [dim]Cleaned up ship_targets for fit {fit_id}[/dim]")
 
 
@@ -885,26 +911,35 @@ def _provision_market_db(
     new_flag: str,
     remote: bool,
 ) -> None:
-    """Provision all tables for a fit in a newly-assigned market database."""
-    doctrine_fit = DoctrineFit.from_resolved(
-        doctrine_id=p["doctrine_id"],
-        fit_id=p["fit_id"],
-        target=p["target"],
-        doctrine_name=p["doctrine_name"],
-        fit_name=p["fit_name"],
-        ship_type_id=p["ship_type_id"],
-        ship_name=p["ship_name"],
-    )
-    upsert_doctrine_fits(doctrine_fit, remote=remote, db_alias=alias, market_flag=new_flag)
-    upsert_doctrine_map(p["doctrine_id"], p["fit_id"], remote=remote, db_alias=alias)
-    upsert_ship_target(
-        p["fit_id"], p["fit_name"], p["ship_type_id"], p["ship_name"],
-        p["target"], remote=remote, db_alias=alias,
-    )
-    refresh_doctrines_for_fit(
-        p["fit_id"], p["ship_type_id"], p["ship_name"],
-        remote=remote, db_alias=alias,
-    )
+    """Provision all tables for a fit in a newly-assigned market database.
+
+    Creates a single engine for all operations to avoid multiple concurrent
+    connections to the same SQLite file.
+    """
+    db = DatabaseConfig(alias)
+    engine = db.remote_engine if remote else db.engine
+    try:
+        doctrine_fit = DoctrineFit.from_resolved(
+            doctrine_id=p["doctrine_id"],
+            fit_id=p["fit_id"],
+            target=p["target"],
+            doctrine_name=p["doctrine_name"],
+            fit_name=p["fit_name"],
+            ship_type_id=p["ship_type_id"],
+            ship_name=p["ship_name"],
+        )
+        upsert_doctrine_fits(doctrine_fit, remote=remote, db_alias=alias, market_flag=new_flag, engine=engine)
+        upsert_doctrine_map(p["doctrine_id"], p["fit_id"], remote=remote, db_alias=alias, engine=engine)
+        upsert_ship_target(
+            p["fit_id"], p["fit_name"], p["ship_type_id"], p["ship_name"],
+            p["target"], remote=remote, db_alias=alias, engine=engine,
+        )
+        refresh_doctrines_for_fit(
+            p["fit_id"], p["ship_type_id"], p["ship_name"],
+            remote=remote, db_alias=alias, engine=engine,
+        )
+    finally:
+        engine.dispose()
 
 
 def _cleanup_market_db(
@@ -914,11 +949,19 @@ def _cleanup_market_db(
     remote: bool,
 ) -> None:
     """Remove a fit's doctrine_fits/doctrine_map from a market database,
-    then clean up doctrines/ship_targets if the fit is orphaned."""
-    remove_doctrine_fits(doctrine_id, fit_id, remote=remote, db_alias=alias)
-    remove_doctrine_map(doctrine_id, fit_id, remote=remote, db_alias=alias)
-    if _check_fit_orphaned(fit_id, alias, remote=remote):
-        _cleanup_orphaned_fit(fit_id, alias, remote=remote)
+    then clean up doctrines/ship_targets if the fit is orphaned.
+
+    Creates a single engine for all operations.
+    """
+    db = DatabaseConfig(alias)
+    engine = db.remote_engine if remote else db.engine
+    try:
+        remove_doctrine_fits(doctrine_id, fit_id, remote=remote, db_alias=alias, engine=engine)
+        remove_doctrine_map(doctrine_id, fit_id, remote=remote, db_alias=alias, engine=engine)
+        if _check_fit_orphaned(fit_id, alias, remote=remote, engine=engine):
+            _cleanup_orphaned_fit(fit_id, alias, remote=remote, engine=engine)
+    finally:
+        engine.dispose()
 
 
 def _execute_market_plan(
@@ -954,12 +997,15 @@ def _execute_market_plan(
             newly_removed = old_aliases - new_aliases
             unchanged = old_aliases & new_aliases
 
-            # Update flag in databases that remain active
+            # Update flag in databases that remain active, heal if needed
             for alias in unchanged:
                 update_fit_market_flag(
                     fit_id, new_flag, remote=False, db_alias=alias,
                     doctrine_id=row_doctrine_id,
                 )
+                if _needs_provisioning(fit_id, alias, remote=False):
+                    _provision_market_db(p, alias, new_flag, remote=False)
+                    console.print(f"  [green]Provisioned[/green] missing data for fit {fit_id} in {alias}")
 
             # Full provisioning in newly-added databases
             for alias in newly_added:
@@ -978,6 +1024,9 @@ def _execute_market_plan(
                                 fit_id, new_flag, remote=True, db_alias=target,
                                 doctrine_id=row_doctrine_id,
                             )
+                            if _needs_provisioning(fit_id, target, remote=True):
+                                _provision_market_db(p, target, new_flag, remote=True)
+                                console.print(f"  [green]Provisioned[/green] missing remote data for fit {fit_id} in {target}")
                         if target in newly_added:
                             _provision_market_db(p, target, new_flag, remote=True)
                         if target in newly_removed:
@@ -1014,7 +1063,27 @@ def _execute_market_plan(
                 f"({p.get('doctrine_name', '?')})"
             )
         else:
-            skipped += 1
+            # Heal: even when flag matches, ensure all target databases have complete data
+            target_aliases = _flag_to_aliases(p["new_flag"])
+            healed = False
+            for alias in target_aliases:
+                if _needs_provisioning(fit_id, alias, remote=False):
+                    _provision_market_db(p, alias, p["new_flag"], remote=False)
+                    console.print(f"  [green]Provisioned[/green] missing data for fit {fit_id} in {alias}")
+                    healed = True
+            if remote:
+                for alias in target_aliases:
+                    try:
+                        if _needs_provisioning(fit_id, alias, remote=True):
+                            _provision_market_db(p, alias, p["new_flag"], remote=True)
+                            console.print(f"  [green]Provisioned[/green] missing remote data for fit {fit_id} in {alias}")
+                            healed = True
+                    except Exception as e:
+                        console.print(f"[yellow]Remote provisioning skipped for {alias}: {e}[/yellow]")
+            if healed:
+                updated += 1
+            else:
+                skipped += 1
 
     # Orphan cleanup for any deleted fits
     for fit_id in deleted_fit_ids:
