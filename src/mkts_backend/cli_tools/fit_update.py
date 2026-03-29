@@ -24,6 +24,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt, Confirm, IntPrompt
 from rich import box
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, DatabaseError
 
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.config import DatabaseConfig
@@ -661,34 +662,42 @@ def assign_doctrine_market(
 
 def _flag_to_aliases(flag: str) -> set[str]:
     """Return the set of explicit database aliases a market_flag implies."""
-    if flag == "primary":
-        return {"wcmktprod"}
-    if flag == "deployment":
-        return {"wcmktnorth"}
-    if flag == "both":
-        return {"wcmktprod", "wcmktnorth"}
-    return set()
+    _FLAG_ALIAS_MAP = {
+        "primary": {"wcmktprod"},
+        "deployment": {"wcmktnorth"},
+        "both": {"wcmktprod", "wcmktnorth"},
+    }
+    if flag not in _FLAG_ALIAS_MAP:
+        logger.warning(f"Unexpected market_flag '{flag}' — treating as empty alias set")
+    return _FLAG_ALIAS_MAP.get(flag, set())
 
 
 def _needs_provisioning(
     fit_id: int,
     db_alias: str,
     remote: bool = False,
+    engine=None,
 ) -> bool:
     """Return True if a fit is missing doctrines or ship_targets rows in a database."""
-    db = DatabaseConfig(db_alias)
-    engine = db.remote_engine if remote else db.engine
-    with engine.connect() as conn:
-        doc_count = conn.execute(
-            text("SELECT COUNT(*) FROM doctrines WHERE fit_id = :fit_id"),
-            {"fit_id": fit_id},
-        ).fetchone()[0]
-        st = conn.execute(
-            text("SELECT 1 FROM ship_targets WHERE fit_id = :fit_id"),
-            {"fit_id": fit_id},
-        ).fetchone()
-    engine.dispose()
-    return doc_count == 0 or st is None
+    if engine is None:
+        db = DatabaseConfig(db_alias)
+        _engine = db.remote_engine if remote else db.engine
+    else:
+        _engine = engine
+    try:
+        with _engine.connect() as conn:
+            doc_count = conn.execute(
+                text("SELECT COUNT(*) FROM doctrines WHERE fit_id = :fit_id"),
+                {"fit_id": fit_id},
+            ).fetchone()[0]
+            st = conn.execute(
+                text("SELECT 1 FROM ship_targets WHERE fit_id = :fit_id"),
+                {"fit_id": fit_id},
+            ).fetchone()
+        return doc_count == 0 or st is None
+    finally:
+        if engine is None:
+            _engine.dispose()
 
 
 def _check_fit_orphaned(
@@ -761,7 +770,7 @@ def _get_remote_market_flags(
     Returns a list of flag values found (0-2 entries).
     """
     flags = []
-    for target in ("wcmkt", "wcmktnorth"):
+    for target in ("wcmktprod", "wcmktnorth"):
         try:
             db = DatabaseConfig(target)
             engine = db.remote_engine
@@ -1031,7 +1040,7 @@ def _execute_market_plan(
                             _provision_market_db(p, target, new_flag, remote=True)
                         if target in newly_removed:
                             _cleanup_market_db(fit_id, row_doctrine_id, target, remote=True)
-                    except Exception as e:
+                    except (OperationalError, DatabaseError, ConnectionError, TimeoutError) as e:
                         console.print(
                             f"[yellow]Remote update skipped for {target}: {e}[/yellow]"
                         )
@@ -1052,7 +1061,7 @@ def _execute_market_plan(
                     try:
                         remove_doctrine_fits(row_doctrine_id, fit_id, remote=True, db_alias=target)
                         remove_doctrine_map(row_doctrine_id, fit_id, remote=True, db_alias=target)
-                    except Exception as e:
+                    except (OperationalError, DatabaseError, ConnectionError, TimeoutError) as e:
                         console.print(
                             f"[yellow]Remote remove skipped for {target}: {e}[/yellow]"
                         )
@@ -1078,23 +1087,24 @@ def _execute_market_plan(
                             _provision_market_db(p, alias, p["new_flag"], remote=True)
                             console.print(f"  [green]Provisioned[/green] missing remote data for fit {fit_id} in {alias}")
                             healed = True
-                    except Exception as e:
+                    except (OperationalError, DatabaseError, ConnectionError, TimeoutError) as e:
                         console.print(f"[yellow]Remote provisioning skipped for {alias}: {e}[/yellow]")
             if healed:
                 updated += 1
             else:
                 skipped += 1
 
-    # Orphan cleanup for any deleted fits
+    # Orphan cleanup for any deleted fits (check all local alias databases)
     for fit_id in deleted_fit_ids:
-        if _check_fit_orphaned(fit_id, db_alias, remote=False):
-            _cleanup_orphaned_fit(fit_id, db_alias, remote=False)
+        for local_alias in ("wcmktprod", "wcmktnorth"):
+            if _check_fit_orphaned(fit_id, local_alias, remote=False):
+                _cleanup_orphaned_fit(fit_id, local_alias, remote=False)
         if remote:
             for target in ("wcmktprod", "wcmktnorth"):
                 try:
                     if _check_fit_orphaned(fit_id, target, remote=True):
                         _cleanup_orphaned_fit(fit_id, target, remote=True)
-                except Exception as e:
+                except (OperationalError, DatabaseError, ConnectionError, TimeoutError) as e:
                     console.print(
                         f"[yellow]Remote orphan cleanup skipped for {target}: {e}[/yellow]"
                     )

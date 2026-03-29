@@ -931,77 +931,79 @@ def refresh_doctrines_for_fit(fit_id: int, ship_id: int, ship_name: str, remote:
         fittings_engine.dispose()
 
     _engine = engine or _get_engine(db_alias, remote)
-    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    try:
+        timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
-    # Pull market stats once into dict for quick lookup
-    stats_map = {}
-    with _engine.connect() as conn:
-        stats_rows = conn.execute(
-            text(
-                "SELECT type_id, price, avg_price, avg_volume, days_remaining, total_volume_remain FROM marketstats"
+        # Pull market stats once into dict for quick lookup
+        stats_map = {}
+        with _engine.connect() as conn:
+            stats_rows = conn.execute(
+                text(
+                    "SELECT type_id, price, avg_price, avg_volume, days_remaining, total_volume_remain FROM marketstats"
+                )
+            ).fetchall()
+            for r in stats_rows:
+                stats_map[r.type_id] = r
+
+        hull_stats = stats_map.get(ship_id)
+        hull_stock = int(hull_stats.total_volume_remain) if hull_stats and hull_stats.total_volume_remain is not None else 0
+
+        with _engine.connect() as conn:
+            conn.execute(text("DELETE FROM doctrines WHERE fit_id = :fit_id"), {"fit_id": fit_id})
+            insert_stmt = text(
+                """
+                INSERT INTO doctrines (
+                    fit_id, ship_id, ship_name, type_id, type_name, fit_qty, hulls,
+                    fits_on_mkt, total_stock, price, avg_vol, days,
+                    group_id, group_name, category_id, category_name, timestamp
+                ) VALUES (
+                    :fit_id, :ship_id, :ship_name, :type_id, :type_name, :fit_qty, :hulls,
+                    :fits_on_mkt, :total_stock, :price, :avg_vol, :days,
+                    :group_id, :group_name, :category_id, :category_name, :timestamp
+                )
+                """
             )
-        ).fetchall()
-        for r in stats_rows:
-            stats_map[r.type_id] = r
+            for type_id, qty in components:
+                type_info = TypeInfo(type_id)
+                stats = stats_map.get(type_id)
+                total_stock = int(stats.total_volume_remain) if stats and stats.total_volume_remain is not None else 0
+                price_val = float(stats.price) if stats and stats.price is not None else 0.0
+                avg_vol = float(stats.avg_volume) if stats and stats.avg_volume is not None else 0.0
+                days_rem = float(stats.days_remaining) if stats and stats.days_remaining is not None else 0.0
+                fits_on_mkt = (total_stock / qty) if qty else 0
+                # Set hulls for all rows based on the hull's total_volume_remain
+                hulls = hull_stock
 
-    hull_stats = stats_map.get(ship_id)
-    hull_stock = int(hull_stats.total_volume_remain) if hull_stats and hull_stats.total_volume_remain is not None else 0
+                if stats is None:
+                    logger.warning(f"No marketstats for type_id {type_id}; defaulting price/stock to 0")
 
-    with _engine.connect() as conn:
-        conn.execute(text("DELETE FROM doctrines WHERE fit_id = :fit_id"), {"fit_id": fit_id})
-        insert_stmt = text(
-            """
-            INSERT INTO doctrines (
-                fit_id, ship_id, ship_name, type_id, type_name, fit_qty, hulls,
-                fits_on_mkt, total_stock, price, avg_vol, days,
-                group_id, group_name, category_id, category_name, timestamp
-            ) VALUES (
-                :fit_id, :ship_id, :ship_name, :type_id, :type_name, :fit_qty, :hulls,
-                :fits_on_mkt, :total_stock, :price, :avg_vol, :days,
-                :group_id, :group_name, :category_id, :category_name, :timestamp
-            )
-            """
-        )
-        for type_id, qty in components:
-            type_info = TypeInfo(type_id)
-            stats = stats_map.get(type_id)
-            total_stock = int(stats.total_volume_remain) if stats and stats.total_volume_remain is not None else 0
-            price_val = float(stats.price) if stats and stats.price is not None else 0.0
-            avg_vol = float(stats.avg_volume) if stats and stats.avg_volume is not None else 0.0
-            days_rem = float(stats.days_remaining) if stats and stats.days_remaining is not None else 0.0
-            fits_on_mkt = (total_stock / qty) if qty else 0
-            # Set hulls for all rows based on the hull's total_volume_remain
-            hulls = hull_stock
-
-            if stats is None:
-                logger.warning(f"No marketstats for type_id {type_id}; defaulting price/stock to 0")
-
-            conn.execute(
-                insert_stmt,
-                {
-                    "fit_id": fit_id,
-                    "ship_id": ship_id,
-                    "ship_name": ship_name,
-                    "type_id": type_id,
-                    "type_name": type_info.type_name,
-                    "fit_qty": int(qty),
-                    "hulls": hulls,
-                    "fits_on_mkt": fits_on_mkt,
-                    "total_stock": total_stock,
-                    "price": price_val,
-                    "avg_vol": avg_vol,
-                    "days": days_rem,
-                    "group_id": int(type_info.group_id),
-                    "group_name": type_info.group_name,
-                    "category_id": int(type_info.category_id),
-                    "category_name": type_info.category_name,
-                    "timestamp": timestamp,
-                },
-            )
-        conn.commit()
-    if engine is None:
-        _engine.dispose()
-    logger.info(f"Rebuilt doctrines rows for fit_id {fit_id} ({len(components)} components)")
+                conn.execute(
+                    insert_stmt,
+                    {
+                        "fit_id": fit_id,
+                        "ship_id": ship_id,
+                        "ship_name": ship_name,
+                        "type_id": type_id,
+                        "type_name": type_info.type_name,
+                        "fit_qty": int(qty),
+                        "hulls": hulls,
+                        "fits_on_mkt": fits_on_mkt,
+                        "total_stock": total_stock,
+                        "price": price_val,
+                        "avg_vol": avg_vol,
+                        "days": days_rem,
+                        "group_id": int(type_info.group_id),
+                        "group_name": type_info.group_name,
+                        "category_id": int(type_info.category_id),
+                        "category_name": type_info.category_name,
+                        "timestamp": timestamp,
+                    },
+                )
+            conn.commit()
+        logger.info(f"Rebuilt doctrines rows for fit_id {fit_id} ({len(components)} components)")
+    finally:
+        if engine is None:
+            _engine.dispose()
 
 def add_doctrine_fits_to_wcmkt(df: pd.DataFrame, remote: bool = False):
 
