@@ -98,7 +98,7 @@ class DatabaseConfig:
             elif alias is None or alias in ["wcmkt", "primary"]:
                 alias = self._production_db_alias
             elif alias in ["deployment", "north"]:
-                alias == self._deployment_db_alias
+                alias = self._deployment_db_alias
             if alias not in self._db_paths:
                 raise ValueError(
                     f"Unknown database alias '{alias}'. Available: {list(self._db_paths.keys())}"
