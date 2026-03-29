@@ -1024,11 +1024,13 @@ def _execute_market_plan(
             for alias in newly_removed:
                 _cleanup_market_db(fit_id, row_doctrine_id, alias, remote=False)
 
-            # Remote mirroring
+            # Remote mirroring — reconcile each remote DB to match new_flag,
+            # regardless of what the remote's current state is (handles drift).
             if remote:
                 for target in ("wcmktprod", "wcmktnorth"):
                     try:
-                        if target in unchanged:
+                        if target in new_aliases:
+                            # This DB should have the fit — update flag and heal if needed
                             update_fit_market_flag(
                                 fit_id, new_flag, remote=True, db_alias=target,
                                 doctrine_id=row_doctrine_id,
@@ -1036,9 +1038,8 @@ def _execute_market_plan(
                             if _needs_provisioning(fit_id, target, remote=True):
                                 _provision_market_db(p, target, new_flag, remote=True)
                                 console.print(f"  [green]Provisioned[/green] missing remote data for fit {fit_id} in {target}")
-                        if target in newly_added:
-                            _provision_market_db(p, target, new_flag, remote=True)
-                        if target in newly_removed:
+                        else:
+                            # This DB should NOT have the fit — clean up if present
                             _cleanup_market_db(fit_id, row_doctrine_id, target, remote=True)
                     except (OperationalError, DatabaseError, ConnectionError, TimeoutError) as e:
                         console.print(
@@ -1072,8 +1073,9 @@ def _execute_market_plan(
                 f"({p.get('doctrine_name', '?')})"
             )
         else:
-            # Heal: even when flag matches, ensure all target databases have complete data
+            # Heal: even when flag matches, reconcile all databases to match
             target_aliases = _flag_to_aliases(p["new_flag"])
+            non_target_aliases = {"wcmktprod", "wcmktnorth"} - target_aliases
             healed = False
             for alias in target_aliases:
                 if _needs_provisioning(fit_id, alias, remote=False):
@@ -1083,12 +1085,21 @@ def _execute_market_plan(
             if remote:
                 for alias in target_aliases:
                     try:
+                        update_fit_market_flag(
+                            fit_id, p["new_flag"], remote=True, db_alias=alias,
+                            doctrine_id=row_doctrine_id,
+                        )
                         if _needs_provisioning(fit_id, alias, remote=True):
                             _provision_market_db(p, alias, p["new_flag"], remote=True)
                             console.print(f"  [green]Provisioned[/green] missing remote data for fit {fit_id} in {alias}")
                             healed = True
                     except (OperationalError, DatabaseError, ConnectionError, TimeoutError) as e:
                         console.print(f"[yellow]Remote provisioning skipped for {alias}: {e}[/yellow]")
+                for alias in non_target_aliases:
+                    try:
+                        _cleanup_market_db(fit_id, row_doctrine_id, alias, remote=True)
+                    except (OperationalError, DatabaseError, ConnectionError, TimeoutError) as e:
+                        console.print(f"[yellow]Remote cleanup skipped for {alias}: {e}[/yellow]")
             if healed:
                 updated += 1
             else:
