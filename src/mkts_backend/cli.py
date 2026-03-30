@@ -504,6 +504,13 @@ def main(history: bool = False, market_alias: str = "primary"):
             logger.error(f"Available markets: {', '.join(MarketContext.list_available())}")
             sys.exit(1)
 
+    # Ensure market databases are synced before querying them
+    for market_ctx in all_contexts:
+        db = DatabaseConfig(market_context=market_ctx)
+        if db.needs_init():
+            logger.info(f"Initializing market database: {db.alias}")
+            db.verify_db_exists()
+
     # Fetch Jita prices once and write to all market databases
     jita_ok = process_jita_prices(all_contexts)
     if not jita_ok:
