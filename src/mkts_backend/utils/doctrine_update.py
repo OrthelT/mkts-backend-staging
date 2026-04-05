@@ -735,6 +735,7 @@ def upsert_lead_ship(
         True if a row was inserted, False if one already exists
     """
     engine = _get_engine(db_alias, remote)
+    inserted = False
     with engine.connect() as conn:
         existing = conn.execute(
             text("SELECT 1 FROM lead_ships WHERE doctrine_id = :doctrine_id"),
@@ -742,25 +743,25 @@ def upsert_lead_ship(
         ).fetchone()
         if existing:
             logger.info(f"lead_ships already has entry for doctrine_id {doctrine_id}, skipping")
-            engine.dispose()
-            return False
-
-        conn.execute(
-            text(
-                "INSERT INTO lead_ships (doctrine_name, doctrine_id, lead_ship, fit_id) "
-                "VALUES (:doctrine_name, :doctrine_id, :lead_ship, :fit_id)"
-            ),
-            {
-                "doctrine_name": doctrine_name,
-                "doctrine_id": doctrine_id,
-                "lead_ship": ship_type_id,
-                "fit_id": fit_id,
-            },
-        )
-        conn.commit()
+        else:
+            conn.execute(
+                text(
+                    "INSERT INTO lead_ships (doctrine_name, doctrine_id, lead_ship, fit_id) "
+                    "VALUES (:doctrine_name, :doctrine_id, :lead_ship, :fit_id)"
+                ),
+                {
+                    "doctrine_name": doctrine_name,
+                    "doctrine_id": doctrine_id,
+                    "lead_ship": ship_type_id,
+                    "fit_id": fit_id,
+                },
+            )
+            conn.commit()
+            inserted = True
     engine.dispose()
-    logger.info(f"Added lead_ship for doctrine_id {doctrine_id}: fit_id={fit_id}, ship={ship_type_id}")
-    return True
+    if inserted:
+        logger.info(f"Added lead_ship for doctrine_id {doctrine_id}: fit_id={fit_id}, ship={ship_type_id}")
+    return inserted
 
 
 def set_lead_ship(
