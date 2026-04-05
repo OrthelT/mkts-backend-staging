@@ -471,7 +471,7 @@ def interactive_add_fit(
     try:
         # Determine which databases to update
         if market_flag == "both":
-            target_aliases = ["wcmkt", "wcmktnorth"]
+            target_aliases = ["wcmkt", "wcmktvsj"]
         else:
             target_aliases = [target_alias]
 
@@ -664,8 +664,8 @@ def _flag_to_aliases(flag: str) -> set[str]:
     """Return the set of explicit database aliases a market_flag implies."""
     _FLAG_ALIAS_MAP = {
         "primary": {"wcmktprod"},
-        "deployment": {"wcmktnorth"},
-        "both": {"wcmktprod", "wcmktnorth"},
+        "deployment": {"wcmktvsj"},
+        "both": {"wcmktprod", "wcmktvsj"},
     }
     if flag not in _FLAG_ALIAS_MAP:
         logger.warning(f"Unexpected market_flag '{flag}' — treating as empty alias set")
@@ -770,7 +770,7 @@ def _get_remote_market_flags(
     Returns a list of flag values found (0-2 entries).
     """
     flags = []
-    for target in ("wcmktprod", "wcmktnorth"):
+    for target in ("wcmktprod", "wcmktvsj"):
         try:
             db = DatabaseConfig(target)
             engine = db.remote_engine
@@ -984,7 +984,7 @@ def _execute_market_plan(
     or unchanged by the flag transition, then provisions/cleans up accordingly.
 
     Always writes to the local database first.  When remote=True, mirrors
-    every change to both remote databases (wcmktprod, wcmktnorth).
+    every change to both remote databases (wcmktprod, wcmktvsj).
 
     Returns aggregate counts: {"updated": int, "deleted": int, "skipped": int}
     """
@@ -1027,7 +1027,7 @@ def _execute_market_plan(
             # Remote mirroring — reconcile each remote DB to match new_flag,
             # regardless of what the remote's current state is (handles drift).
             if remote:
-                for target in ("wcmktprod", "wcmktnorth"):
+                for target in ("wcmktprod", "wcmktvsj"):
                     try:
                         if target in new_aliases:
                             # This DB should have the fit — update flag and heal if needed
@@ -1058,7 +1058,7 @@ def _execute_market_plan(
             remove_doctrine_map(row_doctrine_id, fit_id, remote=False, db_alias=db_alias)
             # Remote
             if remote:
-                for target in ("wcmktprod", "wcmktnorth"):
+                for target in ("wcmktprod", "wcmktvsj"):
                     try:
                         remove_doctrine_fits(row_doctrine_id, fit_id, remote=True, db_alias=target)
                         remove_doctrine_map(row_doctrine_id, fit_id, remote=True, db_alias=target)
@@ -1075,7 +1075,7 @@ def _execute_market_plan(
         else:
             # Heal: even when flag matches, reconcile all databases to match
             target_aliases = _flag_to_aliases(p["new_flag"])
-            non_target_aliases = {"wcmktprod", "wcmktnorth"} - target_aliases
+            non_target_aliases = {"wcmktprod", "wcmktvsj"} - target_aliases
             healed = False
             for alias in target_aliases:
                 if _needs_provisioning(fit_id, alias, remote=False):
@@ -1107,11 +1107,11 @@ def _execute_market_plan(
 
     # Orphan cleanup for any deleted fits (check all local alias databases)
     for fit_id in deleted_fit_ids:
-        for local_alias in ("wcmktprod", "wcmktnorth"):
+        for local_alias in ("wcmktprod", "wcmktvsj"):
             if _check_fit_orphaned(fit_id, local_alias, remote=False):
                 _cleanup_orphaned_fit(fit_id, local_alias, remote=False)
         if remote:
-            for target in ("wcmktprod", "wcmktnorth"):
+            for target in ("wcmktprod", "wcmktvsj"):
                 try:
                     if _check_fit_orphaned(fit_id, target, remote=True):
                         _cleanup_orphaned_fit(fit_id, target, remote=True)
@@ -1265,7 +1265,7 @@ def unassign_doctrine_market(
 def list_fits_command(db_alias: str = "wcmkt", remote: bool = False) -> None:
     """List all fits, showing targets for both primary and north markets."""
     primary_fits = get_fits_list(db_alias="wcmkt", remote=remote)
-    north_fits = get_fits_list(db_alias="wcmktnorth", remote=remote)
+    north_fits = get_fits_list(db_alias="wcmktvsj", remote=remote)
 
     merged: dict[int, dict] = {}
     for fit in primary_fits:
@@ -1533,7 +1533,7 @@ def doctrine_add_fit_command(
 
     # Determine target market databases up front (used for both validation and writes)
     if market_flag == "both":
-        target_aliases = ["wcmkt", "wcmktnorth"]
+        target_aliases = ["wcmkt", "wcmktvsj"]
     else:
         target_aliases = [db_alias]
 
@@ -2362,12 +2362,12 @@ def update_target_command(
             fit_id, target, remote=remote, market_flag="primary", db_alias="wcmkt"
         )
         deploy_ok = _update_target_single(
-            fit_id, target, remote=remote, market_flag="deployment", db_alias="wcmktnorth"
+            fit_id, target, remote=remote, market_flag="deployment", db_alias="wcmktvsj"
         )
         return primary_ok and deploy_ok
 
     if market_flag == "deployment":
-        db_alias = "wcmktnorth"
+        db_alias = "wcmktvsj"
     elif market_flag not in ["primary", "deployment"]:
         db_alias = "wcmkt"
 
@@ -2460,7 +2460,7 @@ def update_friendly_name_command(
         return False
 
     # Push to both remotes
-    for target in ("wcmkt", "wcmktnorth"):
+    for target in ("wcmkt", "wcmktvsj"):
         try:
             ensure_friendly_name_column(db_alias=target, remote=True)
             remote_ok = update_doctrine_friendly_name(doctrine_id, friendly_name, db_alias=target, remote=True)
@@ -2490,7 +2490,7 @@ def populate_friendly_names_command(
     console.print(f"[green]Updated {count} rows locally ({db_alias})[/green]")
 
     # Sync local → both remotes (doctrine_fits should be identical on both)
-    for target in ("wcmkt", "wcmktnorth"):
+    for target in ("wcmkt", "wcmktvsj"):
         ok = sync_friendly_names_to_remote(source_alias=db_alias, target_alias=target)
         if ok:
             console.print(f"[green]Synced friendly_names to remote ({target})[/green]")
@@ -2636,7 +2636,7 @@ def fit_update_command(
 
                 # Determine which databases to update
                 if market_flag == "both":
-                    aliases = ["wcmkt", "wcmktnorth"]
+                    aliases = ["wcmkt", "wcmktvsj"]
                 else:
                     aliases = [target_alias]
 
@@ -2701,8 +2701,8 @@ def fit_update_command(
             mkt_engine.dispose()
 
             if not rows:
-                # Fallback: check wcmktnorth
-                db_north = DatabaseConfig("wcmktnorth")
+                # Fallback: check wcmktvsj
+                db_north = DatabaseConfig("wcmktvsj")
                 north_engine = db_north.remote_engine if use_remote else db_north.engine
                 with north_engine.connect() as conn:
                     rows = conn.execute(
@@ -2730,7 +2730,7 @@ def fit_update_command(
         try:
             # Update all markets where the fit currently exists
             aliases = []
-            for alias in ["wcmkt", "wcmktnorth"]:
+            for alias in ["wcmkt", "wcmktvsj"]:
                 existing = get_fit_target(fit_id, remote=use_remote, db_alias=alias)
                 if existing is not None:
                     aliases.append(alias)
@@ -2806,7 +2806,7 @@ def fit_update_command(
         if market_flag in ("both", "primary"):
             # "primary" is the default when no --market flag is passed,
             # so treat it the same as "both" for remove.
-            aliases = ["wcmkt", "wcmktnorth"]
+            aliases = ["wcmkt", "wcmktvsj"]
         else:
             aliases = [target_alias]
         success = True

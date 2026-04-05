@@ -726,7 +726,7 @@ def update_fit_workflow(
         remote: Use remote database
         clear_existing: Clear existing fit items before inserting
         dry_run: Preview changes without saving
-        target_alias: Target database alias (wcmkt or wcmktnorth)
+        target_alias: Target database alias (wcmkt or wcmktvsj)
         update_targets: If True, update ship_targets table (default: False)
         metadata_override: Dict with metadata fields (overrides file if provided)
     """
@@ -795,7 +795,7 @@ def update_fit_workflow(
             doctrine_id=doctrine_id, fit_id=fit_id, target=metadata.target
         )
 
-        # Propagate to market/production dbs (wcmktprod.db or wcmktnorth2.db)
+        # Propagate to market/production dbs (wcmktprod.db or wcmktvsj.db)
         upsert_doctrine_fits(doctrine_fit, remote=remote,
                              db_alias=target_alias)
         upsert_doctrine_map(

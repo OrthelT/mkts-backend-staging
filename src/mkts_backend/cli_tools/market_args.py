@@ -4,7 +4,7 @@ import sys
 
 MARKET_DB_MAP: dict[str, str] = {
     "primary": "wcmkt",
-    "deployment": "wcmktnorth",
+    "deployment": "wcmktvsj",
 }
 
 MARKET_SYNONYMS: dict[str, str] = {

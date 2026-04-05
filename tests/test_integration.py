@@ -24,13 +24,13 @@ class TestFullMarketContextFlow:
         assert "wcmkttest" in db.path
 
     def test_deployment_market_flow_uses_correct_database(self, deployment_market_context):
-        """Test that deployment market operations use wcmktnorth database."""
+        """Test that deployment market operations use wcmktvsj database."""
         from mkts_backend.config.config import DatabaseConfig
 
         db = DatabaseConfig(market_context=deployment_market_context)
 
-        assert db.alias == "wcmktnorth"
-        assert "wcmktnorth" in db.path
+        assert db.alias == "wcmktvsj"
+        assert "wcmktvsj" in db.path
 
 
 class TestMarketContextConfigChain:
@@ -62,7 +62,7 @@ class TestMarketContextConfigChain:
         esi = ESIConfig(market_context=deployment_market_context)
         gsheets = GoogleSheetConfig(market_context=deployment_market_context)
 
-        assert db.alias == "wcmktnorth"
+        assert db.alias == "wcmktvsj"
         assert esi.region_id == 10000023
         assert gsheets.google_sheet_url == deployment_market_context.gsheets_url
 
@@ -90,7 +90,7 @@ class TestDatabaseWriteIsolation:
         })
 
         primary_db_path = temp_db_dir / "wcmktprod.db"
-        deployment_db_path = temp_db_dir / "wcmktnorth2.db"
+        deployment_db_path = temp_db_dir / "wcmktvsj2.db"
 
         # Write to primary database
         conn_primary = sqlite3.connect(str(primary_db_path))
@@ -307,7 +307,7 @@ class TestConcurrentMarketOperations:
             if i % 2 == 0:
                 assert config.alias == "wcmkttest"
             else:
-                assert config.alias == "wcmktnorth"
+                assert config.alias == "wcmktvsj"
 
     def test_market_context_thread_safety(self, primary_market_context, deployment_market_context):
         """Test that market contexts maintain isolation in rapid succession."""
@@ -327,4 +327,4 @@ class TestConcurrentMarketOperations:
             if market == "primary":
                 assert alias == "wcmkttest"
             else:
-                assert alias == "wcmktnorth"
+                assert alias == "wcmktvsj"

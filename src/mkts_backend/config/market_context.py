@@ -48,8 +48,8 @@ class MarketContext:
     region_id: int
     system_id: int
     structure_id: int
-    database_alias: str         # "wcmktprod" or "wcmktnorth"
-    database_file: str          # "wcmktprod.db" or "wcmktnorth2.db"
+    database_alias: str         # "wcmktprod" or "wcmktvsj"
+    database_file: str          # "wcmktprod.db" or "wcmktvsj.db"
     turso_url_env: str          # env var name for Turso URL
     turso_token_env: str        # env var name for Turso token
     gsheets_url: str

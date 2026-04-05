@@ -183,8 +183,8 @@ OPTIONS:
     --dry-run            Preview changes without saving
     --remote             Use remote database
     --local-only         Use local database only
-    --db-alias=<alias>   Target database: wcmkt, wcmktnorth
-    --north              Shorthand for --db-alias=wcmktnorth
+    --db-alias=<alias>   Target database: wcmkt, wcmktvsj
+    --north              Shorthand for --db-alias=wcmktvsj
     --name=<name>        Friendly display name (for update-friendly-name)
     --doctrine-id=<id>   Doctrine ID (for unassign-market, update-friendly-name, etc.)
     --target=<qty>       Default target quantity for new fits (default: 100)
@@ -333,7 +333,7 @@ def display_update_target_help():
     --remote             Use remote database (default: local)
     --local-only         Use local database only (default: no)
     --db-alias=<alias>   Target database alias (default: wcmkt)
-    --north              Shorthand for --db-alias=wcmktnorth
+    --north              Shorthand for --db-alias=wcmktvsj
     --primary            Shorthand for --market=primary
     """)
     console.print("""

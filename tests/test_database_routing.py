@@ -27,8 +27,8 @@ class TestDatabaseConfigRouting:
 
         db = DatabaseConfig(market_context=deployment_market_context)
 
-        assert db.alias == "wcmktnorth"
-        assert "wcmktnorth" in db.path
+        assert db.alias == "wcmktvsj"
+        assert "wcmktvsj" in db.path
 
     def test_database_config_primary_and_deployment_different_paths(
         self, primary_market_context, deployment_market_context
@@ -212,7 +212,7 @@ class TestDbHandlersRouting:
 
         db = _get_db(deployment_market_context)
 
-        assert db.alias == "wcmktnorth"
+        assert db.alias == "wcmktvsj"
 
     def test_get_db_helper_without_context_uses_default(self):
         """Test _get_db helper without context uses default database."""
@@ -241,7 +241,7 @@ class TestDbQueriesRouting:
 
         db = _get_db(deployment_market_context)
 
-        assert db.alias == "wcmktnorth"
+        assert db.alias == "wcmktvsj"
 
 
 class TestDataProcessingRouting:
@@ -261,7 +261,7 @@ class TestDataProcessingRouting:
 
         db = _get_db(deployment_market_context)
 
-        assert db.alias == "wcmktnorth"
+        assert db.alias == "wcmktvsj"
 
     def test_get_db_helper_without_context_uses_default(self):
         """Test _get_db helper without context uses lazy-initialized default."""
@@ -317,8 +317,8 @@ class TestDatabaseIsolation:
         db = _get_db(deployment_market_context)
 
         # Verify correct database was selected
-        assert db.alias == "wcmktnorth"
-        assert "wcmktnorth" in db.path
+        assert db.alias == "wcmktvsj"
+        assert "wcmktvsj" in db.path
 
     def test_database_path_contains_correct_market_identifier(
         self, primary_market_context, deployment_market_context
@@ -332,8 +332,8 @@ class TestDatabaseIsolation:
         # Primary should reference wcmkttest in development mode
         assert "wcmkttest" in primary_db.path.lower() or "test" in primary_db.path.lower()
 
-        # Deployment should reference wcmktnorth
-        assert "wcmktnorth" in deployment_db.path.lower() or "north" in deployment_db.path.lower()
+        # Deployment should reference wcmktvsj
+        assert "wcmktvsj" in deployment_db.path.lower() or "vsj" in deployment_db.path.lower()
 
 
 class TestCrossMarketIsolation:
@@ -360,7 +360,7 @@ class TestCrossMarketIsolation:
 
         # Verify isolation
         assert primary_alias == "wcmkttest"
-        assert deployment_alias == "wcmktnorth"
+        assert deployment_alias == "wcmktvsj"
         assert db3.alias == primary_alias  # Back to primary
         assert db3.path == primary_path
 
@@ -380,6 +380,6 @@ class TestCrossMarketIsolation:
 
         # Verify each got the correct database
         assert h_primary.alias == "wcmkttest"
-        assert q_deployment.alias == "wcmktnorth"
+        assert q_deployment.alias == "wcmktvsj"
         assert p_primary.alias == "wcmkttest"
-        assert h_deployment.alias == "wcmktnorth"
+        assert h_deployment.alias == "wcmktvsj"

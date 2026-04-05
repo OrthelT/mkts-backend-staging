@@ -28,13 +28,13 @@ class TestMarketContextCreation:
         ctx = deployment_market_context
 
         assert ctx.alias == "deployment"
-        assert ctx.name == "B-9C24 Keepstar"
-        assert ctx.region_id == 10000023
-        assert ctx.structure_id == 1046831245129
-        assert ctx.database_alias == "wcmktnorth"
-        assert ctx.database_file == "wcmktnorth2.db"
-        assert ctx.turso_url_env == "TURSO_WCMKTNORTH_URL"
-        assert ctx.turso_token_env == "TURSO_WCMKTNORTH_TOKEN"
+        assert ctx.name == "VSJ-PP (SneakStar)"
+        assert ctx.region_id == 10000029
+        assert ctx.structure_id == 1053176537595
+        assert ctx.database_alias == "wcmktvsj"
+        assert ctx.database_file == "wcmktvsj.db"
+        assert ctx.turso_url_env == "TURSO_WCMKTVSJ_URL"
+        assert ctx.turso_token_env == "TURSO_WCMKTVSJ_TOKEN"
 
     def test_create_primary_market_context_production(self):
         """Test that primary market context uses production db in production mode."""
@@ -111,9 +111,9 @@ class TestMarketContextIsolation:
         assert "test" in primary_market_context.database_file.lower()
 
     def test_deployment_database_alias_mapping(self, deployment_market_context):
-        """Test deployment market maps to wcmktnorth database."""
-        assert deployment_market_context.database_alias == "wcmktnorth"
-        assert "north" in deployment_market_context.database_file.lower()
+        """Test deployment market maps to wcmktvsj database."""
+        assert deployment_market_context.database_alias == "wcmktvsj"
+        assert "vsj" in deployment_market_context.database_file.lower()
 
     def test_market_contexts_are_independent(self, primary_market_context, deployment_market_context):
         """Test that modifying one context doesn't affect the other."""
@@ -133,7 +133,7 @@ class TestMarketContextIsolation:
         assert primary_url_env != deployment_url_env
         # In development mode, primary uses testing turso env vars
         assert "WCMKTTEST" in primary_url_env
-        assert "WCMKTNORTH" in deployment_url_env
+        assert "WCMKTVSJ" in deployment_url_env
 
     def test_deployment_unaffected_by_environment(self):
         """Test that deployment market is not affected by environment setting."""
@@ -151,5 +151,5 @@ class TestMarketContextIsolation:
         with patch("mkts_backend.config.market_context._load_settings", return_value=prod_settings):
             prod_ctx = MarketContext.from_settings("deployment")
 
-        assert dev_ctx.database_alias == prod_ctx.database_alias == "wcmktnorth"
-        assert dev_ctx.database_file == prod_ctx.database_file == "wcmktnorth2.db"
+        assert dev_ctx.database_alias == prod_ctx.database_alias == "wcmktvsj"
+        assert dev_ctx.database_file == prod_ctx.database_file == "wcmktvsj.db"

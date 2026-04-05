@@ -57,7 +57,7 @@ class DatabaseConfig:
         _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_URL"),
         "sde_turso": os.getenv("TURSO_SDE_URL"),
         "fittings_turso": os.getenv("TURSO_FITTING_URL"),
-        _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_URL"),
+        _deployment_db_alias + "_turso": os.getenv(settings["markets"]["deployment"]["turso_url_env"]),
     }
 
     _db_turso_auth_tokens = {
@@ -65,7 +65,7 @@ class DatabaseConfig:
         _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_TOKEN"),
         "sde_turso": os.getenv("TURSO_SDE_TOKEN"),
         "fittings_turso": os.getenv("TURSO_FITTING_TOKEN"),
-        _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_TOKEN"),
+        _deployment_db_alias + "_turso": os.getenv(settings["markets"]["deployment"]["turso_token_env"]),
     }
 
     def __init__(
@@ -78,7 +78,7 @@ class DatabaseConfig:
         Initialize database configuration.
 
         Args:
-            alias: Database alias (e.g., "wcmkt", "wcmktprod", "wcmktnorth").
+            alias: Database alias (e.g., "wcmkt", "wcmktprod", "wcmktvsj").
                    If market_context is provided, this is ignored.
             dialect: SQLAlchemy dialect string.
             market_context: Optional MarketContext that provides all config values.

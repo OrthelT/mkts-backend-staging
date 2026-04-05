@@ -89,8 +89,8 @@ jobs:
           wcfitting.db-info
           wcmktprod.db
           wcmktprod.db-info
-          wcmktnorth2.db
-          wcmktnorth2.db-info
+          wcmktvsj.db
+          wcmktvsj.db-info
         key: turso-dbs-v2-${{ matrix.market }}-${{ github.run_id }}
         restore-keys: |
           turso-dbs-v2-${{ matrix.market }}-
@@ -113,9 +113,9 @@ jobs:
         # Primary market (4-HWWF / wcmktprod)
         echo "TURSO_WCMKTPROD_URL=${{ secrets.TURSO_WCMKTPROD_URL }}" >> $GITHUB_ENV
         echo "TURSO_WCMKTPROD_TOKEN=${{ secrets.TURSO_WCMKTPROD_TOKEN }}" >> $GITHUB_ENV
-        # Deployment market (B-9C24 / wcmktnorth)
-        echo "TURSO_WCMKTNORTH_URL=${{ secrets.TURSO_WCMKTNORTH_URL }}" >> $GITHUB_ENV
-        echo "TURSO_WCMKTNORTH_TOKEN=${{ secrets.TURSO_WCMKTNORTH_TOKEN }}" >> $GITHUB_ENV
+        # Deployment market (VSJ-PP / wcmktvsj)
+        echo "TURSO_WCMKTVSJ_URL=${{ secrets.TURSO_WCMKTVSJ_URL }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKTVSJ_TOKEN=${{ secrets.TURSO_WCMKTVSJ_TOKEN }}" >> $GITHUB_ENV
         # Janice API key for Jita price fallback
         echo "JANICE_KEY=${{ secrets.JANICE_KEY }}" >> $GITHUB_ENV
 
@@ -179,8 +179,8 @@ jobs:
           wcfitting.db-info
           wcmktprod.db
           wcmktprod.db-info
-          wcmktnorth2.db
-          wcmktnorth2.db-info
+          wcmktvsj.db
+          wcmktvsj.db-info
         key: turso-dbs-v2-${{ matrix.market }}-${{ github.run_id }}
 
     - name: Upload logs as artifacts

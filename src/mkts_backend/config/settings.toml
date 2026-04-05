@@ -44,15 +44,15 @@ market_data = "market_data_4h"
 doctrines = "doctrines_mkt_4H"
 
 [markets.deployment]
-name = "B-9C24 Keepstar"
-region_id = 10000023          # Pure Blind
-system_id = 30002029
-structure_id = 1046831245129
-database_alias = "wcmktnorth"
-database_file = "wcmktnorth2.db"
-turso_url_env = "TURSO_WCMKTNORTH_URL"
-turso_token_env = "TURSO_WCMKTNORTH_TOKEN"
-gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit"
+name = "VSJ-PP (SneakStar)"
+region_id = 10000029          # Pure Blind
+system_id = 30002448
+structure_id = 1053176537595
+database_alias = "wcmktvsj"
+database_file = "wcmktvsj.db"
+turso_url_env = "TURSO_WCMKTVSJ_URL"
+turso_token_env = "TURSO_WCMKTVSJ_TOKEN"
+gsheets_url = ""
 
 [markets.deployment.gsheets_worksheets]
 market_orders = "market_orders_b9"
@@ -67,13 +67,13 @@ doctrines = "doctrines_mkt_b9"
 
 [market_data]
 primary_region_id = 10000003
-deployment_region_id = 10000023
+deployment_region_id = 10000029
 primary_system_id = 30000240
-deployment_system_id = 30002029
+deployment_system_id = 30002448
 primary_structure_id = 1035466617946
-deployment_structure_id = 1046831245129
+deployment_structure_id = 1053176537595
 primary_market_name = "4-HWWF Keepstar"
-deployment_market_name = "B-9C24 Keepstar"
+deployment_market_name = "VSJ-PP (SneakStar)"
 
 # ============================================================================
 # SHARED DATABASE CONFIGURATION
@@ -88,8 +88,8 @@ testing_database_alias = "wcmkttest"
 testing_database_file = "wcmkttest.db"
 testing_turso_url_env = "TURSO_WCMKTTEST_URL"
 testing_turso_token_env = "TURSO_WCMKTTEST_TOKEN"
-deployment_database_alias = "wcmktnorth"
-deployment_database_file = "wcmktnorth2.db"
+deployment_database_alias = "wcmktvsj"
+deployment_database_file = "wcmktvsj.db"
 
 # Shared databases (same for all markets)
 [db.shared]

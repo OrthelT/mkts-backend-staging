@@ -43,8 +43,8 @@ def mock_env_vars():
         "TURSO_WCMKTTEST_URL": "libsql://test-wcmkttest.turso.io",
         "TURSO_WCMKTTEST_TOKEN": "test-wcmkttest-token",
         # Deployment market
-        "TURSO_WCMKTNORTH_URL": "libsql://test-deployment.turso.io",
-        "TURSO_WCMKTNORTH_TOKEN": "test-deployment-token",
+        "TURSO_WCMKTVSJ_URL": "libsql://test-deployment.turso.io",
+        "TURSO_WCMKTVSJ_TOKEN": "test-deployment-token",
         # SDE and fittings
         "TURSO_SDE_URL": "libsql://test-sde.turso.io",
         "TURSO_SDE_TOKEN": "test-sde-token",
@@ -63,7 +63,7 @@ def mock_env_vars():
 def temp_db_dir(tmp_path):
     """Create a temporary directory with mock database files."""
     # Create mock database files
-    for db_name in ["wcmktprod.db", "wcmktnorth2.db", "wcmkttest.db", "sde.db", "wcfitting.db"]:
+    for db_name in ["wcmktprod.db", "wcmktvsj.db", "wcmkttest.db", "sde.db", "wcfitting.db"]:
         db_path = tmp_path / db_name
         conn = sqlite3.connect(str(db_path))
         # Create minimal schema for testing
@@ -174,8 +174,8 @@ def mock_database_config(temp_db_dir):
             self.alias = alias
             if alias in ["wcmkt", "wcmktprod"]:
                 self.path = str(temp_db_dir / "wcmktprod.db")
-            elif alias in ["wcmktnorth", "wcmktnorth2"]:
-                self.path = str(temp_db_dir / "wcmktnorth2.db")
+            elif alias in ["wcmktvsj"]:
+                self.path = str(temp_db_dir / "wcmktvsj.db")
             elif alias == "sde":
                 self.path = str(temp_db_dir / "sde.db")
             elif alias == "fittings":

@@ -578,7 +578,7 @@ def upsert_ship_target(fit_id: int, fit_name: str, ship_id: int, ship_name: str,
     created_at = datetime.datetime.strftime(datetime.datetime.now(datetime.timezone.utc), '%Y-%m-%d %H:%M:%S')
     _engine = engine or _get_engine(db_alias, remote)
     with _engine.connect() as conn:
-        # Some schemas (e.g., wcmktnorth2) lack PK/unique constraint on fit_id; use delete-then-insert.
+        # Some schemas (e.g., wcmktvsj) lack PK/unique constraint on fit_id; use delete-then-insert.
         conn.execute(text("DELETE FROM ship_targets WHERE fit_id = :fit_id"), {"fit_id": fit_id})
         insert_stmt = text(
             """
