@@ -22,6 +22,8 @@ from mkts_backend.db.equiv_handlers import (
     find_equiv_by_attributes,
     ensure_equiv_table,
     sync_equiv_to_remote,
+    seed_fit_equivs_from_csv,
+    list_fit_equiv_groups,
 )
 
 logger = configure_logging(__name__)
@@ -75,6 +77,10 @@ def equiv_command(args: list[str], market_alias: str = "primary") -> bool:
         return _equiv_remove_all(args, target_aliases)
     elif subcommand == "find":
         return _equiv_find(args, target_aliases)
+    elif subcommand == "seed-fit":
+        return _equiv_seed_fit(args, target_aliases)
+    elif subcommand == "list-fit":
+        return _equiv_list_fit(args, target_aliases)
     else:
         _display_equiv_help()
         return True
@@ -300,6 +306,79 @@ def _equiv_find(args: list[str], target_aliases: list[str]) -> bool:
     return True
 
 
+def _equiv_seed_fit(args: list[str], target_aliases: list[str]) -> bool:
+    """Seed fit-scoped equivalents from a CSV file."""
+    csv_path = None
+    fit_id = None
+
+    for arg in args:
+        if arg.startswith("--csv="):
+            csv_path = arg.split("=", 1)[1]
+        elif arg.startswith("--fit-id="):
+            try:
+                fit_id = int(arg.split("=", 1)[1])
+            except ValueError:
+                console.print("[red]Error: --fit-id must be an integer[/red]")
+                return False
+
+    if not csv_path or fit_id is None:
+        console.print("[red]Error: --csv and --fit-id are required[/red]")
+        console.print("Usage: mkts-backend equiv seed-fit --csv=equiv.csv --fit-id=993")
+        return False
+
+    console.print(f"[bold]Seeding fit-scoped equivalents for fit {fit_id} from {csv_path}[/bold]")
+    console.print(f"[bold]Target markets:[/bold] {', '.join(target_aliases)}")
+
+    for alias in target_aliases:
+        market_ctx = MarketContext.from_settings(alias)
+        count = seed_fit_equivs_from_csv(csv_path, fit_id, market_ctx)
+        console.print(f"  [green]{alias}[/green]: seeded {count} group(s)")
+
+    return True
+
+
+def _equiv_list_fit(args: list[str], target_aliases: list[str]) -> bool:
+    """List fit-scoped equivalence groups."""
+    fit_id = None
+    for arg in args:
+        if arg.startswith("--fit-id="):
+            try:
+                fit_id = int(arg.split("=", 1)[1])
+            except ValueError:
+                console.print("[red]Error: --fit-id must be an integer[/red]")
+                return False
+
+    if fit_id is None:
+        console.print("[red]Error: --fit-id is required[/red]")
+        console.print("Usage: mkts-backend equiv list-fit --fit-id=993")
+        return False
+
+    market_ctx = MarketContext.from_settings(target_aliases[0])
+    groups = list_fit_equiv_groups(fit_id, market_ctx)
+
+    if not groups:
+        console.print(f"[yellow]No fit-scoped equivalence groups for fit {fit_id}.[/yellow]")
+        return True
+
+    table = Table(
+        title=f"Fit-Scoped Equivalence Groups (fit {fit_id})",
+        box=box.ROUNDED,
+        show_lines=True,
+    )
+    table.add_column("Group ID", style="cyan", justify="center")
+    table.add_column("Type ID", style="dim")
+    table.add_column("Module Name", style="green")
+
+    for group in groups:
+        gid = group["equiv_group_id"]
+        for member in group["members"]:
+            table.add_row(str(gid), str(member["type_id"]), member["type_name"])
+
+    console.print(table)
+    console.print(f"\n[dim]{len(groups)} group(s) found[/dim]")
+    return True
+
+
 def _display_equiv_help():
     """Display help for the equiv subcommand."""
     console.print("""
@@ -309,10 +388,12 @@ def _display_equiv_help():
     mkts-backend equiv <subcommand> [options]
 
 [bold]SUBCOMMANDS:[/bold]
-    list                           List all equivalence groups
+    list                           List all global equivalence groups
     find <type_id|name> [--add]    Auto-discover equivalent modules by attributes
-    add --type-ids=<id1,id2,...>   Create a new group (resolves names from SDE)
-    remove --id=<group_id>         Remove a group
+    add --type-ids=<id1,id2,...>   Create a new global group (resolves names from SDE)
+    remove --id=<group_id>         Remove a global group
+    seed-fit --csv=<path> --fit-id=<id>   Seed fit-scoped equivalents from CSV
+    list-fit --fit-id=<id>                List fit-scoped equivalence groups
 
 [bold]OPTIONS:[/bold]
     --market=<alias>   Target a single market (default: all markets)

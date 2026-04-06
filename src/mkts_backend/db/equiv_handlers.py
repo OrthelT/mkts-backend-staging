@@ -334,3 +334,176 @@ def ensure_equiv_table(market_ctx: Optional["MarketContext"] = None) -> bool:
     except Exception as e:
         logger.error(f"Failed to create module_equivalents table: {e}")
         return False
+
+
+# =========================================================================
+# Fit-Scoped Equivalents
+# =========================================================================
+
+
+def ensure_fit_equiv_table(market_ctx: Optional["MarketContext"] = None) -> bool:
+    """Ensure the fit_module_equivalents table exists."""
+    db = _get_db(market_ctx)
+    create_query = text("""
+        CREATE TABLE IF NOT EXISTS fit_module_equivalents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fit_id INTEGER NOT NULL,
+            equiv_group_id INTEGER NOT NULL,
+            type_id INTEGER NOT NULL,
+            type_name VARCHAR(255) NOT NULL
+        )
+    """)
+    idx_fit = text(
+        "CREATE INDEX IF NOT EXISTS idx_fme_fit_id ON fit_module_equivalents(fit_id)"
+    )
+    idx_type = text(
+        "CREATE INDEX IF NOT EXISTS idx_fme_type_id ON fit_module_equivalents(type_id)"
+    )
+
+    try:
+        with db.engine.begin() as conn:
+            conn.execute(create_query)
+            conn.execute(idx_fit)
+            conn.execute(idx_type)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to create fit_module_equivalents table: {e}")
+        return False
+
+
+def seed_fit_equivs_from_csv(
+    csv_path: str,
+    fit_id: int,
+    market_ctx: Optional["MarketContext"] = None,
+) -> int:
+    """
+    Seed fit-scoped equivalents from a CSV file.
+
+    CSV format: type_id,type_name,equiv
+    Each row produces a two-member group: (type_id, equiv).
+
+    Existing rows for the given fit_id are deleted first (idempotent).
+
+    Returns:
+        Number of groups created
+    """
+    import csv
+
+    ensure_fit_equiv_table(market_ctx)
+    db = _get_db(market_ctx)
+
+    # Read CSV
+    pairs: list[tuple[int, int]] = []
+    with open(csv_path, newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            pairs.append((int(row["type_id"]), int(row["equiv"])))
+
+    if not pairs:
+        logger.warning(f"No pairs found in {csv_path}")
+        return 0
+
+    delete_query = text(
+        "DELETE FROM fit_module_equivalents WHERE fit_id = :fit_id"
+    )
+    insert_query = text("""
+        INSERT INTO fit_module_equivalents (fit_id, equiv_group_id, type_id, type_name)
+        VALUES (:fit_id, :equiv_group_id, :type_id, :type_name)
+    """)
+
+    with db.engine.begin() as conn:
+        conn.execute(delete_query, {"fit_id": fit_id})
+
+        for group_idx, (tid_a, tid_b) in enumerate(pairs, start=1):
+            for tid in (tid_a, tid_b):
+                name = resolve_type_name(tid)
+                if name is None:
+                    logger.warning(f"Could not resolve type_id {tid}, skipping")
+                    continue
+                conn.execute(insert_query, {
+                    "fit_id": fit_id,
+                    "equiv_group_id": group_idx,
+                    "type_id": tid,
+                    "type_name": name,
+                })
+                logger.info(
+                    f"Fit {fit_id} group {group_idx}: added {name} ({tid})"
+                )
+
+    sync_fit_equiv_to_remote(market_ctx)
+    return len(pairs)
+
+
+def list_fit_equiv_groups(
+    fit_id: int,
+    market_ctx: Optional["MarketContext"] = None,
+) -> list[dict]:
+    """List fit-scoped equivalence groups for a given fit_id."""
+    ensure_fit_equiv_table(market_ctx)
+    db = _get_db(market_ctx)
+    query = text("""
+        SELECT equiv_group_id, type_id, type_name
+        FROM fit_module_equivalents
+        WHERE fit_id = :fit_id
+        ORDER BY equiv_group_id, type_name
+    """)
+
+    with db.engine.connect() as conn:
+        rows = conn.execute(query, {"fit_id": fit_id}).fetchall()
+
+    groups: dict[int, list[dict]] = {}
+    for row in rows:
+        gid = row[0]
+        if gid not in groups:
+            groups[gid] = []
+        groups[gid].append({
+            "equiv_group_id": gid,
+            "type_id": row[1],
+            "type_name": row[2],
+        })
+
+    return [
+        {"equiv_group_id": gid, "members": members}
+        for gid, members in groups.items()
+    ]
+
+
+def sync_fit_equiv_to_remote(market_ctx: Optional["MarketContext"] = None) -> bool:
+    """Push local fit_module_equivalents table to Turso remote."""
+    db = _get_db(market_ctx)
+    try:
+        remote = db.remote_engine
+    except (KeyError, Exception) as e:
+        logger.warning(f"No remote engine for {db.alias}, skipping remote sync: {e}")
+        return False
+
+    ensure_fit_equiv_table(market_ctx)
+
+    with db.engine.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT fit_id, equiv_group_id, type_id, type_name FROM fit_module_equivalents"
+        )).fetchall()
+
+    create_query = text("""
+        CREATE TABLE IF NOT EXISTS fit_module_equivalents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fit_id INTEGER NOT NULL,
+            equiv_group_id INTEGER NOT NULL,
+            type_id INTEGER NOT NULL,
+            type_name VARCHAR(255) NOT NULL
+        )
+    """)
+    with remote.begin() as conn:
+        conn.execute(create_query)
+        conn.execute(text("DELETE FROM fit_module_equivalents"))
+        if rows:
+            values = ",".join(
+                f"({r[0]},{r[1]},{r[2]},'{r[3].replace(chr(39), chr(39)+chr(39))}')"
+                for r in rows
+            )
+            conn.execute(text(
+                f"INSERT INTO fit_module_equivalents (fit_id, equiv_group_id, type_id, type_name) VALUES {values}"
+            ))
+
+    logger.info(f"Synced {len(rows)} fit equiv rows to remote ({db.alias})")
+    return True

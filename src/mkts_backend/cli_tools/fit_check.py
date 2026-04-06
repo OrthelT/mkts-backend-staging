@@ -458,6 +458,7 @@ def _get_fallback_data(
 def get_equiv_stock(
     type_ids: List[int],
     market_ctx: Optional[MarketContext] = None,
+    fit_id: Optional[int] = None,
 ) -> Dict[int, List[Dict]]:
     """
     Find equivalent modules with market stock for a list of type_ids.
@@ -465,9 +466,13 @@ def get_equiv_stock(
     Queries module_equivalents to find all type_ids sharing an equiv_group_id
     with any item in the list, then looks up stock from marketstats.
 
+    When fit_id is provided, also checks fit_module_equivalents for
+    fit-scoped equivalents (e.g. T1/T2 pairs accepted by a specific fit).
+
     Args:
         type_ids: List of canonical type_ids from a fit
         market_ctx: Market context for database selection
+        fit_id: Optional fit_id for fit-scoped equivalents
 
     Returns:
         Dict mapping canonical_type_id to list of equiv dicts:
@@ -501,30 +506,73 @@ def get_equiv_stock(
         """)
         group_rows = conn.execute(group_query, params).fetchall()
 
-        if not group_rows:
-            return {}
-
-        # Map canonical type_id -> equiv_group_id
+        # Map canonical type_id -> equiv_group_id (global)
         canonical_to_group = {row.type_id: row.equiv_group_id for row in group_rows}
         group_ids = set(canonical_to_group.values())
 
-        # Get all members of those equiv groups
-        g_placeholders = ", ".join(f":g_{i}" for i in range(len(group_ids)))
-        g_params = {f"g_{i}": gid for i, gid in enumerate(group_ids)}
-
-        members_query = text(f"""
-            SELECT equiv_group_id, type_id, type_name
-            FROM module_equivalents
-            WHERE equiv_group_id IN ({g_placeholders})
-        """)
-        member_rows = conn.execute(members_query, g_params).fetchall()
-
-        # Build group_id -> list of (type_id, type_name)
+        # Build group_id -> list of (type_id, type_name) for global groups
         group_members: Dict[int, List[tuple]] = defaultdict(list)
-        for row in member_rows:
-            group_members[row.equiv_group_id].append(
-                (row.type_id, row.type_name)
-            )
+        if group_ids:
+            g_placeholders = ", ".join(f":g_{i}" for i in range(len(group_ids)))
+            g_params = {f"g_{i}": gid for i, gid in enumerate(group_ids)}
+
+            members_query = text(f"""
+                SELECT equiv_group_id, type_id, type_name
+                FROM module_equivalents
+                WHERE equiv_group_id IN ({g_placeholders})
+            """)
+            member_rows = conn.execute(members_query, g_params).fetchall()
+
+            for row in member_rows:
+                group_members[row.equiv_group_id].append(
+                    (row.type_id, row.type_name)
+                )
+
+        # Fit-scoped equivalents
+        if fit_id is not None:
+            try:
+                fit_group_query = text(f"""
+                    SELECT type_id, equiv_group_id
+                    FROM fit_module_equivalents
+                    WHERE fit_id = :fit_id AND type_id IN ({placeholders})
+                """)
+                fit_params = {"fit_id": fit_id, **params}
+                fit_group_rows = conn.execute(fit_group_query, fit_params).fetchall()
+
+                if fit_group_rows:
+                    fit_group_ids = set()
+                    for row in fit_group_rows:
+                        # Use negative offset to avoid collisions with global group IDs
+                        fit_gid = -(row.equiv_group_id * 1000 + fit_id)
+                        canonical_to_group[row.type_id] = fit_gid
+                        fit_group_ids.add(row.equiv_group_id)
+
+                    fg_placeholders = ", ".join(
+                        f":fg_{i}" for i in range(len(fit_group_ids))
+                    )
+                    fg_params = {
+                        f"fg_{i}": gid for i, gid in enumerate(fit_group_ids)
+                    }
+                    fit_members_query = text(f"""
+                        SELECT equiv_group_id, type_id, type_name
+                        FROM fit_module_equivalents
+                        WHERE fit_id = :fit_id AND equiv_group_id IN ({fg_placeholders})
+                    """)
+                    fit_members_rows = conn.execute(
+                        fit_members_query, {"fit_id": fit_id, **fg_params}
+                    ).fetchall()
+
+                    for row in fit_members_rows:
+                        fit_gid = -(row.equiv_group_id * 1000 + fit_id)
+                        group_members[fit_gid].append(
+                            (row.type_id, row.type_name)
+                        )
+            except Exception:
+                # Table may not exist yet
+                pass
+
+        if not canonical_to_group:
+            return {}
 
         # Collect all equiv type_ids we need stock for (excluding canonicals)
         canonical_set = set(type_ids)
@@ -780,8 +828,8 @@ def get_fit_market_status_by_id(
         item["jita_fit_price"] = (
             jita_price * item["fit_qty"]) if jita_price else 0
 
-    # Apply equivalent module stock
-    equiv_stock = get_equiv_stock(type_ids, market_ctx)
+    # Apply equivalent module stock (pass fit_id for fit-scoped equivs)
+    equiv_stock = get_equiv_stock(type_ids, market_ctx, fit_id=fit_id)
     _apply_equiv_stock(market_data, equiv_stock)
 
     # Sort: ships first, then by fits available (lowest first to highlight bottlenecks)
@@ -1345,9 +1393,22 @@ def _query_needed_data(
 
             results.append(item)
 
-    # Apply equivalent module stock
+    # Apply equivalent module stock (global + fit-scoped)
     all_type_ids = list({item["type_id"] for item in results})
+
+    # Global equivalents
     equiv_stock = get_equiv_stock(all_type_ids, market_ctx)
+
+    # Fit-scoped equivalents: group items by fit_id and merge
+    fit_ids_in_results = {item["fit_id"] for item in results}
+    for fid in fit_ids_in_results:
+        fit_type_ids = list({
+            item["type_id"] for item in results if item["fit_id"] == fid
+        })
+        fit_equivs = get_equiv_stock(fit_type_ids, market_ctx, fit_id=fid)
+        for tid, equivs in fit_equivs.items():
+            if tid not in equiv_stock:
+                equiv_stock[tid] = equivs
 
     for item in results:
         equivs = equiv_stock.get(item["type_id"])

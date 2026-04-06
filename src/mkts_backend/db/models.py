@@ -228,5 +228,28 @@ class ModuleEquivalents(Base):
         )
 
 
+class FitModuleEquivalents(Base):
+    """
+    Fit-scoped module equivalents for cases where T1/T2 variants
+    should be treated as interchangeable within a specific fit only.
+
+    Unlike global ModuleEquivalents (faction modules with identical stats),
+    these map modules that differ in stats but are acceptable substitutes
+    for a particular doctrine fit.
+    """
+    __tablename__ = "fit_module_equivalents"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fit_id: Mapped[int] = mapped_column(Integer, index=True)
+    equiv_group_id: Mapped[int] = mapped_column(Integer, index=True)
+    type_id: Mapped[int] = mapped_column(Integer, index=True)
+    type_name: Mapped[str] = mapped_column(String)
+
+    def __repr__(self) -> str:
+        return (
+            f"FitModuleEquivalents(fit_id={self.fit_id!r}, equiv_group_id={self.equiv_group_id!r}, "
+            f"type_id={self.type_id!r}, type_name={self.type_name!r})"
+        )
+
+
 if __name__ == "__main__":
     pass
