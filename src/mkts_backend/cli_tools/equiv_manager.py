@@ -58,16 +58,12 @@ def equiv_command(args: list[str], market_alias: str = "primary") -> bool:
     """
     target_aliases = _get_target_markets(args, market_alias)
 
-    # Determine subcommand (first positional arg after "equiv")
+    # Determine subcommand (first positional arg)
     subcommand = None
-    try:
-        equiv_idx = args.index("equiv")
-        for arg in args[equiv_idx + 1:]:
-            if not arg.startswith("--"):
-                subcommand = arg
-                break
-    except ValueError:
-        pass
+    for arg in args:
+        if not arg.startswith("--"):
+            subcommand = arg
+            break
 
     if subcommand == "list":
         # List only needs one market (they should be identical)
@@ -210,20 +206,20 @@ def _equiv_find(args: list[str], target_aliases: list[str]) -> bool:
 
     # Positional arg: first non-flag arg after "find"
     if type_id is None and name_query is None:
-        try:
-            equiv_idx = args.index("equiv")
-            find_idx = args.index("find", equiv_idx + 1)
-            for arg in args[find_idx + 1:]:
-                if arg.startswith("--"):
-                    continue
-                # Numeric → type ID, otherwise name query
-                try:
-                    type_id = int(arg)
-                except ValueError:
-                    name_query = arg
-                break
-        except ValueError:
-            pass
+        found_find = False
+        for arg in args:
+            if arg.startswith("--"):
+                continue
+            if not found_find:
+                if arg == "find":
+                    found_find = True
+                continue
+            # First positional after "find"
+            try:
+                type_id = int(arg)
+            except ValueError:
+                name_query = arg
+            break
 
     if type_id is None and name_query is None:
         console.print("[red]Error: Provide a type ID or module name[/red]")
