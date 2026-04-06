@@ -18,17 +18,21 @@ fittings_db = DatabaseConfig("fittings")
 wcmkt_db = DatabaseConfig("wcmkt")
 
 def get_type_names_from_df(df: pd.DataFrame) -> pd.DataFrame:
-    verify_db_exists = sde_db.verify_db_exists()
+    # Create a fresh DatabaseConfig so the engine is constructed after
+    # init_databases() has synced — the module-level sde_db may hold a
+    # stale engine created before the DB file was populated.
+    _sde = DatabaseConfig("sde")
+    verify_db_exists = _sde.verify_db_exists()
     if not verify_db_exists:
         logger.error("SDE database is not up to date. Exiting...")
-        sde_db.sync()
+        _sde.sync()
 
     input_type_ids = set(df["type_id"].unique())
     rename_map = {"typeID": "type_id", "typeName": "type_name", "groupName": "group_name", "categoryName": "category_name", "categoryID": "category_id"}
     cols = ["typeID", "typeName", "groupName", "categoryName", "categoryID"]
     out_cols = ["type_id", "type_name", "group_name", "category_name", "category_id"]
 
-    engine = sde_db.engine
+    engine = _sde.engine
     with engine.connect() as conn:
         stmt = text("SELECT typeID, typeName, groupName, categoryName, categoryID FROM sdetypes")
         res = conn.execute(stmt)
