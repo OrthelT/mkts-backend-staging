@@ -25,24 +25,19 @@ from mkts_backend.builder_costs.watchlist_sync import (
     sync_from_market,
 )
 from mkts_backend.cli_tools.arg_utils import ParsedArgs
+from mkts_backend.cli_tools.cli_help import (
+    display_build_watchlist_add_help,
+    display_build_watchlist_help,
+    display_build_watchlist_mirror_help,
+    display_build_watchlist_remove_help,
+    display_build_watchlist_sync_help,
+)
 from mkts_backend.cli_tools.prompter import get_multiline_input
 from mkts_backend.config.db_config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.utils.get_type_info import get_type_from_list
 
 logger = configure_logging(__name__)
-
-_USAGE = (
-    "Usage:\n"
-    "  mkts-backend build-watchlist add    --type_id=12345,67890 [--force]\n"
-    "  mkts-backend build-watchlist add    --file=items.csv      [--force]\n"
-    "  mkts-backend build-watchlist add    --paste                [--force]\n"
-    "  mkts-backend build-watchlist remove --type_id=12345,67890\n"
-    "  mkts-backend build-watchlist remove --file=items.csv\n"
-    "  mkts-backend build-watchlist remove --paste\n"
-    "  mkts-backend build-watchlist mirror   (pull missing buildable items from wcmktprod.watchlist)\n"
-    "  mkts-backend build-watchlist sync     (pull buildcost.db local mirror from remote)\n"
-)
 
 
 def handle_build_watchlist(args: list[str]) -> bool:
@@ -54,12 +49,12 @@ def handle_build_watchlist(args: list[str]) -> bool:
     )
 
     if p.has_help() and not subcommand:
-        print(_USAGE)
+        display_build_watchlist_help()
         return True
 
     if not subcommand:
         print("Error: build-watchlist requires a subcommand (add | remove | mirror | sync)")
-        print(_USAGE)
+        display_build_watchlist_help()
         return False
 
     handlers = {
@@ -72,7 +67,7 @@ def handle_build_watchlist(args: list[str]) -> bool:
     if handler is None:
         suggestion = _suggest(subcommand, handlers.keys())
         print(f"Error: unknown subcommand '{subcommand}'.{suggestion}")
-        print(_USAGE)
+        display_build_watchlist_help()
         return False
 
     return handler(p)
@@ -80,16 +75,7 @@ def handle_build_watchlist(args: list[str]) -> bool:
 
 def _handle_add(p: ParsedArgs) -> bool:
     if p.has_help():
-        print(
-            "build-watchlist add: add items to build_watchlist after looking "
-            "up SDE metadata.\n\n"
-            "By default, items without a manufacturing blueprint in the SDE "
-            "are skipped. Pass --force to add them anyway (EverRef will likely "
-            "reject them, but the row will be present).\n"
-            "Local buildcost mirror is auto-synced after the write; pass "
-            "--no-sync to skip."
-        )
-        print(_USAGE)
+        display_build_watchlist_add_help()
         return True
 
     type_ids = _resolve_type_ids(p)
@@ -108,14 +94,7 @@ def _handle_add(p: ParsedArgs) -> bool:
 
 def _handle_remove(p: ParsedArgs) -> bool:
     if p.has_help():
-        print(
-            "build-watchlist remove: delete items from build_watchlist.\n"
-            "Idempotent — type_ids that aren't present are reported but not "
-            "treated as errors.\n"
-            "Local buildcost mirror is auto-synced after the write; pass "
-            "--no-sync to skip."
-        )
-        print(_USAGE)
+        display_build_watchlist_remove_help()
         return True
 
     type_ids = _resolve_type_ids(p)
@@ -142,12 +121,7 @@ def _sync_buildcost_mirror(buildcost_db: DatabaseConfig) -> None:
 
 def _handle_mirror(p: ParsedArgs) -> bool:
     if p.has_help():
-        print(
-            "build-watchlist mirror: reconcile build_watchlist against the "
-            "primary market watchlist.\n"
-            "Adds buildable items from wcmktprod.watchlist that aren't yet "
-            "in build_watchlist. Never removes anything."
-        )
+        display_build_watchlist_mirror_help()
         return True
 
     if (
@@ -183,12 +157,7 @@ def _handle_sync(p: ParsedArgs) -> bool:
     buildcost remote and the local mirror needs to catch up.
     """
     if p.has_help():
-        print(
-            "build-watchlist sync: pull the local buildcost.db mirror from "
-            "the remote (libsql sync).\n"
-            "Use this when another process or machine has written to the "
-            "buildcost remote since your last local read."
-        )
+        display_build_watchlist_sync_help()
         return True
 
     buildcost_db = DatabaseConfig("buildcost")

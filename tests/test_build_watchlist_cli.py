@@ -104,7 +104,7 @@ class TestBuildWatchlistRouting:
         code = _run_cli(["build-watchlist", "--help"])
         assert code == 0
         captured = capsys.readouterr()
-        assert "Usage:" in captured.out
+        assert "USAGE:" in captured.out
         assert "add" in captured.out
         assert "remove" in captured.out
         assert "mirror" in captured.out
