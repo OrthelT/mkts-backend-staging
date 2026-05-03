@@ -83,12 +83,12 @@ def display_build_watchlist_help():
         "    pull, matching how 'sync' is used elsewhere in the CLI.\n"
     )
     console.print("[bold green]EXAMPLES:[/bold green]")
-    console.print("    [dim]mkts-backend build-watchlist add --type_id=12345,67890[/dim]")
-    console.print("    [dim]mkts-backend build-watchlist add --file=items.csv[/dim]")
-    console.print("    [dim]mkts-backend build-watchlist add --paste --force[/dim]")
-    console.print("    [dim]mkts-backend build-watchlist remove --type_id=12345[/dim]")
-    console.print("    [dim]mkts-backend build-watchlist mirror[/dim]")
-    console.print("    [dim]mkts-backend build-watchlist sync[/dim]\n")
+    console.print("    mkts-backend build-watchlist add --type_id=12345,67890")
+    console.print("    mkts-backend build-watchlist add --file=items.csv")
+    console.print("    mkts-backend build-watchlist add --paste --force")
+    console.print("    mkts-backend build-watchlist remove --type_id=12345")
+    console.print("    mkts-backend build-watchlist mirror")
+    console.print("    mkts-backend build-watchlist sync\n")
     console.print(
         "Use [bold]'mkts-backend build-watchlist <subcommand> --help'[/bold] for subcommand details.\n"
     )
