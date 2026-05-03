@@ -2,7 +2,7 @@ name: Builder Costs Collection
 
 on:
   schedule:
-    - cron: '45 */6 * * *'
+    - cron: '45 6 * * *'
   workflow_dispatch: # Allow manual triggering
 
 jobs:
