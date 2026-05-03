@@ -59,6 +59,9 @@ Examples:
   mkts-backend add_structure --local --yes    # Local-only import, skip confirm
 """)
 
+def display_builder_cost_help():
+    console.print("[bold][cyan]update-builder-costs:[/bold][/cyan] Refresh manufacturing costs in buildcost.db")
+    console.print("[bold][green]Usage:[/bold][/green] mkts-backend update-builder-costs")
 
 def display_fit_check_help():
     """Display help for the fit-check subcommand."""

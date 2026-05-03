@@ -552,24 +552,22 @@ def _register_all(reg: CommandRegistry) -> None:
         del market_alias  # buildcost data is market-agnostic
         from mkts_backend.cli_tools.arg_utils import ParsedArgs
         from mkts_backend.builder_costs.runner import run
-
+        
+        """Reads watchlist + jita_prices from the primary market, 
+        filters via SDE industryActivityProducts, fetches costs from EverRef,
+        and writes to buildcost.db (build_watchlist + builder_costs tables).
+        """
         p = ParsedArgs(args)
         if p.has_help():
-            print(
-                "update-builder-costs: Refresh manufacturing costs in buildcost.db\n"
-                "Usage: mkts-backend update-builder-costs\n"
-                "Reads watchlist + jita_prices from the primary market, filters via SDE\n"
-                "industryActivityProducts, fetches costs from EverRef, and writes to\n"
-                "buildcost.db (build_watchlist + builder_costs tables)."
-            )
+            from mkts_backend.cli_tools.cli_help import display_builder_cost_help
+            display_builder_cost_help()
             return True
-
         return run().success
 
     reg.register(
         "update-builder-costs",
         _handle_update_builder_costs,
-        aliases=["builder-costs", "ubc"],
+        aliases=["builder-costs", "ubc", "update-build-costs"],
         description="Refresh manufacturing costs in buildcost.db",
     )
 

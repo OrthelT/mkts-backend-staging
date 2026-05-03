@@ -275,8 +275,6 @@ def update_google_sheet(
         logger.info(f"Updated Google Sheet with {len(df)} rows of data")
 
 
-
-
 def _ensure_jita_prices_table(market_ctx: MarketContext) -> None:
     """Create the jita_prices table on the remote DB if it doesn't exist."""
     db = DatabaseConfig(market_context=market_ctx)
