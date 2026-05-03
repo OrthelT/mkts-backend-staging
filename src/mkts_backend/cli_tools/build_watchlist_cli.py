@@ -1,8 +1,15 @@
-"""CLI dispatch for ``build-watchlist [add|remove|sync]``.
+"""CLI dispatch for ``build-watchlist [add|remove|mirror|sync]``.
 
-Mirrors the input shape of the existing ``add_watchlist`` command:
-``--type_id=…``, ``--file=…``, ``--paste``. ``add`` accepts ``--force`` to
-bypass the buildable filter; ``sync`` takes no flags.
+Verbs:
+    add    — write items to build_watchlist after SDE lookup
+    remove — delete items from build_watchlist
+    mirror — pull missing items from wcmktprod.watchlist (reconciliation)
+    sync   — refresh local buildcost mirror from remote (db.sync())
+
+``sync`` is the standard libsql remote→local pull. ``mirror`` is the
+wcmktprod-into-buildcost reconciliation. They are deliberately separate
+verbs so they don't collide semantically with the rest of the CLI, where
+``sync`` always means ``DatabaseConfig.sync()``.
 """
 
 from __future__ import annotations
@@ -33,7 +40,8 @@ _USAGE = (
     "  mkts-backend build-watchlist remove --type_id=12345,67890\n"
     "  mkts-backend build-watchlist remove --file=items.csv\n"
     "  mkts-backend build-watchlist remove --paste\n"
-    "  mkts-backend build-watchlist sync\n"
+    "  mkts-backend build-watchlist mirror   (pull missing buildable items from wcmktprod.watchlist)\n"
+    "  mkts-backend build-watchlist sync     (pull buildcost.db local mirror from remote)\n"
 )
 
 
@@ -50,13 +58,14 @@ def handle_build_watchlist(args: list[str]) -> bool:
         return True
 
     if not subcommand:
-        print("Error: build-watchlist requires a subcommand (add | remove | sync)")
+        print("Error: build-watchlist requires a subcommand (add | remove | mirror | sync)")
         print(_USAGE)
         return False
 
     handlers = {
         "add": _handle_add,
         "remove": _handle_remove,
+        "mirror": _handle_mirror,
         "sync": _handle_sync,
     }
     handler = handlers.get(subcommand)
@@ -131,10 +140,10 @@ def _sync_buildcost_mirror(buildcost_db: DatabaseConfig) -> None:
         print(f"Warning: local buildcost sync failed: {exc}")
 
 
-def _handle_sync(p: ParsedArgs) -> bool:
+def _handle_mirror(p: ParsedArgs) -> bool:
     if p.has_help():
         print(
-            "build-watchlist sync: reconcile build_watchlist against the "
+            "build-watchlist mirror: reconcile build_watchlist against the "
             "primary market watchlist.\n"
             "Adds buildable items from wcmktprod.watchlist that aren't yet "
             "in build_watchlist. Never removes anything."
@@ -146,7 +155,7 @@ def _handle_sync(p: ParsedArgs) -> bool:
         or p.get_string("file")
         or p.has_flag("paste")
     ):
-        print("Error: 'sync' takes no item flags; it reads from the primary market.")
+        print("Error: 'mirror' takes no item flags; it reads from the primary market.")
         return False
 
     buildcost_db = DatabaseConfig("buildcost")
@@ -160,7 +169,37 @@ def _handle_sync(p: ParsedArgs) -> bool:
             logger.warning(f"Pre-sync of {db.alias} failed: {exc}")
 
     result = sync_from_market(buildcost_db, sde_db, primary_db)
-    _print_sync_summary(result)
+    _print_mirror_summary(result)
+    if result.added > 0 and not p.has_flag("no-sync"):
+        _sync_buildcost_mirror(buildcost_db)
+    return True
+
+
+def _handle_sync(p: ParsedArgs) -> bool:
+    """Pull the local buildcost mirror from the remote (libsql sync).
+
+    No reconciliation, no remote writes — just ``DatabaseConfig.sync()``.
+    Use this when another process (or another machine) has written to the
+    buildcost remote and the local mirror needs to catch up.
+    """
+    if p.has_help():
+        print(
+            "build-watchlist sync: pull the local buildcost.db mirror from "
+            "the remote (libsql sync).\n"
+            "Use this when another process or machine has written to the "
+            "buildcost remote since your last local read."
+        )
+        return True
+
+    buildcost_db = DatabaseConfig("buildcost")
+    print("Syncing buildcost local mirror from remote…")
+    try:
+        buildcost_db.sync()
+    except Exception as exc:
+        logger.error(f"buildcost sync failed: {exc}")
+        print(f"Error: buildcost sync failed: {exc}")
+        return False
+    print(f"Synced buildcost local mirror ({buildcost_db.path})")
     return True
 
 
@@ -259,9 +298,9 @@ def _print_remove_summary(result: RemoveResult) -> None:
         )
 
 
-def _print_sync_summary(result: SyncResult) -> None:
+def _print_mirror_summary(result: SyncResult) -> None:
     print(
-        f"build-watchlist sync: {result.market_size} in market, "
+        f"build-watchlist mirror: {result.market_size} in market, "
         f"{result.already_present} already present, {result.added} added"
     )
     if result.skipped:

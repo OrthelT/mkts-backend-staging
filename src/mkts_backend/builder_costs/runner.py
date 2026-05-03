@@ -56,7 +56,7 @@ def run() -> RunResult:
     if not items:
         logger.error(
             "build_watchlist is empty; aborting builder cost refresh. "
-            "Run 'mkts-backend build-watchlist sync' to seed from wcmktprod."
+            "Run 'mkts-backend build-watchlist mirror' to seed from wcmktprod."
         )
         return RunResult(success=False)
 

@@ -666,7 +666,7 @@ def _register_all(reg: CommandRegistry) -> None:
     reg.register(
         "build-watchlist",
         _handle_build_watchlist,
-        description="Manage build_watchlist (add | remove | sync)",
+        description="Manage build_watchlist (add | remove | mirror | sync)",
     )
 
     # ── add_watchlist ───────────────────────────────────────────

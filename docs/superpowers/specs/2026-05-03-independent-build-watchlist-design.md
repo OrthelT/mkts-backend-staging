@@ -52,7 +52,7 @@ add_watchlist (existing)            → write to wcmktprod.watchlist
 
 build-watchlist add                 → write to build_watchlist (force-able)
 build-watchlist remove              → delete from build_watchlist
-build-watchlist sync                → diff wcmktprod into build_watchlist
+build-watchlist mirror                → diff wcmktprod into build_watchlist
 
 update-builder-costs (modified)     → read build_watchlist (no rebuild)
                                     → fetch costs from EverRef
@@ -92,10 +92,16 @@ Single registered command `build-watchlist`, dispatched on first positional:
 ```
 mkts-backend build-watchlist add    --type_id=12345,67890 [--file=…] [--paste] [--force]
 mkts-backend build-watchlist remove --type_id=12345,67890 [--file=…] [--paste]
-mkts-backend build-watchlist sync
+mkts-backend build-watchlist mirror   (reconcile from wcmktprod.watchlist)
+mkts-backend build-watchlist sync     (pull buildcost local mirror; thin db.sync())
 mkts-backend build-watchlist --help
 mkts-backend build-watchlist <subcommand> --help
 ```
+
+`mirror` and `sync` are deliberately separate verbs to avoid the semantic
+collision where elsewhere in the CLI ``sync`` always means
+``DatabaseConfig.sync()``. ``mirror`` is the wcmktprod→buildcost
+reconciliation; ``sync`` is the libsql remote→local pull.
 
 Dispatch shape mirrors `_handle_fit_update` in `command_registry.py`:
 
@@ -199,7 +205,7 @@ metadata dict (replacing the data previously returned by
 ## Error handling
 
 - Empty `build_watchlist` in `update-builder-costs` → log error, abort. Operator
-  is told to run `build-watchlist sync` or `build-watchlist add`.
+  is told to run `build-watchlist mirror` or `build-watchlist add`.
 - Empty input to `build-watchlist add/remove` → print usage, return False.
 - SDE lookup failure for a type_id → counted as `invalid`, included in summary,
   doesn't block the rest of the batch.
@@ -228,7 +234,7 @@ New / modified test files under `tests/`:
 None. `build_watchlist` already exists in Turso and locally; no schema change.
 First post-deploy run of `update-builder-costs` will skip the rebuild and
 refresh costs for the rows currently in the table. If the table is in a stale
-state, run `build-watchlist sync` once to reconcile from wcmktprod.
+state, run `build-watchlist mirror` once to reconcile from wcmktprod.
 
 ## Risks
 

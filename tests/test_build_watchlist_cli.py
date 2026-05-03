@@ -60,15 +60,25 @@ class TestBuildWatchlistRouting:
 
     @patch("mkts_backend.cli_tools.build_watchlist_cli.sync_from_market")
     @patch("mkts_backend.cli_tools.build_watchlist_cli.DatabaseConfig")
-    def test_sync_routes(self, mock_db, mock_sync):
+    def test_mirror_routes(self, mock_db, mock_sync):
         from mkts_backend.builder_costs.watchlist_sync import SyncResult
 
         mock_db.return_value.sync.return_value = None
         mock_sync.return_value = SyncResult(market_size=10, already_present=8, added=2)
-        code = _run_cli(["build-watchlist", "sync"])
+        code = _run_cli(["build-watchlist", "mirror"])
 
         assert code == 0
         mock_sync.assert_called_once()
+
+    @patch("mkts_backend.cli_tools.build_watchlist_cli.DatabaseConfig")
+    def test_sync_routes_to_db_sync_only(self, mock_db):
+        """'build-watchlist sync' just calls db.sync(), no reconciliation."""
+        mock_db.return_value.sync.return_value = None
+        mock_db.return_value.path = "/tmp/buildcost.db"
+        code = _run_cli(["build-watchlist", "sync"])
+
+        assert code == 0
+        mock_db.return_value.sync.assert_called_once()
 
     def test_missing_subcommand_errors(self, capsys):
         code = _run_cli(["build-watchlist"])
@@ -97,6 +107,7 @@ class TestBuildWatchlistRouting:
         assert "Usage:" in captured.out
         assert "add" in captured.out
         assert "remove" in captured.out
+        assert "mirror" in captured.out
         assert "sync" in captured.out
 
     def test_add_with_no_input_errors(self, capsys):
@@ -113,8 +124,8 @@ class TestBuildWatchlistRouting:
         captured = capsys.readouterr()
         assert "mutually exclusive" in captured.out
 
-    def test_sync_with_extra_flags_errors(self, capsys):
-        code = _run_cli(["build-watchlist", "sync", "--type_id=34"])
+    def test_mirror_with_extra_flags_errors(self, capsys):
+        code = _run_cli(["build-watchlist", "mirror", "--type_id=34"])
         assert code != 0
         captured = capsys.readouterr()
         assert "no item flags" in captured.out
