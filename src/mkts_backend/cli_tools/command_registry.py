@@ -502,12 +502,15 @@ def _register_all(reg: CommandRegistry) -> None:
 
     # ── sync ────────────────────────────────────────────────────
     def _handle_sync(args: list[str], market_alias: str) -> bool:
+        from mkts_backend.cli_tools.arg_utils import ParsedArgs
         from mkts_backend.config.market_context import MarketContext
         from mkts_backend.config.db_config import DatabaseConfig
         from mkts_backend.config.logging_config import configure_logging
         from mkts_backend.cli_tools.market_args import expand_market_alias
 
         logger = configure_logging(__name__)
+        p = ParsedArgs(args)
+        skip_buildcost = p.has_flag("no-buildcost")
 
         for mkt in expand_market_alias(market_alias):
             market_ctx = MarketContext.from_settings(mkt)
@@ -517,12 +520,23 @@ def _register_all(reg: CommandRegistry) -> None:
             logger.info(f"Database synced: {db.alias}")
             print(f"Database synced: {db.alias} ({db.path})")
 
+        if not skip_buildcost:
+            buildcost = DatabaseConfig("buildcost")
+            print("Syncing database: buildcost")
+            try:
+                buildcost.sync()
+                logger.info("Database synced: buildcost")
+                print(f"Database synced: buildcost ({buildcost.path})")
+            except Exception as exc:
+                logger.warning(f"buildcost sync failed: {exc}")
+                print(f"Warning: buildcost sync failed: {exc}")
+
         return True
 
     reg.register(
         "sync",
         _handle_sync,
-        description="Sync the database (both markets by default)",
+        description="Sync local mirrors from remote (markets + buildcost; --no-buildcost to skip)",
         default_market="both",
     )
 

@@ -76,7 +76,9 @@ def _handle_add(p: ParsedArgs) -> bool:
             "up SDE metadata.\n\n"
             "By default, items without a manufacturing blueprint in the SDE "
             "are skipped. Pass --force to add them anyway (EverRef will likely "
-            "reject them, but the row will be present)."
+            "reject them, but the row will be present).\n"
+            "Local buildcost mirror is auto-synced after the write; pass "
+            "--no-sync to skip."
         )
         print(_USAGE)
         return True
@@ -90,6 +92,8 @@ def _handle_add(p: ParsedArgs) -> bool:
     sde_db = DatabaseConfig("sde")
     result = add_to_build_watchlist(buildcost_db, sde_db, type_ids, force=force)
     _print_add_summary(result, force=force)
+    if result.added > 0 and not p.has_flag("no-sync"):
+        _sync_buildcost_mirror(buildcost_db)
     return True
 
 
@@ -98,7 +102,9 @@ def _handle_remove(p: ParsedArgs) -> bool:
         print(
             "build-watchlist remove: delete items from build_watchlist.\n"
             "Idempotent — type_ids that aren't present are reported but not "
-            "treated as errors."
+            "treated as errors.\n"
+            "Local buildcost mirror is auto-synced after the write; pass "
+            "--no-sync to skip."
         )
         print(_USAGE)
         return True
@@ -110,7 +116,19 @@ def _handle_remove(p: ParsedArgs) -> bool:
     buildcost_db = DatabaseConfig("buildcost")
     result = remove_from_build_watchlist(buildcost_db, type_ids)
     _print_remove_summary(result)
+    if result.removed > 0 and not p.has_flag("no-sync"):
+        _sync_buildcost_mirror(buildcost_db)
     return True
+
+
+def _sync_buildcost_mirror(buildcost_db: DatabaseConfig) -> None:
+    """Pull the buildcost local mirror after a remote write. Best-effort."""
+    try:
+        buildcost_db.sync()
+        print("Synced local buildcost mirror")
+    except Exception as exc:
+        logger.warning(f"buildcost local sync failed (remote write succeeded): {exc}")
+        print(f"Warning: local buildcost sync failed: {exc}")
 
 
 def _handle_sync(p: ParsedArgs) -> bool:

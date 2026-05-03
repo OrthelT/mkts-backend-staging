@@ -104,13 +104,16 @@ def _mirror_to_build_watchlist(type_ids: list[int]) -> None:
 
     Failure here does not roll back the market-side write; we only log and
     print a warning. Buildable filter is applied by ``add_to_build_watchlist``.
+    Pulls the buildcost local mirror after the remote write so subsequent
+    local reads see the new rows.
     """
     try:
         from mkts_backend.builder_costs.watchlist_sync import add_to_build_watchlist
         from mkts_backend.config.db_config import DatabaseConfig
 
+        buildcost_db = DatabaseConfig("buildcost")
         result = add_to_build_watchlist(
-            DatabaseConfig("buildcost"),
+            buildcost_db,
             DatabaseConfig("sde"),
             type_ids,
             force=False,
@@ -124,6 +127,12 @@ def _mirror_to_build_watchlist(type_ids: list[int]) -> None:
         if details:
             msg += f"; {'; '.join(details)}"
         print(msg)
+        if result.added > 0:
+            try:
+                buildcost_db.sync()
+                print("Synced local buildcost mirror")
+            except Exception as exc:
+                logger.warning(f"buildcost local sync failed: {exc}")
     except Exception as exc:
         logger.warning(f"build_watchlist mirror failed (market write succeeded): {exc}")
         print(f"Warning: build_watchlist mirror failed: {exc}")
