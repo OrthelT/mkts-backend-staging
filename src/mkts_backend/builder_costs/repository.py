@@ -66,6 +66,61 @@ def read_jita_prices(market_db: DatabaseConfig) -> dict[int, float]:
     }
 
 
+def read_build_watchlist(db: DatabaseConfig) -> list[dict]:
+    """Return all rows from build_watchlist as plain dicts.
+
+    Reads the local mirror; sync the remote first if up-to-date data matters.
+    """
+    with db.engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                "SELECT type_id, type_name, group_name, category_id "
+                "FROM build_watchlist"
+            )
+        ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def read_build_watchlist_type_ids(db: DatabaseConfig) -> set[int]:
+    """Return just the type_ids in build_watchlist (for set diffs)."""
+    with db.engine.connect() as conn:
+        rows = conn.execute(text("SELECT type_id FROM build_watchlist")).all()
+    return {int(row[0]) for row in rows}
+
+
+def delete_build_watchlist_rows(db: DatabaseConfig, type_ids: list[int]) -> int:
+    """Delete the given type_ids from build_watchlist on the remote.
+
+    Returns the number of rows actually deleted (after the DB resolves
+    which type_ids were present).
+    """
+    if not type_ids:
+        return 0
+
+    table = BuildWatchlist.__table__
+    engine = db.remote_engine
+    deleted = 0
+    session = Session(bind=engine)
+    try:
+        with session.begin():
+            for start in range(0, len(type_ids), _UPSERT_CHUNK_SIZE):
+                chunk = type_ids[start : start + _UPSERT_CHUNK_SIZE]
+                placeholders = ", ".join(f":t_{i}" for i, _ in enumerate(chunk))
+                params = {f"t_{i}": tid for i, tid in enumerate(chunk)}
+                result = session.execute(
+                    text(
+                        f"DELETE FROM {table.name} WHERE type_id IN ({placeholders})"
+                    ),
+                    params,
+                )
+                deleted += result.rowcount or 0
+    finally:
+        session.close()
+        engine.dispose()
+    logger.info(f"Deleted {deleted} rows from build_watchlist")
+    return deleted
+
+
 def upsert_build_watchlist(db: DatabaseConfig, items: list[dict]) -> int:
     """Upsert build_watchlist rows on the buildcost remote.
 

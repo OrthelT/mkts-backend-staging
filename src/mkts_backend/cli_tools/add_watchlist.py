@@ -95,7 +95,38 @@ def add_watchlist(args: list[str], market_alias: str = "primary") -> None:
     if all_ok:
         label = " + ".join(target_aliases)
         print(f"Watchlist update complete for {label}")
+        _mirror_to_build_watchlist(type_ids)
     exit()
+
+
+def _mirror_to_build_watchlist(type_ids: list[int]) -> None:
+    """Best-effort mirror to build_watchlist after a successful market write.
+
+    Failure here does not roll back the market-side write; we only log and
+    print a warning. Buildable filter is applied by ``add_to_build_watchlist``.
+    """
+    try:
+        from mkts_backend.builder_costs.watchlist_sync import add_to_build_watchlist
+        from mkts_backend.config.db_config import DatabaseConfig
+
+        result = add_to_build_watchlist(
+            DatabaseConfig("buildcost"),
+            DatabaseConfig("sde"),
+            type_ids,
+            force=False,
+        )
+        msg = f"Mirrored {result.added}/{len(type_ids)} items to build_watchlist"
+        details: list[str] = []
+        if result.skipped:
+            details.append(f"{len(result.skipped)} skipped (no blueprint)")
+        if result.invalid:
+            details.append(f"{len(result.invalid)} invalid (not in SDE)")
+        if details:
+            msg += f"; {'; '.join(details)}"
+        print(msg)
+    except Exception as exc:
+        logger.warning(f"build_watchlist mirror failed (market write succeeded): {exc}")
+        print(f"Warning: build_watchlist mirror failed: {exc}")
 
 def process_add_watchlist(type_ids: list[int], remote: bool = False, db_alias: str = "wcmkt"):
     """

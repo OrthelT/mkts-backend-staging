@@ -3,15 +3,15 @@
 Steps:
     1. Init buildcost.db schema (idempotent).
     2. Sync local mirrors of buildcost / sde / primary market.
-    3. Refresh build_watchlist from the primary market via SDE filter.
+    3. Read build_watchlist from the buildcost local mirror.
     4. Read jita_prices from the primary market local mirror.
     5. Fetch costs from EverRef for the buildable set.
     6. Upsert builder_costs to the buildcost remote.
 
-Market-independent: the only market DB touched is the primary market,
-purely as a source for ``watchlist`` and ``jita_prices``. The deployment
-market is not consulted — its watchlist drift from primary is small enough
-that the simplification is worth it.
+build_watchlist is now an independent table — see
+``docs/superpowers/specs/2026-05-03-independent-build-watchlist-design.md``.
+The runner no longer rebuilds it from wcmktprod; mutations happen via
+``add_watchlist`` (auto-mirror) and ``build-watchlist add|remove|sync``.
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ from dataclasses import dataclass
 
 from mkts_backend.builder_costs.repository import (
     init_buildcost_tables,
+    read_build_watchlist,
     read_jita_prices,
     upsert_builder_costs,
 )
-from mkts_backend.builder_costs.watchlist_sync import refresh_build_watchlist
 from mkts_backend.config.db_config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.esi.async_everref import run_async_fetch_builder_costs
@@ -52,18 +52,23 @@ def run() -> RunResult:
             logger.error(f"Database {db.alias} could not be initialized")
             return RunResult(success=False)
 
-    items = refresh_build_watchlist(primary_db, sde_db, buildcost_db)
+    items = read_build_watchlist(buildcost_db)
     if not items:
-        logger.error("No buildable watchlist items; aborting builder cost refresh")
+        logger.error(
+            "build_watchlist is empty; aborting builder cost refresh. "
+            "Run 'mkts-backend build-watchlist sync' to seed from wcmktprod."
+        )
         return RunResult(success=False)
 
-    type_ids = [item["type_id"] for item in items]
+    type_ids = [int(item["type_id"]) for item in items]
     watchlist_metadata = {
-        item["type_id"]: {
-            "type_id": item["type_id"],
-            "type_name": item["type_name"],
-            "group_name": item["group_name"],
-            "category_id": item["category_id"],
+        int(item["type_id"]): {
+            "type_id": int(item["type_id"]),
+            "type_name": item.get("type_name"),
+            "group_name": item.get("group_name"),
+            "category_id": int(item["category_id"])
+            if item.get("category_id") is not None
+            else None,
         }
         for item in items
     }

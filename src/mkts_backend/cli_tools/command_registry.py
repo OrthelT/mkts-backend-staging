@@ -641,6 +641,20 @@ def _register_all(reg: CommandRegistry) -> None:
 
     reg.register("esi-auth", _handle_esi_auth, description="Re-authorize ESI tokens with expanded scopes")
 
+    # ── build-watchlist ─────────────────────────────────────────
+    def _handle_build_watchlist(args: list[str], market_alias: str) -> bool:
+        del market_alias  # buildcost data is market-agnostic
+        from mkts_backend.cli_tools.build_watchlist_cli import (
+            handle_build_watchlist,
+        )
+        return handle_build_watchlist(args)
+
+    reg.register(
+        "build-watchlist",
+        _handle_build_watchlist,
+        description="Manage build_watchlist (add | remove | sync)",
+    )
+
     # ── add_watchlist ───────────────────────────────────────────
     def _handle_add_watchlist(args: list[str], market_alias: str) -> bool:
         from mkts_backend.cli_tools.add_watchlist import add_watchlist
