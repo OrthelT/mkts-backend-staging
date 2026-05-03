@@ -549,40 +549,28 @@ def _register_all(reg: CommandRegistry) -> None:
 
     # ── update-builder-costs ───────────────────────────────────
     def _handle_update_builder_costs(args: list[str], market_alias: str) -> bool:
+        del market_alias  # buildcost data is market-agnostic
         from mkts_backend.cli_tools.arg_utils import ParsedArgs
-        from mkts_backend.config.market_context import MarketContext
-        from mkts_backend.cli import process_builder_costs, init_databases
+        from mkts_backend.builder_costs.runner import run
 
         p = ParsedArgs(args)
         if p.has_help():
             print(
-                "update-builder-costs: Fetch EverRef manufacturing costs for all watchlist items\n"
+                "update-builder-costs: Refresh manufacturing costs in buildcost.db\n"
                 "Usage: mkts-backend update-builder-costs\n"
-                "Build costs are market-independent; written to all configured market DBs."
+                "Reads watchlist + jita_prices from the primary market, filters via SDE\n"
+                "industryActivityProducts, fetches costs from EverRef, and writes to\n"
+                "buildcost.db (build_watchlist + builder_costs tables)."
             )
             return True
 
-        init_databases()
-
-        all_ctxs = []
-        for alias in MarketContext.list_available():
-            try:
-                all_ctxs.append(MarketContext.from_settings(alias))
-            except (ValueError, KeyError):
-                pass
-
-        if not all_ctxs:
-            print("Error: No market contexts configured")
-            return False
-
-        return process_builder_costs(market_contexts=all_ctxs)
+        return run().success
 
     reg.register(
         "update-builder-costs",
         _handle_update_builder_costs,
         aliases=["builder-costs", "ubc"],
-        description="Fetch EverRef manufacturing costs for watchlist items",
-        default_market="primary",
+        description="Refresh manufacturing costs in buildcost.db",
     )
 
     # ── update-markets ──────────────────────────────────────────

@@ -20,7 +20,11 @@ EVEREF_STATIC_PARAMS = (
     "&system_cost_bonus=0&manufacturing_cost=0&facility_tax=0"
 )
 API_TIMEOUT = 20.0
-MAX_CONCURRENCY = 6
+MAX_CONCURRENCY = 10
+# EverRef has no rate limit; the maintainer has confirmed bursts are fine.
+# 120 req/min keeps the average at 2/sec (polite for a single-maintainer hobby
+# API) and lets the full ~1300-item watchlist finish inside a 15-min CI budget.
+EVEREF_REQUESTS_PER_MINUTE = 120
 
 MANUFACTURABLE_META_GROUPS = frozenset({1, 2, 14})
 ALLOWED_CATEGORIES = frozenset({7, 18, 8, 6, 87, 22, 32})
@@ -238,7 +242,7 @@ async def async_fetch_builder_costs(
         return []
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
-    limiter = AsyncLimiter(30, time_period=60.0)
+    limiter = AsyncLimiter(EVEREF_REQUESTS_PER_MINUTE, time_period=60.0)
     headers = {"User-Agent": SettingsService().esi_user_agent}
 
     async with httpx.AsyncClient(http2=True, headers=headers) as client:
@@ -250,10 +254,13 @@ async def async_fetch_builder_costs(
         )
 
     successful = [result for result in results if result is not None]
-    logger.info(f"{len(successful)}/{len(fetch_jobs)} items fetched successfully")
-    if len(successful) != len(fetch_jobs):
-        logger.warning("Builder cost fetch incomplete; aborting write to avoid partial replacement")
-        return []
+    failed = len(fetch_jobs) - len(successful)
+    if failed:
+        logger.warning(
+            f"{failed}/{len(fetch_jobs)} items failed; persisting the {len(successful)} successful results"
+        )
+    else:
+        logger.info(f"{len(successful)}/{len(fetch_jobs)} items fetched successfully")
     return successful
 
 

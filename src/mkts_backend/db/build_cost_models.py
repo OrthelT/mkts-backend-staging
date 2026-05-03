@@ -10,10 +10,45 @@ CREATE TABLE. Functionally equivalent for SQLite: ``ON CONFLICT(structure_id)``
 works against either.
 """
 
-from sqlalchemy import Column, Float, Integer, String
+from sqlalchemy import Column, DateTime, Float, Integer, String
 from sqlalchemy.orm import declarative_base
 
 BuildCostBase = declarative_base()
+
+
+class BuildWatchlist(BuildCostBase):
+    """Pre-filtered, market-agnostic list of buildable items.
+
+    Refreshed from the union of market-DB watchlists, filtered by the SDE
+    industryActivityProducts join (manufacturing activity only). Drives the
+    EverRef cost fetch in update-builder-costs.
+    """
+
+    __tablename__ = "build_watchlist"
+
+    type_id = Column(Integer, primary_key=True)
+    type_name = Column(String, nullable=True)
+    group_name = Column(String, nullable=True)
+    category_id = Column(Integer, nullable=True)
+    added_at = Column(DateTime, nullable=False)
+    last_seen_at = Column(DateTime, nullable=False)
+
+
+class BuilderCosts(BuildCostBase):
+    """EverRef manufacturing cost snapshot per buildable type_id.
+
+    Market-independent. One row per type_id. ``fetched_at`` is the timestamp
+    of the latest successful EverRef fetch and is replaced on every refresh.
+    """
+
+    __tablename__ = "builder_costs"
+
+    type_id = Column(Integer, primary_key=True)
+    total_cost_per_unit = Column(Float, nullable=True)
+    time_per_unit = Column(Float, nullable=True)
+    me = Column(Integer, nullable=True)
+    runs = Column(Integer, nullable=True)
+    fetched_at = Column(DateTime, nullable=False)
 
 
 class Structure(BuildCostBase):
