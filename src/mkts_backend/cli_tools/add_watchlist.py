@@ -29,13 +29,17 @@ def parse_pasted_input(paste):
     else:
         return None
 
-def add_watchlist(args: list[str], market_alias: str = "primary") -> None:
+def add_watchlist(args: list[str], market_alias: str = "primary") -> bool:
     """Add items to the watchlist for the specified market(s).
 
     Args:
         args: Raw CLI arguments (used to extract --type_id, --file, and --local).
         market_alias: Normalized market alias from parse_market_args
                       ("primary", "deployment", or "both").
+
+    Returns:
+        True if every market write succeeded, False otherwise. The buildcost
+        auto-mirror is best-effort and does not affect the return value.
     """
     p = ParsedArgs(args)
     type_ids_str = p.get_string("type_id", "type-id")
@@ -53,7 +57,7 @@ def add_watchlist(args: list[str], market_alias: str = "primary") -> None:
 
     if type_ids_str and file_path:
         print("Error: --type_id and --file are mutually exclusive")
-        return None
+        return False
 
     if file_path:
         with open(file_path, "r") as f:
@@ -61,10 +65,10 @@ def add_watchlist(args: list[str], market_alias: str = "primary") -> None:
         type_ids_str = parse_pasted_input(paste)
         if not type_ids_str:
             print("Error: No valid type IDs provided")
-            return None
+            return False
         else:
             print(f"Processing add_watchlist command for {len(type_ids_str)} items")
-            
+
 
     if not type_ids_str:
         print("Error: --type_id or --file parameter is required for add_watchlist command")
@@ -72,7 +76,7 @@ def add_watchlist(args: list[str], market_alias: str = "primary") -> None:
         print("       mkts-backend add_watchlist --file=data/expanded_typeids.csv")
         print("       mkts-backend add_watchlist --type_id=12345 --deployment")
         print("       mkts-backend add_watchlist --type_id=12345 --both")
-        return None
+        return False
 
     # Default to remote database, use --local flag for local database
     remote = not p.has_flag("local")
@@ -96,7 +100,7 @@ def add_watchlist(args: list[str], market_alias: str = "primary") -> None:
         label = " + ".join(target_aliases)
         print(f"Watchlist update complete for {label}")
         _mirror_to_build_watchlist(type_ids)
-    exit()
+    return all_ok
 
 
 def _mirror_to_build_watchlist(type_ids: list[int]) -> None:

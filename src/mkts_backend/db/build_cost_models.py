@@ -17,11 +17,11 @@ BuildCostBase = declarative_base()
 
 
 class BuildWatchlist(BuildCostBase):
-    """Pre-filtered, market-agnostic list of buildable items.
+    """Independent, market-agnostic list of buildable items.
 
-    Refreshed from the union of market-DB watchlists, filtered by the SDE
-    industryActivityProducts join (manufacturing activity only). Drives the
-    EverRef cost fetch in update-builder-costs.
+    Source of truth — written by ``build-watchlist add|remove|mirror`` and the
+    auto-mirror in ``add_watchlist``. Drives the EverRef cost fetch in
+    ``update-builder-costs``, which only reads from this table.
     """
 
     __tablename__ = "build_watchlist"
@@ -44,11 +44,19 @@ class BuilderCosts(BuildCostBase):
     __tablename__ = "builder_costs"
 
     type_id = Column(Integer, primary_key=True)
-    total_cost_per_unit = Column(Float, nullable=True)
-    time_per_unit = Column(Float, nullable=True)
-    me = Column(Integer, nullable=True)
-    runs = Column(Integer, nullable=True)
+    total_cost_per_unit = Column(Float, nullable=False)
+    time_per_unit = Column(Float, nullable=False)
+    me = Column(Integer, nullable=False)
+    runs = Column(Integer, nullable=False)
     fetched_at = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        return (
+            f"BuilderCosts(type_id={self.type_id!r}, "
+            f"total_cost_per_unit={self.total_cost_per_unit!r}, "
+            f"time_per_unit={self.time_per_unit!r}, me={self.me!r}, "
+            f"runs={self.runs!r}, fetched_at={self.fetched_at!r})"
+        )
 
 
 class Structure(BuildCostBase):

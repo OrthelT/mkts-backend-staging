@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import csv
 
+from mkts_backend.builder_costs.sde_lookup import lookup_type_ids_by_name
 from mkts_backend.builder_costs.watchlist_sync import (
     AddResult,
     RemoveResult,
@@ -35,7 +36,6 @@ from mkts_backend.cli_tools.cli_help import (
 from mkts_backend.cli_tools.prompter import get_multiline_input
 from mkts_backend.config.db_config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
-from mkts_backend.utils.get_type_info import get_type_from_list
 
 logger = configure_logging(__name__)
 
@@ -86,7 +86,7 @@ def _handle_add(p: ParsedArgs) -> bool:
     buildcost_db = DatabaseConfig("buildcost")
     sde_db = DatabaseConfig("sde")
     result = add_to_build_watchlist(buildcost_db, sde_db, type_ids, force=force)
-    _print_add_summary(result, force=force)
+    _print_add_summary(result)
     if result.added > 0 and not p.has_flag("no-sync"):
         _sync_buildcost_mirror(buildcost_db)
     return True
@@ -136,11 +136,19 @@ def _handle_mirror(p: ParsedArgs) -> bool:
     sde_db = DatabaseConfig("sde")
     primary_db = DatabaseConfig("primary")
 
-    for db in (buildcost_db, primary_db):
-        try:
-            db.sync()
-        except Exception as exc:
-            logger.warning(f"Pre-sync of {db.alias} failed: {exc}")
+    try:
+        primary_db.sync()
+    except Exception as exc:
+        # Reconciling against a stale mirror would silently miss recent
+        # wcmktprod additions; abort so the user knows the run was a no-op.
+        logger.error(f"Pre-sync of {primary_db.alias} failed: {exc}")
+        print(f"Error: could not sync {primary_db.alias} local mirror; aborting mirror.")
+        return False
+
+    try:
+        buildcost_db.sync()
+    except Exception as exc:
+        logger.warning(f"Pre-sync of {buildcost_db.alias} failed: {exc}")
 
     result = sync_from_market(buildcost_db, sde_db, primary_db)
     _print_mirror_summary(result)
@@ -199,7 +207,7 @@ def _resolve_type_ids(p: ParsedArgs) -> list[int] | None:
     if not pasted:
         print("Error: no paste input provided")
         return None
-    return _parse_pasted_lines(pasted)
+    return _parse_pasted_lines(pasted.splitlines())
 
 
 def _parse_csv_ids(value: str) -> list[int] | None:
@@ -228,13 +236,18 @@ def _read_type_ids_from_csv(path: str) -> list[int] | None:
         return None
 
 
-def _parse_pasted_lines(lines) -> list[int] | None:
+def _parse_pasted_lines(lines: list[str]) -> list[int] | None:
     cleaned = [line.strip() for line in lines if line.strip()]
     if not cleaned:
         print("Error: paste input was empty")
         return None
-    type_info_list = get_type_from_list(cleaned)
-    type_ids = [info.type_id for info in type_info_list if info.type_id]
+    sde_db = DatabaseConfig("sde")
+    type_ids, unresolved = lookup_type_ids_by_name(cleaned, sde_db)
+    if unresolved:
+        print(
+            f"Warning: {len(unresolved)} name(s) not found in SDE: "
+            f"{unresolved[:10]}{'…' if len(unresolved) > 10 else ''}"
+        )
     if not type_ids:
         print("Error: no valid type names found in paste input")
         return None
@@ -248,12 +261,13 @@ def _suggest(name: str, choices) -> str:
     return f" Did you mean: {', '.join(sorted(matches))}?"
 
 
-def _print_add_summary(result: AddResult, *, force: bool) -> None:
+def _print_add_summary(result: AddResult) -> None:
     print(f"build-watchlist add: {result.added} added")
     if result.skipped:
-        verb = "added with --force" if force else "skipped (no blueprint)"
-        if not force:
-            print(f"  {len(result.skipped)} {verb}: {result.skipped[:10]}")
+        print(
+            f"  {len(result.skipped)} skipped (no blueprint): "
+            f"{result.skipped[:10]}"
+        )
     if result.invalid:
         print(f"  {len(result.invalid)} invalid (not in SDE): {result.invalid[:10]}")
 

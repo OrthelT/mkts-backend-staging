@@ -2,7 +2,7 @@
 
 build_watchlist is its own source of truth. wcmktprod.watchlist is mirrored
 in via the existing ``add_watchlist`` command and reconciled on demand via
-``build-watchlist sync``. The cost refresh just *reads* from build_watchlist;
+``build-watchlist mirror``. The cost refresh just *reads* from build_watchlist;
 it doesn't rebuild it.
 
 Three operations live here:
@@ -11,7 +11,7 @@ Three operations live here:
   auto-mirror in ``add_watchlist``. Applies the buildable filter unless
   ``force=True``.
 - ``remove_from_build_watchlist`` — used by ``build-watchlist remove``.
-- ``sync_from_market`` — used by ``build-watchlist sync``. Adds market
+- ``sync_from_market`` — used by ``build-watchlist mirror``. Adds market
   watchlist items missing from build_watchlist (buildable only, no force).
 """
 

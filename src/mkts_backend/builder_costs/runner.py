@@ -1,8 +1,8 @@
 """Single-run orchestration for the builder-costs refresh.
 
 Steps:
-    1. Init buildcost.db schema (idempotent).
-    2. Sync local mirrors of buildcost / sde / primary market.
+    1. Init buildcost.db schema on the remote (idempotent).
+    2. Verify local mirrors of buildcost / sde / primary market exist.
     3. Read build_watchlist from the buildcost local mirror.
     4. Read jita_prices from the primary market local mirror.
     5. Fetch costs from EverRef for the buildable set.
@@ -11,7 +11,7 @@ Steps:
 build_watchlist is now an independent table — see
 ``docs/superpowers/specs/2026-05-03-independent-build-watchlist-design.md``.
 The runner no longer rebuilds it from wcmktprod; mutations happen via
-``add_watchlist`` (auto-mirror) and ``build-watchlist add|remove|sync``.
+``add_watchlist`` (auto-mirror) and ``build-watchlist add|remove|mirror``.
 """
 
 from __future__ import annotations
@@ -75,16 +75,12 @@ def run() -> RunResult:
 
     jita_prices = read_jita_prices(primary_db)
 
-    sde_engine = sde_db.engine
-    try:
-        results = run_async_fetch_builder_costs(
-            type_ids,
-            jita_prices,
-            sde_engine,
-            watchlist_metadata=watchlist_metadata,
-        )
-    finally:
-        sde_engine.dispose()
+    results = run_async_fetch_builder_costs(
+        type_ids,
+        jita_prices,
+        sde_db.engine,
+        watchlist_metadata=watchlist_metadata,
+    )
 
     if not results:
         logger.error("EverRef returned no successful results")

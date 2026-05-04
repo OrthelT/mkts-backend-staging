@@ -10,6 +10,7 @@ from __future__ import annotations
 import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from mkts_backend.config.db_config import DatabaseConfig
@@ -27,15 +28,11 @@ def init_buildcost_tables(db: DatabaseConfig) -> None:
     """Idempotently create build_watchlist and builder_costs on the remote.
 
     ``checkfirst=True`` is per-table — the existing structures/rigs/industry_index
-    tables are untouched. Called at the start of every run; cheap when tables
-    already exist.
+    tables are untouched.
     """
     engine = db.remote_engine
-    try:
-        BuildWatchlist.__table__.create(engine, checkfirst=True)
-        BuilderCosts.__table__.create(engine, checkfirst=True)
-    finally:
-        engine.dispose()
+    BuildWatchlist.__table__.create(engine, checkfirst=True)
+    BuilderCosts.__table__.create(engine, checkfirst=True)
     logger.info("Confirmed buildcost.db schema for build_watchlist and builder_costs")
 
 
@@ -51,7 +48,7 @@ def read_jita_prices(market_db: DatabaseConfig) -> dict[int, float]:
                 text("SELECT type_id, sell_price FROM jita_prices"),
                 conn,
             )
-    except Exception as exc:
+    except SQLAlchemyError as exc:
         logger.warning(f"Could not read jita_prices from {market_db.alias}: {exc}")
         return {}
 
@@ -116,7 +113,6 @@ def delete_build_watchlist_rows(db: DatabaseConfig, type_ids: list[int]) -> int:
                 deleted += result.rowcount or 0
     finally:
         session.close()
-        engine.dispose()
     logger.info(f"Deleted {deleted} rows from build_watchlist")
     return deleted
 
@@ -151,7 +147,6 @@ def upsert_build_watchlist(db: DatabaseConfig, items: list[dict]) -> int:
                 session.execute(stmt)
     finally:
         session.close()
-        engine.dispose()
     logger.info(f"Upserted {len(items)} rows to build_watchlist")
     return len(items)
 
@@ -182,6 +177,5 @@ def upsert_builder_costs(db: DatabaseConfig, records: list[dict]) -> int:
                 session.execute(stmt)
     finally:
         session.close()
-        engine.dispose()
     logger.info(f"Upserted {len(records)} rows to builder_costs")
     return len(records)

@@ -20,9 +20,12 @@ Make `build_watchlist` an independent table with its own lifecycle:
 - `wcmktprod.watchlist` ⊆ `build_watchlist` (the market watchlist is a subset)
 - Items added via the existing `add_watchlist` are auto-mirrored into
   `build_watchlist` (buildable filter applied)
-- Manual add/remove/sync operations live behind a new
-  `build-watchlist [add|remove|sync]` CLI command following the existing
-  `[command] [subcommand]` convention used by `equiv` and `fit-update`
+- Manual add/remove/mirror operations live behind a new
+  `build-watchlist [add|remove|mirror|sync]` CLI command following the
+  existing `[command] [subcommand]` convention used by `equiv` and
+  `fit-update`. (`mirror` reconciles wcmktprod into build_watchlist; `sync`
+  is the standard libsql remote→local pull, kept as its own verb to avoid
+  semantic collision.)
 
 ## Out of scope
 
@@ -115,7 +118,7 @@ def _handle_build_watchlist(args: list[str], market_alias: str) -> bool:
     if not subcommand:
         # error: subcommand required
         ...
-    handler = {"add": _add, "remove": _remove, "sync": _sync}.get(subcommand)
+    handler = {"add": _add, "remove": _remove, "mirror": _mirror, "sync": _sync}.get(subcommand)
     if handler is None:
         # "Did you mean?" via existing Levenshtein logic
         ...
@@ -217,8 +220,9 @@ metadata dict (replacing the data previously returned by
 New / modified test files under `tests/`:
 
 - `test_build_watchlist_cli.py` *(new)* — routing for
-  `build-watchlist add|remove|sync|--help`, unknown subcommand error path,
-  mutually-exclusive `--type_id` vs `--file`, `--force` toggling the filter.
+  `build-watchlist add|remove|mirror|sync|--help`, unknown subcommand error
+  path, mutually-exclusive `--type_id` vs `--file`, `--force` toggling the
+  filter.
 - `test_watchlist_sync.py` *(new)* — unit tests for
   `add_to_build_watchlist` (buildable split, force override, SDE-missing
   invalid path), `remove_from_build_watchlist` (idempotency), and

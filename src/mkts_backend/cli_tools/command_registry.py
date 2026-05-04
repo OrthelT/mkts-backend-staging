@@ -566,17 +566,24 @@ def _register_all(reg: CommandRegistry) -> None:
         del market_alias  # buildcost data is market-agnostic
         from mkts_backend.cli_tools.arg_utils import ParsedArgs
         from mkts_backend.builder_costs.runner import run
-        
-        """Reads watchlist + jita_prices from the primary market, 
-        filters via SDE industryActivityProducts, fetches costs from EverRef,
-        and writes to buildcost.db (build_watchlist + builder_costs tables).
-        """
+
         p = ParsedArgs(args)
         if p.has_help():
             from mkts_backend.cli_tools.cli_help import display_builder_cost_help
             display_builder_cost_help()
             return True
-        return run().success
+        result = run()
+        if not result.success:
+            return False
+        if result.missing > 0:
+            # Partial EverRef failures must surface as non-zero exit so the
+            # daily CI job catches stale rows instead of silently persisting.
+            print(
+                f"update-builder-costs: {result.missing} of "
+                f"{result.watchlist_size} items missing fresh cost data"
+            )
+            return False
+        return True
 
     reg.register(
         "update-builder-costs",
@@ -666,14 +673,14 @@ def _register_all(reg: CommandRegistry) -> None:
     reg.register(
         "build-watchlist",
         _handle_build_watchlist,
+        aliases=["build_watchlist"],
         description="Manage build_watchlist (add | remove | mirror | sync)",
     )
 
     # ── add_watchlist ───────────────────────────────────────────
     def _handle_add_watchlist(args: list[str], market_alias: str) -> bool:
         from mkts_backend.cli_tools.add_watchlist import add_watchlist
-        add_watchlist(args, market_alias=market_alias)
-        return True
+        return add_watchlist(args, market_alias=market_alias)
 
     reg.register(
         "add_watchlist",
