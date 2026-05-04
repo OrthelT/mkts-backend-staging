@@ -119,6 +119,18 @@ class DatabaseConfig:
         if self._remote_engine is None:
             turso_url = self._db_turso_urls[f"{self.alias}_turso"]
             auth_token = self._db_turso_auth_tokens[f"{self.alias}_turso"]
+            missing = []
+            if not turso_url:
+                missing.append("URL")
+            if not auth_token:
+                missing.append("token")
+            if missing:
+                raise RuntimeError(
+                    f"Turso remote not configured for alias '{self.alias}': "
+                    f"missing {' and '.join(missing)} "
+                    f"(check the corresponding TURSO_*_URL / TURSO_*_TOKEN "
+                    f"env vars in your environment or CI secrets)."
+                )
             self._remote_engine = create_engine(
                 f"sqlite+{turso_url}?secure=true",
                 connect_args={
