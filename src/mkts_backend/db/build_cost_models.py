@@ -10,10 +10,53 @@ CREATE TABLE. Functionally equivalent for SQLite: ``ON CONFLICT(structure_id)``
 works against either.
 """
 
-from sqlalchemy import Column, Float, Integer, String
+from sqlalchemy import Column, DateTime, Float, Integer, String
 from sqlalchemy.orm import declarative_base
 
 BuildCostBase = declarative_base()
+
+
+class BuildWatchlist(BuildCostBase):
+    """Independent, market-agnostic list of buildable items.
+
+    Source of truth — written by ``build-watchlist add|remove|mirror`` and the
+    auto-mirror in ``add_watchlist``. Drives the EverRef cost fetch in
+    ``update-builder-costs``, which only reads from this table.
+    """
+
+    __tablename__ = "build_watchlist"
+
+    type_id = Column(Integer, primary_key=True)
+    type_name = Column(String, nullable=True)
+    group_name = Column(String, nullable=True)
+    category_id = Column(Integer, nullable=True)
+    added_at = Column(DateTime, nullable=False)
+    last_seen_at = Column(DateTime, nullable=False)
+
+
+class BuilderCosts(BuildCostBase):
+    """EverRef manufacturing cost snapshot per buildable type_id.
+
+    Market-independent. One row per type_id. ``fetched_at`` is the timestamp
+    of the latest successful EverRef fetch and is replaced on every refresh.
+    """
+
+    __tablename__ = "builder_costs"
+
+    type_id = Column(Integer, primary_key=True)
+    total_cost_per_unit = Column(Float, nullable=False)
+    time_per_unit = Column(Float, nullable=False)
+    me = Column(Integer, nullable=False)
+    runs = Column(Integer, nullable=False)
+    fetched_at = Column(DateTime, nullable=False)
+
+    def __repr__(self) -> str:
+        return (
+            f"BuilderCosts(type_id={self.type_id!r}, "
+            f"total_cost_per_unit={self.total_cost_per_unit!r}, "
+            f"time_per_unit={self.time_per_unit!r}, me={self.me!r}, "
+            f"runs={self.runs!r}, fetched_at={self.fetched_at!r})"
+        )
 
 
 class Structure(BuildCostBase):

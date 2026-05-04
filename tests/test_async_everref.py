@@ -82,9 +82,38 @@ class TestGetMetaGroups:
         assert result == {34: 1, 35: 1}
 
 
+class TestFilterBuildable:
+    def test_returns_set_of_buildable_type_ids(self, in_memory_sde_db):
+        from mkts_backend.esi.async_everref import filter_buildable
+
+        engine = create_engine(f"sqlite:///{in_memory_sde_db}")
+        try:
+            result = filter_buildable([34, 35, 36, 999999], engine)
+        finally:
+            engine.dispose()
+
+        # 34 and 35 are in industryActivityProducts; 36 and 999999 are not.
+        assert result == {34, 35}
+
+    def test_empty_input_returns_empty_set(self, in_memory_sde_db):
+        from mkts_backend.esi.async_everref import filter_buildable
+
+        engine = create_engine(f"sqlite:///{in_memory_sde_db}")
+        try:
+            assert filter_buildable([], engine) == set()
+        finally:
+            engine.dispose()
+
+
 class TestAsyncFetchBuilderCosts:
     @pytest.mark.asyncio
-    async def test_partial_failures_abort_the_batch(self, in_memory_sde_db):
+    async def test_partial_failures_persist_successful_subset(self, in_memory_sde_db):
+        """A single failure no longer poisons the whole run.
+
+        The rolling refresh and elevated rate limit make full-run failures
+        more impactful, so per-item failures degrade gracefully: successful
+        results are returned and persisted, failures are logged and skipped.
+        """
         from mkts_backend.esi import async_everref
 
         engine = create_engine(f"sqlite:///{in_memory_sde_db}")
@@ -126,4 +155,5 @@ class TestAsyncFetchBuilderCosts:
             finally:
                 engine.dispose()
 
-        assert results == []
+        assert len(results) == 1
+        assert results[0]["type_id"] == 34

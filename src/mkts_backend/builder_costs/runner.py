@@ -1,0 +1,100 @@
+"""Single-run orchestration for the builder-costs refresh.
+
+Steps:
+    1. Init buildcost.db schema on the remote (idempotent).
+    2. Verify local mirrors of buildcost / sde / primary market exist.
+    3. Read build_watchlist from the buildcost local mirror.
+    4. Read jita_prices from the primary market local mirror.
+    5. Fetch costs from EverRef for the buildable set.
+    6. Upsert builder_costs to the buildcost remote.
+
+build_watchlist is now an independent table — see
+``docs/superpowers/specs/2026-05-03-independent-build-watchlist-design.md``.
+The runner no longer rebuilds it from wcmktprod; mutations happen via
+``add_watchlist`` (auto-mirror) and ``build-watchlist add|remove|mirror``.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from mkts_backend.builder_costs.repository import (
+    init_buildcost_tables,
+    read_build_watchlist,
+    read_jita_prices,
+    upsert_builder_costs,
+)
+from mkts_backend.config.db_config import DatabaseConfig
+from mkts_backend.config.logging_config import configure_logging
+from mkts_backend.esi.async_everref import run_async_fetch_builder_costs
+
+logger = configure_logging(__name__)
+
+
+@dataclass
+class RunResult:
+    success: bool
+    fetched: int = 0
+    missing: int = 0
+    watchlist_size: int = 0
+
+
+def run() -> RunResult:
+    """Run a single end-to-end refresh of builder_costs in buildcost.db."""
+    buildcost_db = DatabaseConfig("buildcost")
+    sde_db = DatabaseConfig("sde")
+    primary_db = DatabaseConfig("primary")
+
+    init_buildcost_tables(buildcost_db)
+
+    for db in (buildcost_db, sde_db, primary_db):
+        if not db.verify_db_exists():
+            logger.error(f"Database {db.alias} could not be initialized")
+            return RunResult(success=False)
+
+    items = read_build_watchlist(buildcost_db)
+    if not items:
+        logger.error(
+            "build_watchlist is empty; aborting builder cost refresh. "
+            "Run 'mkts-backend build-watchlist mirror' to seed from wcmktprod."
+        )
+        return RunResult(success=False)
+
+    type_ids = [int(item["type_id"]) for item in items]
+    watchlist_metadata = {
+        int(item["type_id"]): {
+            "type_id": int(item["type_id"]),
+            "type_name": item.get("type_name"),
+            "group_name": item.get("group_name"),
+            "category_id": int(item["category_id"])
+            if item.get("category_id") is not None
+            else None,
+        }
+        for item in items
+    }
+
+    jita_prices = read_jita_prices(primary_db)
+
+    results = run_async_fetch_builder_costs(
+        type_ids,
+        jita_prices,
+        sde_db.engine,
+        watchlist_metadata=watchlist_metadata,
+    )
+
+    if not results:
+        logger.error("EverRef returned no successful results")
+        return RunResult(success=False, watchlist_size=len(items))
+
+    written = upsert_builder_costs(buildcost_db, list(results))
+    missing = len(items) - written
+    logger.info(
+        f"Builder costs refresh complete: fetched={written}, "
+        f"missing={missing}, watchlist_size={len(items)}"
+    )
+    return RunResult(
+        success=True,
+        fetched=written,
+        missing=missing,
+        watchlist_size=len(items),
+    )

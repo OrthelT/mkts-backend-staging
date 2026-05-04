@@ -1,5 +1,6 @@
 import asyncio
 import re
+import time
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, TypedDict
@@ -20,7 +21,11 @@ EVEREF_STATIC_PARAMS = (
     "&system_cost_bonus=0&manufacturing_cost=0&facility_tax=0"
 )
 API_TIMEOUT = 20.0
-MAX_CONCURRENCY = 6
+MAX_CONCURRENCY = 10
+# EverRef has no rate limit; the maintainer has confirmed bursts are fine.
+# 120 req/min keeps the average at 2/sec (polite for a single-maintainer hobby
+# API) and lets the full ~1300-item watchlist finish inside a 15-min CI budget.
+EVEREF_REQUESTS_PER_MINUTE = 120
 
 MANUFACTURABLE_META_GROUPS = frozenset({1, 2, 14})
 ALLOWED_CATEGORIES = frozenset({7, 18, 8, 6, 87, 22, 32})
@@ -37,6 +42,44 @@ DEFAULT_MATERIAL_PRICE_SOURCE = "ESI_AVG"
 _DURATION_RE = re.compile(
     r"^P(?:(?P<days>\d+)D)?(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+(?:\.\d+)?)S)?)?$"
 )
+
+PROGRESS_LOG_INTERVAL = 100
+
+
+def _format_eta(seconds: float) -> str:
+    if seconds < 60:
+        return f"{int(seconds)} sec"
+    minutes, secs = divmod(int(seconds), 60)
+    return f"{minutes} min {secs} sec"
+
+
+class _ProgressTracker:
+    """Counts completed fetches and logs every PROGRESS_LOG_INTERVAL items.
+
+    Safe for asyncio because all increments happen between awaits in the
+    single-threaded event loop. ETA is derived from wall-clock rate, which
+    converges to the rate-limiter's steady-state after the initial burst.
+    """
+
+    def __init__(self, total: int, interval: int = PROGRESS_LOG_INTERVAL) -> None:
+        self.total = total
+        self.interval = interval
+        self.completed = 0
+        self.start = time.monotonic()
+
+    def tick(self) -> None:
+        self.completed += 1
+        if self.completed % self.interval != 0 or self.completed >= self.total:
+            return
+        elapsed = time.monotonic() - self.start
+        if elapsed <= 0:
+            return
+        rate = self.completed / elapsed
+        eta = (self.total - self.completed) / rate if rate > 0 else 0.0
+        logger.info(
+            f"Fetched {self.completed} of {self.total} items, "
+            f"estimated time remaining: {_format_eta(eta)}"
+        )
 
 
 class WatchlistMetadata(TypedDict):
@@ -110,10 +153,29 @@ def _get_meta_groups(type_ids: list[int], sde_engine: Engine) -> dict[int, int]:
     blueprint". Items missing from the SDE or without a blueprint are absent
     from the returned dict.
     """
+    return _query_buildable(type_ids, sde_engine, return_meta_group=True)
+
+
+def filter_buildable(type_ids: list[int], sde_engine: Engine) -> set[int]:
+    """Return the subset of ``type_ids`` produced by a manufacturing blueprint.
+
+    Uses the same ``industryActivityProducts`` join as ``_get_meta_groups``;
+    used at write time by the build_watchlist mutation helpers so unbuildable
+    items never make it into the table in the first place.
+    """
+    return set(_query_buildable(type_ids, sde_engine, return_meta_group=False).keys())
+
+
+def _query_buildable(
+    type_ids: list[int],
+    sde_engine: Engine,
+    *,
+    return_meta_group: bool,
+) -> dict[int, int]:
     if not type_ids:
         return {}
 
-    meta_groups: dict[int, int] = {}
+    out: dict[int, int] = {}
     with sde_engine.connect() as conn:
         for start in range(0, len(type_ids), _META_GROUP_CHUNK_SIZE):
             chunk = type_ids[start : start + _META_GROUP_CHUNK_SIZE]
@@ -130,11 +192,16 @@ def _get_meta_groups(type_ids: list[int], sde_engine: Engine) -> dict[int, int]:
             )
             for row in conn.execute(query, params).mappings():
                 type_id = row.get("typeID")
-                meta_group_id = row.get("metaGroupID")
-                if type_id is None or meta_group_id is None:
+                if type_id is None:
                     continue
-                meta_groups[int(type_id)] = int(meta_group_id)
-    return meta_groups
+                if return_meta_group:
+                    meta_group_id = row.get("metaGroupID")
+                    if meta_group_id is None:
+                        continue
+                    out[int(type_id)] = int(meta_group_id)
+                else:
+                    out[int(type_id)] = 1
+    return out
 
 
 def _build_request_url(type_id: int, me: int, runs: int) -> str:
@@ -146,6 +213,22 @@ def _build_request_url(type_id: int, me: int, runs: int) -> str:
 
 
 async def _fetch_one(
+    client: httpx.AsyncClient,
+    semaphore: asyncio.Semaphore,
+    limiter: AsyncLimiter,
+    type_id: int,
+    me: int,
+    runs: int,
+    progress: _ProgressTracker | None = None,
+) -> BuilderCostRecord | None:
+    try:
+        return await _fetch_one_inner(client, semaphore, limiter, type_id, me, runs)
+    finally:
+        if progress is not None:
+            progress.tick()
+
+
+async def _fetch_one_inner(
     client: httpx.AsyncClient,
     semaphore: asyncio.Semaphore,
     limiter: AsyncLimiter,
@@ -238,22 +321,26 @@ async def async_fetch_builder_costs(
         return []
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
-    limiter = AsyncLimiter(30, time_period=60.0)
+    limiter = AsyncLimiter(EVEREF_REQUESTS_PER_MINUTE, time_period=60.0)
     headers = {"User-Agent": SettingsService().esi_user_agent}
+    progress = _ProgressTracker(total=len(fetch_jobs))
 
     async with httpx.AsyncClient(http2=True, headers=headers) as client:
         results = await asyncio.gather(
             *(
-                _fetch_one(client, semaphore, limiter, type_id, me, runs)
+                _fetch_one(client, semaphore, limiter, type_id, me, runs, progress)
                 for type_id, me, runs in fetch_jobs
             )
         )
 
     successful = [result for result in results if result is not None]
-    logger.info(f"{len(successful)}/{len(fetch_jobs)} items fetched successfully")
-    if len(successful) != len(fetch_jobs):
-        logger.warning("Builder cost fetch incomplete; aborting write to avoid partial replacement")
-        return []
+    failed = len(fetch_jobs) - len(successful)
+    if failed:
+        logger.warning(
+            f"{failed}/{len(fetch_jobs)} items failed; persisting the {len(successful)} successful results"
+        )
+    else:
+        logger.info(f"{len(successful)}/{len(fetch_jobs)} items fetched successfully")
     return successful
 
 

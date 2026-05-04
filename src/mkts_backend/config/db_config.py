@@ -59,7 +59,7 @@ class DatabaseConfig:
 
     def __init__(
         self,
-        alias: str = None,
+        alias: str | None = None,
         dialect: str = "sqlite+libsql",
         market_context: Optional["MarketContext"] = None
     ):

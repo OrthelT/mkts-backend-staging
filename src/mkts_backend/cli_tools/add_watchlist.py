@@ -29,13 +29,17 @@ def parse_pasted_input(paste):
     else:
         return None
 
-def add_watchlist(args: list[str], market_alias: str = "primary") -> None:
+def add_watchlist(args: list[str], market_alias: str = "primary") -> bool:
     """Add items to the watchlist for the specified market(s).
 
     Args:
         args: Raw CLI arguments (used to extract --type_id, --file, and --local).
         market_alias: Normalized market alias from parse_market_args
                       ("primary", "deployment", or "both").
+
+    Returns:
+        True if every market write succeeded, False otherwise. The buildcost
+        auto-mirror is best-effort and does not affect the return value.
     """
     p = ParsedArgs(args)
     type_ids_str = p.get_string("type_id", "type-id")
@@ -53,7 +57,7 @@ def add_watchlist(args: list[str], market_alias: str = "primary") -> None:
 
     if type_ids_str and file_path:
         print("Error: --type_id and --file are mutually exclusive")
-        return None
+        return False
 
     if file_path:
         with open(file_path, "r") as f:
@@ -61,10 +65,10 @@ def add_watchlist(args: list[str], market_alias: str = "primary") -> None:
         type_ids_str = parse_pasted_input(paste)
         if not type_ids_str:
             print("Error: No valid type IDs provided")
-            return None
+            return False
         else:
             print(f"Processing add_watchlist command for {len(type_ids_str)} items")
-            
+
 
     if not type_ids_str:
         print("Error: --type_id or --file parameter is required for add_watchlist command")
@@ -72,7 +76,7 @@ def add_watchlist(args: list[str], market_alias: str = "primary") -> None:
         print("       mkts-backend add_watchlist --file=data/expanded_typeids.csv")
         print("       mkts-backend add_watchlist --type_id=12345 --deployment")
         print("       mkts-backend add_watchlist --type_id=12345 --both")
-        return None
+        return False
 
     # Default to remote database, use --local flag for local database
     remote = not p.has_flag("local")
@@ -95,7 +99,47 @@ def add_watchlist(args: list[str], market_alias: str = "primary") -> None:
     if all_ok:
         label = " + ".join(target_aliases)
         print(f"Watchlist update complete for {label}")
-    exit()
+        _mirror_to_build_watchlist(type_ids)
+    return all_ok
+
+
+def _mirror_to_build_watchlist(type_ids: list[int]) -> None:
+    """Best-effort mirror to build_watchlist after a successful market write.
+
+    Failure here does not roll back the market-side write; we only log and
+    print a warning. Buildable filter is applied by ``add_to_build_watchlist``.
+    Pulls the buildcost local mirror after the remote write so subsequent
+    local reads see the new rows.
+    """
+    try:
+        from mkts_backend.builder_costs.watchlist_sync import add_to_build_watchlist
+        from mkts_backend.config.db_config import DatabaseConfig
+
+        buildcost_db = DatabaseConfig("buildcost")
+        result = add_to_build_watchlist(
+            buildcost_db,
+            DatabaseConfig("sde"),
+            type_ids,
+            force=False,
+        )
+        msg = f"Mirrored {result.added}/{len(type_ids)} items to build_watchlist"
+        details: list[str] = []
+        if result.skipped:
+            details.append(f"{len(result.skipped)} skipped (no blueprint)")
+        if result.invalid:
+            details.append(f"{len(result.invalid)} invalid (not in SDE)")
+        if details:
+            msg += f"; {'; '.join(details)}"
+        print(msg)
+        if result.added > 0:
+            try:
+                buildcost_db.sync()
+                print("Synced local buildcost mirror")
+            except Exception as exc:
+                logger.warning(f"buildcost local sync failed: {exc}")
+    except Exception as exc:
+        logger.warning(f"build_watchlist mirror failed (market write succeeded): {exc}")
+        print(f"Warning: build_watchlist mirror failed: {exc}")
 
 def process_add_watchlist(type_ids: list[int], remote: bool = False, db_alias: str = "wcmkt"):
     """

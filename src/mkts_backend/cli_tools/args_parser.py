@@ -20,6 +20,7 @@ _SUBCOMMANDS_WITH_HELP = {
     "update-fit",
     "update-target",
     "update-builder-costs",
+    "build-watchlist",
 }
 
 

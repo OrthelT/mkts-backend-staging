@@ -12,7 +12,7 @@ from mkts_backend.db.db_handlers import (
     update_market_orders,
     log_update,
 )
-from mkts_backend.db.models import MarketStats, Doctrines, JitaPrices, BuilderCosts
+from mkts_backend.db.models import MarketStats, Doctrines, JitaPrices
 from mkts_backend.utils.utils import (
     validate_columns,
     convert_datetime_columns,
@@ -275,8 +275,6 @@ def update_google_sheet(
         logger.info(f"Updated Google Sheet with {len(df)} rows of data")
 
 
-
-
 def _ensure_jita_prices_table(market_ctx: MarketContext) -> None:
     """Create the jita_prices table on the remote DB if it doesn't exist."""
     db = DatabaseConfig(market_context=market_ctx)
@@ -332,132 +330,6 @@ def process_jita_prices(market_contexts: list[MarketContext]) -> bool:
             logger.error(f"Failed to update Jita prices for {ctx.alias}: {e}")
 
     return any_success
-
-
-def _ensure_builder_costs_table(market_ctx: MarketContext) -> None:
-    """Create the builder_costs table on the remote DB if it doesn't exist."""
-    db = DatabaseConfig(market_context=market_ctx)
-    engine = db.remote_engine
-    try:
-        BuilderCosts.__table__.create(engine, checkfirst=True)
-    finally:
-        engine.dispose()
-
-
-def process_builder_costs(market_contexts: list[MarketContext]) -> bool:
-    """Fetch EverRef builder costs once, write to all configured market databases."""
-    import pandas as pd
-    from sqlalchemy import text
-    from sqlalchemy.exc import SQLAlchemyError
-
-    from mkts_backend.esi.async_everref import run_async_fetch_builder_costs
-
-    available_contexts: list[MarketContext] = []
-    for ctx in market_contexts:
-        db = DatabaseConfig(market_context=ctx)
-        try:
-            if not db.verify_db_exists():
-                logger.error(f"Database verification failed for {ctx.alias}")
-                return False
-            db.sync()
-            available_contexts.append(ctx)
-        except Exception as exc:
-            logger.error(f"Failed to prepare database for {ctx.alias}: {exc}")
-            return False
-
-    if not available_contexts:
-        logger.warning("No market databases available for builder cost collection")
-        return False
-
-    watchlist_rows: dict[int, dict[str, object]] = {}
-    for ctx in available_contexts:
-        db = DatabaseConfig(market_context=ctx)
-        try:
-            watchlist = db.get_watchlist()
-        except SQLAlchemyError as exc:
-            logger.error(f"Failed to read watchlist for {ctx.alias}: {exc}")
-            return False
-
-        if watchlist.empty:
-            continue
-
-        for row in watchlist[
-            ["type_id", "type_name", "group_name", "category_id"]
-        ].drop_duplicates(subset=["type_id"]).to_dict(orient="records"):
-            type_id = int(row["type_id"])
-            watchlist_rows.setdefault(
-                type_id,
-                {
-                    "type_id": type_id,
-                    "type_name": row.get("type_name"),
-                    "group_name": row.get("group_name"),
-                    "category_id": int(row["category_id"])
-                    if pd.notna(row.get("category_id"))
-                    else None,
-                },
-            )
-
-    if not watchlist_rows:
-        logger.warning("No watchlist items found for builder cost fetch")
-        return False
-
-    jita_price_map: dict[int, float] = {}
-    for ctx in available_contexts:
-        db = DatabaseConfig(market_context=ctx)
-        try:
-            with db.engine.connect() as conn:
-                jita_df = pd.read_sql_query(
-                    text("SELECT type_id, sell_price FROM jita_prices"),
-                    conn,
-                )
-            jita_price_map = {
-                int(row.type_id): float(row.sell_price)
-                for row in jita_df.itertuples(index=False)
-                if pd.notna(row.sell_price)
-            }
-            if jita_price_map:
-                break
-        except SQLAlchemyError as exc:
-            logger.warning(
-                f"Failed to read Jita prices from {ctx.alias}; continuing with empty map: {exc}"
-            )
-
-    sde_db = DatabaseConfig("sde")
-    sde_engine = sde_db.engine
-    try:
-        results = run_async_fetch_builder_costs(
-            list(watchlist_rows.keys()),
-            jita_price_map,
-            sde_engine,
-            watchlist_metadata=watchlist_rows,
-        )
-    finally:
-        sde_engine.dispose()
-
-    if not results:
-        logger.warning("No builder cost data returned")
-        return False
-
-    df = pd.DataFrame(results)
-
-    all_success = True
-    for ctx in available_contexts:
-        try:
-            _ensure_builder_costs_table(ctx)
-            valid_columns = BuilderCosts.__table__.columns.keys()
-            builder_df = validate_columns(df, valid_columns)
-            status = upsert_database(BuilderCosts, builder_df, market_ctx=ctx)
-            if status:
-                log_update("builder_costs", remote=True, market_ctx=ctx)
-                logger.info(f"Builder costs updated for {ctx.alias}: {len(builder_df)} items")
-            else:
-                logger.error(f"Failed to update builder costs for {ctx.alias}")
-                all_success = False
-        except SQLAlchemyError as exc:
-            logger.error(f"Failed to update builder costs for {ctx.alias}: {exc}")
-            all_success = False
-
-    return all_success
 
 
 def _run_market_pipeline(

@@ -502,12 +502,15 @@ def _register_all(reg: CommandRegistry) -> None:
 
     # ── sync ────────────────────────────────────────────────────
     def _handle_sync(args: list[str], market_alias: str) -> bool:
+        from mkts_backend.cli_tools.arg_utils import ParsedArgs
         from mkts_backend.config.market_context import MarketContext
         from mkts_backend.config.db_config import DatabaseConfig
         from mkts_backend.config.logging_config import configure_logging
         from mkts_backend.cli_tools.market_args import expand_market_alias
 
         logger = configure_logging(__name__)
+        p = ParsedArgs(args)
+        skip_buildcost = p.has_flag("no-buildcost")
 
         for mkt in expand_market_alias(market_alias):
             market_ctx = MarketContext.from_settings(mkt)
@@ -517,12 +520,23 @@ def _register_all(reg: CommandRegistry) -> None:
             logger.info(f"Database synced: {db.alias}")
             print(f"Database synced: {db.alias} ({db.path})")
 
+        if not skip_buildcost:
+            buildcost = DatabaseConfig("buildcost")
+            print("Syncing database: buildcost")
+            try:
+                buildcost.sync()
+                logger.info("Database synced: buildcost")
+                print(f"Database synced: buildcost ({buildcost.path})")
+            except Exception as exc:
+                logger.warning(f"buildcost sync failed: {exc}")
+                print(f"Warning: buildcost sync failed: {exc}")
+
         return True
 
     reg.register(
         "sync",
         _handle_sync,
-        description="Sync the database (both markets by default)",
+        description="Sync local mirrors from remote (markets + buildcost; --no-buildcost to skip)",
         default_market="both",
     )
 
@@ -549,40 +563,33 @@ def _register_all(reg: CommandRegistry) -> None:
 
     # ── update-builder-costs ───────────────────────────────────
     def _handle_update_builder_costs(args: list[str], market_alias: str) -> bool:
+        del market_alias  # buildcost data is market-agnostic
         from mkts_backend.cli_tools.arg_utils import ParsedArgs
-        from mkts_backend.config.market_context import MarketContext
-        from mkts_backend.cli import process_builder_costs, init_databases
+        from mkts_backend.builder_costs.runner import run
 
         p = ParsedArgs(args)
         if p.has_help():
-            print(
-                "update-builder-costs: Fetch EverRef manufacturing costs for all watchlist items\n"
-                "Usage: mkts-backend update-builder-costs\n"
-                "Build costs are market-independent; written to all configured market DBs."
-            )
+            from mkts_backend.cli_tools.cli_help import display_builder_cost_help
+            display_builder_cost_help()
             return True
-
-        init_databases()
-
-        all_ctxs = []
-        for alias in MarketContext.list_available():
-            try:
-                all_ctxs.append(MarketContext.from_settings(alias))
-            except (ValueError, KeyError):
-                pass
-
-        if not all_ctxs:
-            print("Error: No market contexts configured")
+        result = run()
+        if not result.success:
             return False
-
-        return process_builder_costs(market_contexts=all_ctxs)
+        if result.missing > 0:
+            # Partial EverRef failures must surface as non-zero exit so the
+            # daily CI job catches stale rows instead of silently persisting.
+            print(
+                f"update-builder-costs: {result.missing} of "
+                f"{result.watchlist_size} items missing fresh cost data"
+            )
+            return False
+        return True
 
     reg.register(
         "update-builder-costs",
         _handle_update_builder_costs,
-        aliases=["builder-costs", "ubc"],
-        description="Fetch EverRef manufacturing costs for watchlist items",
-        default_market="primary",
+        aliases=["builder-costs", "ubc", "update-build-costs"],
+        description="Refresh manufacturing costs in buildcost.db",
     )
 
     # ── update-markets ──────────────────────────────────────────
@@ -655,11 +662,25 @@ def _register_all(reg: CommandRegistry) -> None:
 
     reg.register("esi-auth", _handle_esi_auth, description="Re-authorize ESI tokens with expanded scopes")
 
+    # ── build-watchlist ─────────────────────────────────────────
+    def _handle_build_watchlist(args: list[str], market_alias: str) -> bool:
+        del market_alias  # buildcost data is market-agnostic
+        from mkts_backend.cli_tools.build_watchlist_cli import (
+            handle_build_watchlist,
+        )
+        return handle_build_watchlist(args)
+
+    reg.register(
+        "build-watchlist",
+        _handle_build_watchlist,
+        aliases=["build_watchlist"],
+        description="Manage build_watchlist (add | remove | mirror | sync)",
+    )
+
     # ── add_watchlist ───────────────────────────────────────────
     def _handle_add_watchlist(args: list[str], market_alias: str) -> bool:
         from mkts_backend.cli_tools.add_watchlist import add_watchlist
-        add_watchlist(args, market_alias=market_alias)
-        return True
+        return add_watchlist(args, market_alias=market_alias)
 
     reg.register(
         "add_watchlist",
