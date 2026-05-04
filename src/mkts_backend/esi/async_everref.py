@@ -2,6 +2,7 @@ import asyncio
 import re
 import time
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, TypedDict
 
@@ -96,6 +97,31 @@ class BuilderCostRecord(TypedDict):
     me: int
     runs: int
     fetched_at: datetime
+
+
+@dataclass
+class FetchSummary:
+    """Outcome of a builder-cost fetch run.
+
+    ``attempted`` counts items that entered the EverRef queue (i.e. survived
+    the design-time filters in ``_resolve_api_params`` and the SDE buildable
+    join). ``failed = attempted - len(records)`` is the real EverRef miss
+    count — the right denominator when deciding whether the run "missed"
+    fresh data.
+    """
+
+    records: list[BuilderCostRecord] = field(default_factory=list)
+    attempted: int = 0
+    filtered_unbuildable: int = 0  # no manufacturing blueprint in SDE
+    filtered_out_of_scope: int = 0  # excluded by meta-group/category/name filters
+
+    @property
+    def succeeded(self) -> int:
+        return len(self.records)
+
+    @property
+    def failed(self) -> int:
+        return self.attempted - self.succeeded
 
 
 def _parse_iso_duration(value: str | None) -> float | None:
@@ -291,7 +317,7 @@ async def async_fetch_builder_costs(
     jita_prices: dict[int, float],
     sde_engine: Engine,
     watchlist_metadata: Mapping[int, WatchlistMetadata] | None = None,
-) -> list[BuilderCostRecord]:
+) -> FetchSummary:
     watchlist_metadata = watchlist_metadata or {}
     meta_groups = _get_meta_groups(type_ids, sde_engine)
     unbuildable = len(type_ids) - len(meta_groups)
@@ -316,9 +342,15 @@ async def async_fetch_builder_costs(
         me, runs = params
         fetch_jobs.append((type_id, me, runs))
 
+    out_of_scope = len(type_ids) - unbuildable - len(fetch_jobs)
+
     if not fetch_jobs:
         logger.info("No manufacturable watchlist items matched the builder cost filters")
-        return []
+        return FetchSummary(
+            attempted=0,
+            filtered_unbuildable=unbuildable,
+            filtered_out_of_scope=out_of_scope,
+        )
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
     limiter = AsyncLimiter(EVEREF_REQUESTS_PER_MINUTE, time_period=60.0)
@@ -341,7 +373,12 @@ async def async_fetch_builder_costs(
         )
     else:
         logger.info(f"{len(successful)}/{len(fetch_jobs)} items fetched successfully")
-    return successful
+    return FetchSummary(
+        records=successful,
+        attempted=len(fetch_jobs),
+        filtered_unbuildable=unbuildable,
+        filtered_out_of_scope=out_of_scope,
+    )
 
 
 def run_async_fetch_builder_costs(
@@ -349,7 +386,7 @@ def run_async_fetch_builder_costs(
     jita_prices: dict[int, float],
     sde_engine: Engine,
     watchlist_metadata: Mapping[int, WatchlistMetadata] | None = None,
-) -> list[BuilderCostRecord]:
+) -> FetchSummary:
     return asyncio.run(
         async_fetch_builder_costs(
             type_ids,

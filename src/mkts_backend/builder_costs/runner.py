@@ -75,22 +75,40 @@ def run() -> RunResult:
 
     jita_prices = read_jita_prices(primary_db)
 
-    results = run_async_fetch_builder_costs(
+    summary = run_async_fetch_builder_costs(
         type_ids,
         jita_prices,
         sde_db.engine,
         watchlist_metadata=watchlist_metadata,
     )
 
-    if not results:
-        logger.error("EverRef returned no successful results")
+    if summary.attempted == 0:
+        # Nothing eligible to fetch — every item filtered out by SDE buildable
+        # join or the meta-group/category scope filters. Treat as success;
+        # the watchlist is just full of non-fetchable items.
+        logger.info(
+            f"No items eligible for cost fetch "
+            f"(unbuildable={summary.filtered_unbuildable}, "
+            f"out_of_scope={summary.filtered_out_of_scope}, "
+            f"watchlist_size={len(items)})"
+        )
+        return RunResult(success=True, watchlist_size=len(items))
+
+    if not summary.records:
+        logger.error(
+            f"EverRef returned no successful results "
+            f"({summary.failed}/{summary.attempted} attempted items failed)"
+        )
         return RunResult(success=False, watchlist_size=len(items))
 
-    written = upsert_builder_costs(buildcost_db, list(results))
-    missing = len(items) - written
+    written = upsert_builder_costs(buildcost_db, summary.records)
+    missing = summary.attempted - written
     logger.info(
         f"Builder costs refresh complete: fetched={written}, "
-        f"missing={missing}, watchlist_size={len(items)}"
+        f"missing={missing}, attempted={summary.attempted}, "
+        f"filtered_unbuildable={summary.filtered_unbuildable}, "
+        f"filtered_out_of_scope={summary.filtered_out_of_scope}, "
+        f"watchlist_size={len(items)}"
     )
     return RunResult(
         success=True,

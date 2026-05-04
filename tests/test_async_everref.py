@@ -146,7 +146,7 @@ class TestAsyncFetchBuilderCosts:
             ],
         ):
             try:
-                results = await async_everref.async_fetch_builder_costs(
+                summary = await async_everref.async_fetch_builder_costs(
                     [34, 35],
                     {34: 1_000_000, 35: 1_000_000},
                     engine,
@@ -155,5 +155,8 @@ class TestAsyncFetchBuilderCosts:
             finally:
                 engine.dispose()
 
-        assert len(results) == 1
-        assert results[0]["type_id"] == 34
+        assert summary.attempted == 2
+        assert summary.succeeded == 1
+        assert summary.failed == 1
+        assert len(summary.records) == 1
+        assert summary.records[0]["type_id"] == 34
