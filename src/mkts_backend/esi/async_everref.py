@@ -31,9 +31,9 @@ EVEREF_REQUESTS_PER_MINUTE = 120
 MANUFACTURABLE_META_GROUPS = frozenset({1, 2, 14})
 ALLOWED_CATEGORIES = frozenset({7, 18, 8, 6, 87, 22, 32})
 EXCLUDED_GROUPS = frozenset(
-    {"Interdiction Nullifier", "Exotic Plasma Charge", "Condenser Pack"}
+    {"Interdiction Nullifier", "Exotic Plasma Charge", "Condenser Pack", "Jump Drive Economizer", "Warp Accelerator", "Vorton Projector", "Advanced Condenser Pack", "SCARAB Breacher Pods"}
 )
-EXCLUDED_NAMES = frozenset({"Vedmak", "Leshak", "Damavik", "Zirnitra"})
+EXCLUDED_NAMES = frozenset({"Vedmak", "Leshak", "Damavik", "Zirnitra", "Metamorphosis", "Stormbringer", "Pacifier", "Enforcer", "'Magpie' Mobile Tractor Unit", "'Packrat' Mobile Tractor Unit", "'Yurt' Mobile Depot", "'Wetu' Mobile Depot"})
 HIGH_VALUE_THRESHOLD = 40_000_000
 T2_MODULE_CATEGORIES = frozenset({7, 18, 8})
 
