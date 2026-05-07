@@ -4,9 +4,10 @@ from typing import List
 
 import pandas as pd
 from sqlalchemy import text, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from mkts_backend.db.models import Doctrines, LeadShips, DoctrineFitItems, Base
+from mkts_backend.db.models import Doctrines, LeadShips, DoctrineFitItems, Watchlist, Base
 from mkts_backend.db.db_queries import get_watchlist_ids, get_fit_ids, get_fit_items
 from mkts_backend.utils.get_type_info import TypeInfo
 from mkts_backend.config.db_config import DatabaseConfig
@@ -1046,16 +1047,25 @@ def add_doctrine_type_info_to_watchlist(doctrine_id: int):
                 missing_type_info.append(type_info)
 
     for type_info in missing_type_info:
-        stmt5 = text("INSERT INTO watchlist (type_id, type_name, group_name, category_name, category_id, group_id) VALUES (:type_id, :type_name, :group_name, :category_name, :category_id, :group_id)")
+        stmt5 = sqlite_insert(Watchlist).values(
+            type_id=int(type_info.type_id),
+            type_name=type_info.type_name,
+            group_name=type_info.group_name,
+            category_name=type_info.category_name,
+            category_id=int(type_info.category_id),
+            group_id=int(type_info.group_id),
+        ).on_conflict_do_nothing(index_elements=["type_id"])
         db = DatabaseConfig("wcmkt")
         engine = db.engine
-        with engine.connect() as conn:
-            conn.execute(stmt5, {"type_id": type_info.type_id, "type_name": type_info.type_name, "group_name": type_info.group_name, "category_name": type_info.category_name, "category_id": type_info.category_id, "group_id": type_info.group_id})
-            conn.commit()
-        conn.close()
+        with engine.begin() as conn:
+            result = conn.execute(stmt5)
         engine.dispose()
-        logger.info(f"Added {type_info.type_name} to watchlist")
-        print(f"Added {type_info.type_name} to watchlist")
+        if result.rowcount:
+            logger.info(f"Added {type_info.type_name} to watchlist")
+            print(f"Added {type_info.type_name} to watchlist")
+        else:
+            logger.info(f"Skipped {type_info.type_name}: already in watchlist")
+            print(f"Skipped {type_info.type_name}: already in watchlist")
 
 def refresh_doctrines_for_fit(fit_id: int, ship_id: int, ship_name: str, remote: bool = False, db_alias: str = "wcmkt", engine=None, conn=None) -> None:
     """

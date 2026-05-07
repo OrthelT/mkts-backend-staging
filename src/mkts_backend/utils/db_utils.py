@@ -1,5 +1,6 @@
 import pandas as pd
-from sqlalchemy import text, insert, select, bindparam
+from sqlalchemy import text, select, bindparam
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from mkts_backend.config.db_config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.db.models import Watchlist, UpdateLog
@@ -72,19 +73,19 @@ def add_missing_items_to_watchlist(missing_items: list[int], remote: bool = Fals
 
         with engine.connect() as conn:
             for _, row in new_items.iterrows():
-                stmt = insert(Watchlist).values(
-                    type_id=row['type_id'],
+                stmt = sqlite_insert(Watchlist).values(
+                    type_id=int(row['type_id']),
                     type_name=row['type_name'],
-                    group_id=row['group_id'],
+                    group_id=int(row['group_id']),
                     group_name=row['group_name'],
-                    category_id=row['category_id'],
+                    category_id=int(row['category_id']),
                     category_name=row['category_name']
-                )
-                try:
-                    conn.execute(stmt)
+                ).on_conflict_do_nothing(index_elements=["type_id"])
+                result = conn.execute(stmt)
+                if result.rowcount:
                     logger.info(f"Added {row['type_name']} (ID: {row['type_id']}) to watchlist")
-                except Exception as e:
-                    logger.warning(f"Item {row['type_id']} may already exist: {e}")
+                else:
+                    logger.info(f"Skipped {row['type_name']} (ID: {row['type_id']}): already in watchlist")
             conn.commit()
 
         engine.dispose()
@@ -118,22 +119,21 @@ def update_watchlist_tables(missing_items: list[int]):
     df = df.rename(columns=dict(zip(inv_cols, watchlist_cols)))
 
     engine = wcmkt_db.engine
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         for _, row in df.iterrows():
-            stmt = insert(Watchlist).values(
-                type_id=row['type_id'],
+            stmt = sqlite_insert(Watchlist).values(
+                type_id=int(row['type_id']),
                 type_name=row['type_name'],
-                group_id=row['group_id'],
+                group_id=int(row['group_id']),
                 group_name=row['group_name'],
-                category_id=row['category_id'],
+                category_id=int(row['category_id']),
                 category_name=row['category_name']
-            )
-            try:
-                conn.execute(stmt)
-                conn.commit()
+            ).on_conflict_do_nothing(index_elements=["type_id"])
+            result = conn.execute(stmt)
+            if result.rowcount:
                 logger.info(f"Added {row['type_name']} (ID: {row['type_id']}) to watchlist")
-            except Exception as e:
-                logger.warning(f"Item {row['type_id']} may already exist in watchlist: {e}")
+            else:
+                logger.info(f"Skipped {row['type_name']} (ID: {row['type_id']}): already in watchlist")
 
 def export_doctrines_to_csv(db_alias: str = "wcmkt", output_file: str = "doctrines_backup.csv"):
     """
@@ -278,14 +278,23 @@ def fix_null_doctrine_stats_timestamps (doctrine_stats: pd.DataFrame, timestamp:
 
 def restore_watchlist_from_csv(csv_file: str = "data/watchlist_updated.csv", remote: bool = False):
 
+    cols = ["type_id", "type_name", "group_id", "group_name", "category_id", "category_name"]
+    df = pd.read_csv(csv_file)[cols]
+    df["type_id"] = df["type_id"].astype(int)
+    df["group_id"] = df["group_id"].astype(int)
+    df["category_id"] = df["category_id"].astype(int)
+    rows = df.to_dict(orient="records")
+
     db = DatabaseConfig("wcmkt")
     engine = db.remote_engine if remote else db.engine
-    with engine.connect() as conn:
-        df = pd.read_csv(csv_file)
-        df.to_sql("watchlist", conn, if_exists="replace", index=False)
-    conn.close()
-    engine.dispose()
-    logger.info(f"Restored watchlist from {csv_file} to {db.alias}")
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM watchlist"))
+            for i in range(0, len(rows), 500):
+                conn.execute(sqlite_insert(Watchlist).values(rows[i : i + 500]))
+    finally:
+        engine.dispose()
+    logger.info(f"Restored watchlist from {csv_file} to {db.alias}: {len(df)} items")
 
 if __name__ == "__main__":
     pass
