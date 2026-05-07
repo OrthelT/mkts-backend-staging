@@ -153,6 +153,12 @@ def update_watchlist_data(esi: ESIConfig, watchlist_csv: str = "data/watchlist.c
     df["category_id"] = df["category_id"].astype(int)
     rows = df.to_dict(orient="records")
 
+    if not rows:
+        raise ValueError(
+            f"refusing to update watchlist from empty CSV {watchlist_csv}: "
+            "would DELETE all rows and insert nothing"
+        )
+
     engine = wcmkt_db.engine
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM watchlist"))

@@ -104,7 +104,7 @@ def duplicate_type_ids(db: DatabaseConfig, table: str) -> list[tuple]:
         ).fetchall()
 
 
-def build_select_expr(table: str, source: str) -> str:
+def build_select_expr(table: str, source: str) -> tuple[str, list[str]]:
     """Build a SELECT list with COALESCE for each Base column."""
     defaults = DEFAULTS[table]
     cols = list(defaults.keys())

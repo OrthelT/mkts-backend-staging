@@ -285,6 +285,12 @@ def restore_watchlist_from_csv(csv_file: str = "data/watchlist_updated.csv", rem
     df["category_id"] = df["category_id"].astype(int)
     rows = df.to_dict(orient="records")
 
+    if not rows:
+        raise ValueError(
+            f"refusing to restore watchlist from empty CSV {csv_file}: "
+            "would DELETE all rows and insert nothing"
+        )
+
     db = DatabaseConfig("wcmkt")
     engine = db.remote_engine if remote else db.engine
     try:
