@@ -66,3 +66,4 @@ curl-request.txt
 target_updates.sql
 factionmap.sql mktcheck.sql target_updates.sql
 *.sql
+dbrefresh.sh
