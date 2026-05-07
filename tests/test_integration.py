@@ -9,6 +9,9 @@ from unittest.mock import patch, MagicMock, call
 import pandas as pd
 import sqlite3
 from pathlib import Path
+from sqlalchemy import create_engine
+
+from mkts_backend.db.models import Base
 
 
 class TestFullMarketContextFlow:
@@ -93,10 +96,11 @@ class TestDatabaseWriteIsolation:
         primary_db_path = temp_db_dir / "wcmktprod.db"
         deployment_db_path = temp_db_dir / "wcmktnorth2.db"
 
-        # Write to primary database
-        conn_primary = sqlite3.connect(str(primary_db_path))
-        test_data.to_sql("marketstats", conn_primary, if_exists="replace", index=False)
-        conn_primary.close()
+        primary_engine = create_engine(f"sqlite:///{primary_db_path}")
+        Base.metadata.create_all(primary_engine)
+        with primary_engine.begin() as conn:
+            test_data.to_sql("marketstats", conn, if_exists="append", index=False)
+        primary_engine.dispose()
 
         # Read from deployment database - should NOT have the data
         conn_deployment = sqlite3.connect(str(deployment_db_path))

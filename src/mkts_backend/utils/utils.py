@@ -6,9 +6,11 @@ import pandas as pd
 import json
 import sqlalchemy as sa
 from sqlalchemy import text, create_engine
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from mkts_backend.config.db_config import DatabaseConfig
 from mkts_backend.config.esi_config import ESIConfig
 from mkts_backend.config.logging_config import configure_logging
+from mkts_backend.db.models import Watchlist
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 logger = configure_logging(__name__)
@@ -144,13 +146,24 @@ def get_fit_items(fit_id: int) -> pd.DataFrame:
     return df
 
 def update_watchlist_data(esi: ESIConfig, watchlist_csv: str = "data/watchlist.csv") -> bool:
-    df = pd.read_csv(watchlist_csv)
-    db = wcmkt_db
-    engine = db.engine
-    with engine.connect() as conn:
-        df.to_sql("watchlist", conn, if_exists="replace", index=False)
-        conn.commit()
-    conn.close()
+    cols = ["type_id", "type_name", "group_id", "group_name", "category_id", "category_name"]
+    df = pd.read_csv(watchlist_csv)[cols]
+    df["type_id"] = df["type_id"].astype(int)
+    df["group_id"] = df["group_id"].astype(int)
+    df["category_id"] = df["category_id"].astype(int)
+    rows = df.to_dict(orient="records")
+
+    if not rows:
+        raise ValueError(
+            f"refusing to update watchlist from empty CSV {watchlist_csv}: "
+            "would DELETE all rows and insert nothing"
+        )
+
+    engine = wcmkt_db.engine
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM watchlist"))
+        for i in range(0, len(rows), 500):
+            conn.execute(sqlite_insert(Watchlist).values(rows[i : i + 500]))
     logger.info(f"Watchlist updated: {len(df)} items")
     return True
 
