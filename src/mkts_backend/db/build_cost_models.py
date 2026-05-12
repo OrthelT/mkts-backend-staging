@@ -94,3 +94,20 @@ class Rig(BuildCostBase):
     type_id = Column(Integer, primary_key=True)
     type_name = Column(String)
     icon_id = Column(Integer)
+
+
+class UpdateLog(BuildCostBase):
+    """Per-database update timestamp ledger.
+
+    The wcmkts_new frontend probes ``MAX(timestamp) WHERE table_name='buildcost'``
+    on this table to decide whether to trigger a sync. Mirrors the wcmktprod
+    `updatelog` schema (see ``db/models.py:174``) but is intentionally a
+    separate class so it stays bound to ``BuildCostBase`` rather than
+    wcmktprod's ``Base``.
+    """
+
+    __tablename__ = "updatelog"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    table_name = Column(String, nullable=False)
+    timestamp = Column(DateTime, nullable=False)

@@ -7,15 +7,17 @@ target the remote engine; the local mirror is refreshed via
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import delete, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from mkts_backend.config.db_config import DatabaseConfig
 from mkts_backend.config.logging_config import configure_logging
-from mkts_backend.db.build_cost_models import BuildWatchlist, BuilderCosts
+from mkts_backend.db.build_cost_models import BuildWatchlist, BuilderCosts, UpdateLog
 
 logger = configure_logging(__name__)
 
@@ -25,7 +27,7 @@ _UPSERT_CHUNK_SIZE = 500
 
 
 def init_buildcost_tables(db: DatabaseConfig) -> None:
-    """Idempotently create build_watchlist and builder_costs on the remote.
+    """Idempotently create build_watchlist, builder_costs and updatelog on the remote.
 
     ``checkfirst=True`` is per-table — the existing structures/rigs/industry_index
     tables are untouched.
@@ -33,7 +35,10 @@ def init_buildcost_tables(db: DatabaseConfig) -> None:
     engine = db.remote_engine
     BuildWatchlist.__table__.create(engine, checkfirst=True)
     BuilderCosts.__table__.create(engine, checkfirst=True)
-    logger.info("Confirmed buildcost.db schema for build_watchlist and builder_costs")
+    UpdateLog.__table__.create(engine, checkfirst=True)
+    logger.info(
+        "Confirmed buildcost.db schema for build_watchlist, builder_costs, updatelog"
+    )
 
 
 def read_jita_prices(market_db: DatabaseConfig) -> dict[int, float]:
@@ -179,3 +184,19 @@ def upsert_builder_costs(db: DatabaseConfig, records: list[dict]) -> int:
         session.close()
     logger.info(f"Upserted {len(records)} rows to builder_costs")
     return len(records)
+
+
+def log_buildcost_update(db: DatabaseConfig, table_name: str = "buildcost") -> None:
+    """Stamp the remote ``updatelog`` so the wcmkts_new frontend detects the change.
+
+    Mirrors ``db_handlers.log_update()`` but targets buildcost.db's remote engine
+    and the buildcost-bound ``UpdateLog`` model. Delete-then-insert keeps a
+    single row per ``table_name``.
+    """
+    engine = db.remote_engine
+    with Session(bind=engine) as session, session.begin():
+        session.execute(delete(UpdateLog).where(UpdateLog.table_name == table_name))
+        session.add(
+            UpdateLog(table_name=table_name, timestamp=datetime.now(timezone.utc))
+        )
+    logger.info(f"Stamped buildcost updatelog for table_name={table_name!r}")

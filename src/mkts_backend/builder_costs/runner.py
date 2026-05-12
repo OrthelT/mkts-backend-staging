@@ -20,6 +20,7 @@ from dataclasses import dataclass
 
 from mkts_backend.builder_costs.repository import (
     init_buildcost_tables,
+    log_buildcost_update,
     read_build_watchlist,
     read_jita_prices,
     upsert_builder_costs,
@@ -102,6 +103,7 @@ def run() -> RunResult:
         return RunResult(success=False, watchlist_size=len(items))
 
     written = upsert_builder_costs(buildcost_db, summary.records)
+    log_buildcost_update(buildcost_db)
     missing = summary.attempted - written
     logger.info(
         f"Builder costs refresh complete: fetched={written}, "
