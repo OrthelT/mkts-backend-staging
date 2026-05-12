@@ -475,14 +475,10 @@ def log_update(
     db = _get_db(market_ctx)
     engine = db.remote_engine if remote else db.engine
 
-    session = Session(bind=engine)
-    with session.begin():
+    with Session(bind=engine) as session, session.begin():
         session.execute(delete(UpdateLog).where(UpdateLog.table_name == table_name))
         session.add(UpdateLog(table_name=table_name, timestamp=datetime.now(timezone.utc)))
-        session.commit()
-        session.close()
 
-    engine.dispose()
     return True
 
 def ensure_cache_table(engine):

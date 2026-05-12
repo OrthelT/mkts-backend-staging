@@ -1,6 +1,9 @@
 from sqlalchemy import String, Integer, DateTime, Float, Boolean, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from mkts_backend.db._update_log_mixin import UpdateLogMixin
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -171,14 +174,18 @@ class DoctrineFitItems(Base):
         )
 
 
-class UpdateLog(Base):
-    __tablename__ = "updatelog"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    table_name: Mapped[str] = mapped_column(String)
-    timestamp: Mapped[DateTime] = mapped_column(DateTime)
+class UpdateLog(UpdateLogMixin, Base):
+    """Per-database update timestamp ledger for wcmktprod.
+
+    Column shape is owned by ``UpdateLogMixin``; see ``UpdateLog`` in
+    ``db/build_cost_models.py`` for the buildcost-bound sibling.
+    """
 
     def __repr__(self) -> str:
-        return f"updatelog(id={self.id!r}, table_name={self.table_name!r}, timestamp={self.timestamp!r})"
+        return (
+            f"updatelog(id={self.id!r}, table_name={self.table_name!r}, "
+            f"timestamp={self.timestamp!r})"
+        )
 
 
 class ESIRequestCache(Base):

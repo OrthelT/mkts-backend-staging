@@ -28,8 +28,9 @@ from mkts_backend.db.build_cost_models import UpdateLog
 def buildcost_engine(tmp_path):
     """File-backed SQLite engine standing in for buildcost.db's remote engine.
 
-    File-backed (not ``:memory:``) so ``engine.dispose()`` from the code under
-    test doesn't wipe the data before assertions run.
+    File-backed (not ``:memory:``) so the test storage matches production
+    semantics — a real buildcost.db is a SQLite file on disk, not an
+    ephemeral in-memory DB.
     """
     db_path = tmp_path / "buildcost_test.db"
     engine = create_engine(f"sqlite:///{db_path}")
@@ -109,7 +110,7 @@ class TestLogBuildcostUpdate:
         assert before - timedelta(seconds=1) <= ts <= after + timedelta(seconds=1)
 
     def test_second_call_replaces_first_row(self, fake_db, buildcost_engine):
-        """Delete-then-insert keeps exactly one row per table_name."""
+        """Upsert against UNIQUE(table_name) keeps exactly one row per table_name."""
         init_buildcost_tables(fake_db)
         log_buildcost_update(fake_db)
         log_buildcost_update(fake_db)
@@ -121,6 +122,16 @@ class TestLogBuildcostUpdate:
             ).scalar()
 
         assert count == 1
+
+    def test_returns_stamped_timestamp(self, fake_db, buildcost_engine):
+        init_buildcost_tables(fake_db)
+        before = datetime.now(timezone.utc)
+        returned = log_buildcost_update(fake_db)
+        after = datetime.now(timezone.utc)
+
+        assert isinstance(returned, datetime)
+        assert returned.tzinfo is not None
+        assert before <= returned <= after
 
     def test_custom_table_name_isolated_from_buildcost_row(
         self, fake_db, buildcost_engine
@@ -140,11 +151,47 @@ class TestLogBuildcostUpdate:
 
 
 class TestUpdateLogModel:
-    def test_columns_match_wcmktprod_schema(self):
-        """Buildcost UpdateLog must mirror wcmktprod UpdateLog column set so
-        the frontend's freshness probe query works against either DB."""
-        assert set(UpdateLog.__table__.columns.keys()) == {
-            "id",
-            "table_name",
-            "timestamp",
+    """Schema parity tests for the buildcost-bound ``UpdateLog``.
+
+    Both ``UpdateLog`` classes (buildcost + wcmktprod) inherit from
+    ``UpdateLogMixin``, so column shape *cannot* drift unless someone
+    overrides the mixin. These tests pin the shape so an accidental override
+    or a mixin edit that breaks the frontend contract gets caught immediately.
+    """
+
+    def test_column_set_matches_wcmktprod(self):
+        from mkts_backend.db.models import UpdateLog as WcmktprodUpdateLog
+
+        buildcost_cols = set(UpdateLog.__table__.columns.keys())
+        wcmktprod_cols = set(WcmktprodUpdateLog.__table__.columns.keys())
+        assert buildcost_cols == wcmktprod_cols == {"id", "table_name", "timestamp"}
+
+    def test_column_types_match_wcmktprod(self):
+        from mkts_backend.db.models import UpdateLog as WcmktprodUpdateLog
+
+        for col_name in ("id", "table_name", "timestamp"):
+            ours = UpdateLog.__table__.columns[col_name]
+            theirs = WcmktprodUpdateLog.__table__.columns[col_name]
+            assert type(ours.type) is type(theirs.type), (
+                f"column {col_name!r} type drift: "
+                f"buildcost={type(ours.type).__name__} "
+                f"wcmktprod={type(theirs.type).__name__}"
+            )
+
+    def test_constraints_pinned(self):
+        cols = UpdateLog.__table__.columns
+        assert cols["id"].primary_key is True
+        assert cols["id"].autoincrement is True
+        assert cols["table_name"].nullable is False
+        assert cols["timestamp"].nullable is False
+
+    def test_table_name_has_unique_constraint(self):
+        """Schema, not writer, enforces "one row per table_name"."""
+        from sqlalchemy import UniqueConstraint
+
+        unique_cols = {
+            tuple(c.name for c in constraint.columns)
+            for constraint in UpdateLog.__table__.constraints
+            if isinstance(constraint, UniqueConstraint)
         }
+        assert ("table_name",) in unique_cols

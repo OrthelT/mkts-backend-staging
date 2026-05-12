@@ -13,6 +13,8 @@ works against either.
 from sqlalchemy import Column, DateTime, Float, Integer, String
 from sqlalchemy.orm import declarative_base
 
+from mkts_backend.db._update_log_mixin import UpdateLogMixin
+
 BuildCostBase = declarative_base()
 
 
@@ -96,18 +98,18 @@ class Rig(BuildCostBase):
     icon_id = Column(Integer)
 
 
-class UpdateLog(BuildCostBase):
-    """Per-database update timestamp ledger.
+class UpdateLog(UpdateLogMixin, BuildCostBase):
+    """Per-database update timestamp ledger for ``buildcost.db``.
 
     The wcmkts_new frontend probes ``MAX(timestamp) WHERE table_name='buildcost'``
-    on this table to decide whether to trigger a sync. Mirrors the wcmktprod
-    `updatelog` schema (see ``db/models.py:174``) but is intentionally a
-    separate class so it stays bound to ``BuildCostBase`` rather than
-    wcmktprod's ``Base``.
+    to decide whether to trigger a sync. Column shape is owned by
+    ``UpdateLogMixin`` and shared with the wcmktprod ``UpdateLog`` in
+    ``db/models.py``; one class per ``Base`` because each base is bound to a
+    different physical database.
     """
 
-    __tablename__ = "updatelog"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    table_name = Column(String, nullable=False)
-    timestamp = Column(DateTime, nullable=False)
+    def __repr__(self) -> str:
+        return (
+            f"updatelog(id={self.id!r}, table_name={self.table_name!r}, "
+            f"timestamp={self.timestamp!r})"
+        )

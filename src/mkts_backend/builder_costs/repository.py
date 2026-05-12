@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pandas as pd
-from sqlalchemy import delete, text
+from sqlalchemy import text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -30,12 +30,18 @@ def init_buildcost_tables(db: DatabaseConfig) -> None:
     """Idempotently create build_watchlist, builder_costs and updatelog on the remote.
 
     ``checkfirst=True`` is per-table — the existing structures/rigs/industry_index
-    tables are untouched.
+    tables are untouched. Each create is logged on failure so a partial init
+    surfaces *which* table the libsql remote rejected, not just a raw stack.
     """
     engine = db.remote_engine
-    BuildWatchlist.__table__.create(engine, checkfirst=True)
-    BuilderCosts.__table__.create(engine, checkfirst=True)
-    UpdateLog.__table__.create(engine, checkfirst=True)
+    for model in (BuildWatchlist, BuilderCosts, UpdateLog):
+        try:
+            model.__table__.create(engine, checkfirst=True)
+        except SQLAlchemyError:
+            logger.error(
+                f"buildcost.db schema init failed for table {model.__tablename__!r}"
+            )
+            raise
     logger.info(
         "Confirmed buildcost.db schema for build_watchlist, builder_costs, updatelog"
     )
@@ -186,17 +192,27 @@ def upsert_builder_costs(db: DatabaseConfig, records: list[dict]) -> int:
     return len(records)
 
 
-def log_buildcost_update(db: DatabaseConfig, table_name: str = "buildcost") -> None:
+def log_buildcost_update(
+    db: DatabaseConfig, table_name: str = "buildcost"
+) -> datetime:
     """Stamp the remote ``updatelog`` so the wcmkts_new frontend detects the change.
 
-    Mirrors ``db_handlers.log_update()`` but targets buildcost.db's remote engine
-    and the buildcost-bound ``UpdateLog`` model. Delete-then-insert keeps a
-    single row per ``table_name``.
+    Targets buildcost.db's remote engine and the buildcost-bound ``UpdateLog``
+    model. Upsert against ``UNIQUE(table_name)`` enforces "one row per
+    table_name" at the schema layer; the prior delete-then-insert is replaced
+    so concurrent runners can't race the row to zero or two. Returns the
+    stamped timestamp so callers can surface it in their result record.
     """
+    stamped_at = datetime.now(timezone.utc)
     engine = db.remote_engine
+    stmt = sqlite_insert(UpdateLog.__table__).values(
+        table_name=table_name, timestamp=stamped_at
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["table_name"],
+        set_={"timestamp": stmt.excluded.timestamp},
+    )
     with Session(bind=engine) as session, session.begin():
-        session.execute(delete(UpdateLog).where(UpdateLog.table_name == table_name))
-        session.add(
-            UpdateLog(table_name=table_name, timestamp=datetime.now(timezone.utc))
-        )
+        session.execute(stmt)
     logger.info(f"Stamped buildcost updatelog for table_name={table_name!r}")
+    return stamped_at

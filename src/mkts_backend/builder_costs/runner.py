@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from mkts_backend.builder_costs.repository import (
     init_buildcost_tables,
     log_buildcost_update,
@@ -38,6 +40,7 @@ class RunResult:
     fetched: int = 0
     missing: int = 0
     watchlist_size: int = 0
+    log_stamped: bool = False
 
 
 def run() -> RunResult:
@@ -103,18 +106,33 @@ def run() -> RunResult:
         return RunResult(success=False, watchlist_size=len(items))
 
     written = upsert_builder_costs(buildcost_db, summary.records)
-    log_buildcost_update(buildcost_db)
+
+    # The frontend probe depends on this stamp being current after every
+    # successful refresh. If it fails *after* the upsert committed, the data
+    # is fresh but the frontend will see the old timestamp and skip syncing —
+    # report success=False so the cron exit code surfaces the mismatch.
+    log_stamped = False
+    try:
+        log_buildcost_update(buildcost_db)
+        log_stamped = True
+    except SQLAlchemyError as exc:
+        logger.error(
+            f"buildcost updatelog stamp failed after upserting {written} rows; "
+            f"frontend will not detect the refresh. error={exc}"
+        )
+
     missing = summary.attempted - written
     logger.info(
         f"Builder costs refresh complete: fetched={written}, "
         f"missing={missing}, attempted={summary.attempted}, "
         f"filtered_unbuildable={summary.filtered_unbuildable}, "
         f"filtered_out_of_scope={summary.filtered_out_of_scope}, "
-        f"watchlist_size={len(items)}"
+        f"watchlist_size={len(items)}, log_stamped={log_stamped}"
     )
     return RunResult(
-        success=True,
+        success=log_stamped,
         fetched=written,
         missing=missing,
         watchlist_size=len(items),
+        log_stamped=log_stamped,
     )
