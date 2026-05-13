@@ -66,15 +66,21 @@ def process_market_orders(
         try:
             expires_dt = parsedate_to_datetime(expires_str)
             if datetime.now(timezone.utc) < expires_dt:
-                logger.info(f"Market orders cache valid until {expires_str}, skipping fetch")
+                logger.info(
+                    f"Market orders cache valid until {expires_str}, skipping fetch"
+                )
                 return True
         except (ValueError, TypeError) as e:
-            logger.warning(f"Invalid Expires value in orders cache: {expires_str!r} ({e}), proceeding with fetch")
+            logger.warning(
+                f"Invalid Expires value in orders cache: {expires_str!r} ({e}), proceeding with fetch"
+            )
 
     # Layer 2: Per-page etag check
     page_etags = cache.get("pages", {})
     result = fetch_market_orders(
-        esi, order_type=order_type, page_etags=page_etags if page_etags else None,
+        esi,
+        order_type=order_type,
+        page_etags=page_etags if page_etags else None,
         test_mode=test_mode,
     )
 
@@ -134,6 +140,8 @@ def process_history(market_ctx: Optional[MarketContext] = None) -> bool:
             logger.info(
                 f"History updated:{get_table_length('market_history', market_ctx=market_ctx)} items"
             )
+            db = DatabaseConfig(market_ctx.alias)
+            db.push()
             return True
         else:
             logger.error("Failed to update market history")
@@ -148,16 +156,6 @@ def process_market_stats(market_ctx: Optional[MarketContext] = None) -> bool:
         if market_ctx
         else DatabaseConfig("wcmkt")
     )
-    db.sync()
-    logger.info("database synced")
-    logger.info("validating database")
-    validation_test = db.validate_sync()
-    if validation_test:
-        logger.info("database validated")
-    else:
-        logger.error("database validation failed")
-        raise Exception("database validation failed in market stats")
-
     try:
         market_stats_df = calculate_market_stats(market_ctx=market_ctx)
         if len(market_stats_df) > 0:
@@ -192,6 +190,7 @@ def process_market_stats(market_ctx: Optional[MarketContext] = None) -> bool:
             logger.info(
                 f"Market stats updated:{get_table_length('marketstats', market_ctx=market_ctx)} items"
             )
+            db.push()
             return True
         else:
             logger.error("Failed to update market stats")
@@ -210,14 +209,6 @@ def process_doctrine_stats(market_ctx: Optional[MarketContext] = None) -> bool:
     )
     db.sync()
     logger.info("database synced")
-    logger.info("validating database")
-    validation_test = db.validate_sync()
-    if validation_test:
-        logger.info("database validated")
-    else:
-        logger.error("database validation failed")
-        raise Exception("database validation failed in doctrines stats")
-
     doctrine_stats_df = calculate_doctrine_stats(market_ctx=market_ctx)
     doctrine_stats_df = convert_datetime_columns(doctrine_stats_df, ["timestamp"])
     status = upsert_database(Doctrines, doctrine_stats_df, market_ctx=market_ctx)
@@ -226,6 +217,7 @@ def process_doctrine_stats(market_ctx: Optional[MarketContext] = None) -> bool:
         logger.info(
             f"Doctrines updated:{get_table_length('doctrines', market_ctx=market_ctx)} items"
         )
+        db.push()
         return True
     else:
         logger.error("Failed to update doctrines")
@@ -353,19 +345,6 @@ def _run_market_pipeline(
     db = DatabaseConfig(market_context=market_ctx)
     logger.info(f"Database: {db.alias} ({db.path})")
 
-    # Validate and sync database
-    validation_test = db.validate_sync()
-    if not validation_test:
-        logger.warning(f"{db.alias} database is not up to date. Syncing...")
-        db.sync()
-        logger.debug("database synced")
-        validation_test = db.validate_sync()
-        if validation_test:
-            logger.debug("database validated")
-        else:
-            logger.error("database validation failed")
-            raise Exception(f"database validation failed for {db.alias}")
-
     if not QUIET:
         print("=" * 80)
         print(f"Fetching market orders for {market_ctx.name}")
@@ -473,7 +452,9 @@ def run_market_update(history: bool = False, market_alias: str = "all") -> bool:
             all_contexts.append(market_ctx)
         except ValueError as e:
             logger.error(f"Invalid market: {e}")
-            logger.error(f"Available markets: {', '.join(MarketContext.list_available())}")
+            logger.error(
+                f"Available markets: {', '.join(MarketContext.list_available())}"
+            )
             sys.exit(1)
 
     for market_ctx in all_contexts:
@@ -482,9 +463,12 @@ def run_market_update(history: bool = False, market_alias: str = "all") -> bool:
             logger.info(f"Initializing market database: {db.alias}")
             db.verify_db_exists()
 
-    jita_ok = process_jita_prices(all_contexts)
+    # jita_ok = process_jita_prices(all_contexts)
+    jita_ok = False
     if not jita_ok:
-        logger.warning("Jita price update failed; downstream stats will lack Jita comparisons")
+        logger.warning(
+            "Jita price update failed; downstream stats will lack Jita comparisons"
+        )
 
     for market_ctx in all_contexts:
         _run_market_pipeline(market_ctx, history=history)

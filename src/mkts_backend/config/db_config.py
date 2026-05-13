@@ -5,7 +5,7 @@ from typing import Optional, TYPE_CHECKING
 
 import turso
 import turso.sync as tursosync
-
+from turso.sqlalchemy import get_sync_connection
 from dotenv import load_dotenv
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.config.settings_service import SettingsService
@@ -63,6 +63,7 @@ class DatabaseConfig:
         self,
         alias: str | None = None,
         dialect: str = "sqlite+turso",
+        sync_dialect: str = "sqlite+turso_sync",
         market_context: Optional["MarketContext"] = None,
     ):
         """
@@ -107,6 +108,7 @@ class DatabaseConfig:
             self.token = self._db_turso_auth_tokens.get(f"{self.alias}_turso")
 
         self.url = f"{dialect}:///{self.path}"
+        self.sync_url = f"{sync_dialect}:///{self.path}"
         self._engine = None
         self._remote_engine = None
         self._sqlite_local_connect = None
@@ -124,25 +126,15 @@ class DatabaseConfig:
         if self._remote_engine is None:
             turso_url = self._db_turso_urls[f"{self.alias}_turso"]
             auth_token = self._db_turso_auth_tokens[f"{self.alias}_turso"]
-            missing = []
-            if not turso_url:
-                missing.append("URL")
-            if not auth_token:
-                missing.append("token")
-            if missing:
-                raise RuntimeError(
-                    f"Turso remote not configured for alias '{self.alias}': "
-                    f"missing {' and '.join(missing)} "
-                    f"(check the corresponding TURSO_*_URL / TURSO_*_TOKEN "
-                    f"env vars in your environment or CI secrets)."
-                )
+
             self._remote_engine = create_engine(
-                self.url,
+                self.sync_url,
                 connect_args={
                     "remote_url": turso_url,
                     "auth_token": auth_token,
                 },
             )
+
         return self._remote_engine
 
     @property
@@ -180,6 +172,7 @@ class DatabaseConfig:
 
         with conn:
             conn.pull()
+        conn.close()
 
         end_time = perf_counter()
         logger.info(f"Database: {self.alias} ({self.path})")
@@ -189,48 +182,19 @@ class DatabaseConfig:
         logger.info(f"========== END SYNC {self.alias} ==========")
         logger.info("--------------------------------\n")
 
-    def validate_sync(self) -> bool:
+    def push(self):
+        push_start = perf_counter()
+        conn = self.turso_sync_connection
+        with conn:
+            conn.push()
+            logger.debug(conn.stats())
+        conn.close()
+        push_end = perf_counter()
+        logger.info(f"Database: {self.alias} ({self.path})")
+        logger.info(f"Sync time: {push_end - push_start:.1f} seconds")
         logger.info(
-            f"Validating sync for {self.alias}, url: {self.turso_url}, self.path: {self.path}"
+            "========================================================================="
         )
-
-        # check that db is initialized
-        verify_db_exists = self.verify_db_exists()
-        if not verify_db_exists:
-            logger.warning(f"Database {self.alias} is not up to date. Syncing...")
-            self.sync()
-            verify_db_exists = self.verify_db_exists()
-            if not verify_db_exists:
-                logger.error(
-                    f"Database {self.alias} is still not up to date. Exiting..."
-                )
-                return False
-        else:
-            logger.info(f"Database {self.alias} is up to date")
-
-        with self.remote_engine.connect() as conn:
-            result = conn.execute(
-                text("SELECT timestamp FROM updatelog WHERE table_name = marketstats")
-            ).fetchone()
-            if result is None:
-                return False
-            else:
-                remote_last_update = result[0]
-        conn.close()
-        with self.engine.connect() as conn:
-            result = conn.execute(
-                text("SELECT MAX(last_update) FROM marketstats")
-            ).fetchone()
-            if result is None:
-                return False
-            else:
-                local_last_update = result[0]
-        conn.close()
-        logger.info(f"remote_last_update: {remote_last_update}")
-        logger.info(f"local_last_update: {local_last_update}")
-        validation_test = remote_last_update == local_last_update
-        logger.info(f"validation_test: {validation_test}")
-        return validation_test
 
     def get_table_list(self, local_only: bool = True) -> list[tuple]:
         if local_only:
@@ -293,8 +257,8 @@ class DatabaseConfig:
                 return result[0]
 
     def get_status(self):
-        with turso_sync_connection() as conn:
-            stats = conn.stats
+        with self.turso_sync_connection as conn:
+            stats = conn.stats()
             return stats
 
     def get_watchlist(self):
