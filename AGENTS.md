@@ -1,3 +1,7 @@
+# IMPORTANT
+This project will refactor this codebase to use the new pyturso database library to test the migration prior to attempting to apply it in production. All databases will be renamed by appending test to to the filename (e.g. wcmktprodtest.db) and will receive corresponding remotes. We will try to leave the alias unchanged at first and map the callers back to the new files. 
+
+
 # LLM Agent Guide: Eve Online Market Data System
 
 This guide provides comprehensive documentation for LLM agents working with this Eve Online Market Data Collection and Analysis System. It covers both assisting users in implementing their own system and working with the existing codebase.
