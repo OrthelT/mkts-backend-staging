@@ -14,7 +14,7 @@ token_file = "file:token.json"
 [app]
 name = "WinterCo Markets Backend"
 environment = "production" # "production" or "development"
-log_level = "INFO" # INFO or DEBUG
+log_level = "DEBUG" # INFO or DEBUG
 
 # ============================================================================
 # MARKETS CONFIGURATION
@@ -26,15 +26,16 @@ log_level = "INFO" # INFO or DEBUG
 default = "primary"
 
 [markets.primary]
-name = "4-HWWF - WinterCo. Central Station"
-region_id = 10000003          # Vale of Silent
-system_id = 30000240
-structure_id = 1053970513596
-database_alias = "wcmktnewkeep"
-database_file = "wcmktnewkeep.db"
-turso_url_env = "TURSO_WCMKTNEWKEEP_URL"
-turso_token_env = "TURSO_WCMKTNEWKEEP_TOKEN"
-gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit" # wc_northern_supply
+[markets.deployment]
+name = "X47L-Q - Rogue Threshold"
+region_id = 10000023
+system_id = 30001967
+structure_id = 1041669946862
+database_alias = "wcmktnorth"
+database_file = "wcmktnorth2test.db"
+turso_url_env = "TURSO_WCMKTNORTH_URL"
+turso_token_env = "TURSO_WCMKTNORTH_TOKEN"
+gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit"
 
 [markets.deployment]
 name = "X47L-Q - Rogue Threshold"
@@ -68,10 +69,26 @@ doctrines = "doctrines_mkt_4H"
 # Market-independent databases (same for every market). All per-market DB
 # config lives in [markets.<alias>] above — this is the only other pathway.
 
-[shared]
-sde_file = "sdelite.db"
-fittings_file = "wcfitting.db"
-buildcost_file = "buildcost.db"
+[db]
+# Legacy aliases for backward compatibility
+production_database_alias = "wcmktprod"
+production_database_file = "wcmktprodtest.db"
+testing_database_alias = "wcmkttest"
+testing_database_file = "wcmkttest.db"
+testing_turso_url_env = "TURSO_WCMKTTEST_URL"
+testing_turso_token_env = "TURSO_WCMKTTEST_TOKEN"
+deployment_database_alias = "wcmktnorth"
+deployment_database_file = "wcmktnorth2test.db"
+
+# Shared databases (same for all markets)
+[db.shared]
+sde_alias = "sde"
+sde_file = "sdelitetest.db"
+fittings_alias = "fittings"
+fittings_file = "wcfittingtest.db"
+cli_cache_file = "cli_cache.db"  # Local-only cache for ESI assets (not synced to Turso)
+buildcost_alias = "buildcost"
+buildcost_file = "buildcosttest.db"
 
 # Test/dev database. When environment="development", the default market routes
 # here instead of its production DB (see MarketContext.from_settings).
