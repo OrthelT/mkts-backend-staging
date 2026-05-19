@@ -46,21 +46,26 @@ market_orders = "market_orders_4h"
 market_data = "market_data_4h"
 doctrines = "doctrines_mkt_4H"
 
-[markets.deployment]
-name = "X47L-Q - Rogue Threshold"
-region_id = 10000023
-system_id = 30001967
-structure_id = 1041669946862
-database_alias = "wcmktnorth"
-database_file = "wcmktnorth2.db"
-turso_url_env = "TURSO_WCMKTNORTH_URL"
-turso_token_env = "TURSO_WCMKTNORTH_TOKEN"
-gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit"
+# ORIGINAL X47L-Q CONFIG — commented out during temporary 4-HWWF transition.
+# To revert: delete the active [markets.deployment] block below, then uncomment this block.
+# [markets.deployment]
+# name = "X47L-Q - Rogue Threshold"
+# region_id = 10000023
+# system_id = 30001967
+# structure_id = 1041669946862
+# database_alias = "wcmktnorth"
+# database_file = "wcmktnorth2.db"
+# turso_url_env = "TURSO_WCMKTNORTH_URL"
+# turso_token_env = "TURSO_WCMKTNORTH_TOKEN"
+# gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit"
+#
+# [markets.deployment.gsheets_worksheets]
+# market_orders = "market_orders_b9"
+# market_data = "market_data_b9"
+# doctrines = "doctrines_mkt_b9"
 
-[markets.deployment.gsheets_worksheets]
-market_orders = "market_orders_b9"
-market_data = "market_data_b9"
-doctrines = "doctrines_mkt_b9"
+# TEMPORARY: paste the replacement [markets.deployment] block here, pointing at the
+# second 4-HWWF Keepstar. Use the commented block above as a template.
 
 # ============================================================================
 # SHARED DATABASE CONFIGURATION
