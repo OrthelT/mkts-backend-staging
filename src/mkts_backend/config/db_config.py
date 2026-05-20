@@ -45,7 +45,7 @@ class DatabaseConfig:
         "sde_turso": os.getenv("TURSO_SDE_URL"),
         "fittings_turso": os.getenv("TURSO_FITTING_URL"),
         "buildcost_turso": os.getenv("TURSO_BUILDCOST_URL"),
-        _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_URL"),
+        _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNEWKEEP_URL"),
     }
 
     _db_turso_auth_tokens = {
@@ -54,7 +54,7 @@ class DatabaseConfig:
         "sde_turso": os.getenv("TURSO_SDE_TOKEN"),
         "fittings_turso": os.getenv("TURSO_FITTING_TOKEN"),
         "buildcost_turso": os.getenv("TURSO_BUILDCOST_TOKEN"),
-        _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNORTH_TOKEN"),
+        _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNEWKEEP_TOKEN"),
     }
 
     def __init__(

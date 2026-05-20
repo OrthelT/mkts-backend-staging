@@ -46,6 +46,18 @@ market_orders = "market_orders_4h"
 market_data = "market_data_4h"
 doctrines = "doctrines_mkt_4H"
 
+
+[markets.deployment]
+name = "4-HWWF - WinterCo. Central Station"
+region_id = 10000003          # Vale of Silent
+system_id = 30000240
+structure_id = 1053970513596
+database_alias = "wcmktnewkeep"
+database_file = "wcmktnewkeep.db"
+turso_url_env = "TURSO_WCMKTNEWKEEP_URL"
+turso_token_env = "TURSO_WCMKTNEWKEEP_TOKEN"
+gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit" # wc_northern_supply
+
 # ORIGINAL X47L-Q CONFIG — commented out during temporary 4-HWWF transition.
 # To revert: delete the active [markets.deployment] block below, then uncomment this block.
 # [markets.deployment]
@@ -80,8 +92,10 @@ testing_database_alias = "wcmkttest"
 testing_database_file = "wcmkttest.db"
 testing_turso_url_env = "TURSO_WCMKTTEST_URL"
 testing_turso_token_env = "TURSO_WCMKTTEST_TOKEN"
-deployment_database_alias = "wcmktnorth"
-deployment_database_file = "wcmktnorth2.db"
+#deployment_database_alias = "wcmktnorth"
+#deployment_database_file = "wcmktnorth2.db"
+deployment_database_alias = "wcmktnewkeep"
+deployment_database_file = "wcmktnewkeep.db"
 
 # Shared databases (same for all markets)
 [db.shared]
