@@ -68,3 +68,4 @@ factionmap.sql mktcheck.sql target_updates.sql
 *.sql
 mktsturso
 mktbk
+wcnew

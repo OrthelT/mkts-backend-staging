@@ -1,11 +1,15 @@
 """Centralized market argument parsing for CLI commands."""
 
 import sys
+from mkts_backend.config.settings_service import SettingsService
+
+service = SettingsService()
 
 MARKET_DB_MAP: dict[str, str] = {
-    "primary": "wcmkt",
-    "deployment": "wcmktnorth",
-}
+    "primary": service.db_production_alias,
+    "deployment": service.db_deployment_alias,
+    }
+
 
 MARKET_SYNONYMS: dict[str, str] = {
     "north": "deployment",
