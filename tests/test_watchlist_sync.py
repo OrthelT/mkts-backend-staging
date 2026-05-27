@@ -223,3 +223,75 @@ class TestSyncFromMarket:
 
         assert result.added == 0
         assert sorted(result.skipped) == [36]
+
+
+class TestDeleteOrphanBuilderCosts:
+    """``delete_orphan_builder_costs`` lives in repository.py but is tested
+    here because the in-memory ``buildcost_db`` fixture is the only place
+    that already wires up both build_watchlist and builder_costs schema.
+    """
+
+    @staticmethod
+    def _seed_builder_costs(db, type_ids: list[int]) -> None:
+        from datetime import datetime, timezone
+
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+        from mkts_backend.db.build_cost_models import BuilderCosts
+
+        now = datetime.now(timezone.utc)
+        rows = [
+            {
+                "type_id": tid,
+                "total_cost_per_unit": 100.0,
+                "time_per_unit": 60.0,
+                "me": 10,
+                "runs": 1,
+                "fetched_at": now,
+            }
+            for tid in type_ids
+        ]
+        with db.remote_engine.begin() as conn:
+            conn.execute(sqlite_insert(BuilderCosts.__table__).values(rows))
+
+    @staticmethod
+    def _read_builder_costs_ids(db) -> set[int]:
+        from sqlalchemy import text
+
+        with db.engine.connect() as conn:
+            rows = conn.execute(text("SELECT type_id FROM builder_costs")).all()
+        return {int(r[0]) for r in rows}
+
+    def test_prunes_orphans_only(self, buildcost_db, sde_db):
+        from mkts_backend.builder_costs.repository import (
+            delete_orphan_builder_costs,
+        )
+        from mkts_backend.builder_costs.watchlist_sync import (
+            add_to_build_watchlist,
+        )
+
+        # build_watchlist: {34, 35}. builder_costs: {34, 35, 99, 19810} — 99
+        # and 19810 are orphans (never in watchlist or removed from it).
+        add_to_build_watchlist(buildcost_db, sde_db, [34, 35])
+        self._seed_builder_costs(buildcost_db, [34, 35, 99, 19810])
+
+        deleted = delete_orphan_builder_costs(buildcost_db)
+
+        assert deleted == 2
+        assert self._read_builder_costs_ids(buildcost_db) == {34, 35}
+
+    def test_no_orphans_returns_zero(self, buildcost_db, sde_db):
+        from mkts_backend.builder_costs.repository import (
+            delete_orphan_builder_costs,
+        )
+        from mkts_backend.builder_costs.watchlist_sync import (
+            add_to_build_watchlist,
+        )
+
+        add_to_build_watchlist(buildcost_db, sde_db, [34, 35])
+        self._seed_builder_costs(buildcost_db, [34, 35])
+
+        deleted = delete_orphan_builder_costs(buildcost_db)
+
+        assert deleted == 0
+        assert self._read_builder_costs_ids(buildcost_db) == {34, 35}

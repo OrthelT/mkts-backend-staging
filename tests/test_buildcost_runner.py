@@ -30,6 +30,7 @@ def patched_runner():
         patch.object(runner_module, "read_jita_prices") as mock_read_prices,
         patch.object(runner_module, "run_async_fetch_builder_costs") as mock_fetch,
         patch.object(runner_module, "upsert_builder_costs") as mock_upsert,
+        patch.object(runner_module, "delete_orphan_builder_costs") as mock_prune,
         patch.object(runner_module, "log_buildcost_update") as mock_log,
     ):
         # Default to the happy path; individual tests override what they need.
@@ -47,6 +48,7 @@ def patched_runner():
         )
         mock_fetch.return_value = summary
         mock_upsert.return_value = 1
+        mock_prune.return_value = 0
 
         yield {
             "db_cls": mock_db_cls,
@@ -55,6 +57,7 @@ def patched_runner():
             "read_prices": mock_read_prices,
             "fetch": mock_fetch,
             "upsert": mock_upsert,
+            "prune": mock_prune,
             "log": mock_log,
         }
 
@@ -88,6 +91,41 @@ class TestHappyPath:
         assert result.success is False
         assert result.log_stamped is False
         assert result.fetched == 1
+
+    def test_prune_runs_after_upsert_before_log(self, patched_runner):
+        # Sequence-tracking parent mock: any call on a child shows up on the
+        # parent's mock_calls in invocation order. That's how we assert the
+        # contract "upsert → prune → log" without relying on side effects.
+        order = MagicMock()
+        order.attach_mock(patched_runner["upsert"], "upsert")
+        order.attach_mock(patched_runner["prune"], "prune")
+        order.attach_mock(patched_runner["log"], "log")
+        patched_runner["prune"].return_value = 3
+
+        result = run()
+
+        call_names = [name for name, _, _ in order.mock_calls]
+        assert call_names == ["upsert", "prune", "log"]
+        assert result.pruned == 3
+        assert result.success is True
+
+    def test_prune_failure_does_not_block_log_stamp(self, patched_runner):
+        # If prune fails the upsert is already committed and the data is
+        # fresh — the frontend stamp must still fire so it picks up the new
+        # rows. Orphan persistence is the prior-bug baseline; logging the
+        # failure is enough.
+        patched_runner["prune"].side_effect = OperationalError(
+            "prune failed", None, None
+        )
+
+        result = run()
+
+        assert patched_runner["upsert"].call_count == 1
+        assert patched_runner["prune"].call_count == 1
+        assert patched_runner["log"].call_count == 1
+        assert result.success is True
+        assert result.log_stamped is True
+        assert result.pruned == 0
 
 
 class TestEarlyReturnsSkipLog:

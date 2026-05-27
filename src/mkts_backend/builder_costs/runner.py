@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from sqlalchemy.exc import SQLAlchemyError
 
 from mkts_backend.builder_costs.repository import (
+    delete_orphan_builder_costs,
     init_buildcost_tables,
     log_buildcost_update,
     read_build_watchlist,
@@ -41,6 +42,7 @@ class RunResult:
     missing: int = 0
     watchlist_size: int = 0
     log_stamped: bool = False
+    pruned: int = 0
 
 
 def run() -> RunResult:
@@ -107,6 +109,20 @@ def run() -> RunResult:
 
     written = upsert_builder_costs(buildcost_db, summary.records)
 
+    # Prune builder_costs rows whose type_id is no longer in build_watchlist
+    # (e.g. removed via `build-watchlist remove`). Without this pass the
+    # upsert-only writer leaves orphans behind forever and the frontend keeps
+    # displaying them. Done before the updatelog stamp so the stamp reflects
+    # a fully reconciled state.
+    pruned = 0
+    try:
+        pruned = delete_orphan_builder_costs(buildcost_db)
+    except SQLAlchemyError as exc:
+        logger.error(
+            f"orphan prune failed after upserting {written} rows; "
+            f"stale builder_costs rows may persist. error={exc}"
+        )
+
     # The frontend probe depends on this stamp being current after every
     # successful refresh. If it fails *after* the upsert committed, the data
     # is fresh but the frontend will see the old timestamp and skip syncing —
@@ -127,7 +143,8 @@ def run() -> RunResult:
         f"missing={missing}, attempted={summary.attempted}, "
         f"filtered_unbuildable={summary.filtered_unbuildable}, "
         f"filtered_out_of_scope={summary.filtered_out_of_scope}, "
-        f"watchlist_size={len(items)}, log_stamped={log_stamped}"
+        f"watchlist_size={len(items)}, pruned={pruned}, "
+        f"log_stamped={log_stamped}"
     )
     return RunResult(
         success=log_stamped,
@@ -135,4 +152,5 @@ def run() -> RunResult:
         missing=missing,
         watchlist_size=len(items),
         log_stamped=log_stamped,
+        pruned=pruned,
     )

@@ -162,6 +162,35 @@ def upsert_build_watchlist(db: DatabaseConfig, items: list[dict]) -> int:
     return len(items)
 
 
+def delete_orphan_builder_costs(db: DatabaseConfig) -> int:
+    """Delete builder_costs rows whose type_id is no longer in build_watchlist.
+
+    build_watchlist is the source of truth for which items the system tracks.
+    Rows in builder_costs are only ever upserted, so removing an item from
+    build_watchlist (via ``build-watchlist remove``) would otherwise leave its
+    cost row behind and the frontend would keep displaying it. Caller must
+    ensure build_watchlist is non-empty before invoking — the runner enforces
+    this in ``run()`` before reaching the prune step.
+    """
+    engine = db.remote_engine
+    deleted = 0
+    session = Session(bind=engine)
+    try:
+        with session.begin():
+            result = session.execute(
+                text(
+                    "DELETE FROM builder_costs "
+                    "WHERE type_id NOT IN (SELECT type_id FROM build_watchlist)"
+                )
+            )
+            deleted = result.rowcount or 0
+    finally:
+        session.close()
+    if deleted:
+        logger.info(f"Pruned {deleted} orphan rows from builder_costs")
+    return deleted
+
+
 def upsert_builder_costs(db: DatabaseConfig, records: list[dict]) -> int:
     """Upsert builder_costs rows. On conflict, replaces every non-PK column."""
     if not records:
