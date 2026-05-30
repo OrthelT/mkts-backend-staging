@@ -7,7 +7,7 @@ echo "--------------"
 
 dbfiles=(
   "wcmktprod"
-  "wcmktnorth2"
+  "wcmktnewkeep"
 )
 
 
