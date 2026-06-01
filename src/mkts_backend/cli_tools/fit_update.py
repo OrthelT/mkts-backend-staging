@@ -172,7 +172,7 @@ def eft_text_to_file(eft_text: str) -> str:
     return file_path
 
 
-def get_fits_list(db_alias: str = "wcmkt", remote: bool = False) -> List[dict]:
+def get_fits_list(db_alias: str, remote: bool = False) -> List[dict]:
     """Get list of fits from doctrine_fits table."""
     db = DatabaseConfig(db_alias)
     engine = db.remote_engine if remote else db.engine

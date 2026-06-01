@@ -28,7 +28,8 @@ class DatabaseConfig:
     _testing_db_file = _service.db_testing_file
     _deployment_db_alias = _service.db_deployment_alias
     _deployment_db_file = _service.db_deployment_file
-
+    _market3_db_alias  = _service.db_market3_alias
+    _market3_db_file: str = _service.db_market3_file
 
     _db_paths = {
         _testing_db_alias: _testing_db_file,
@@ -37,6 +38,8 @@ class DatabaseConfig:
         "buildcost": _service.db_buildcost_file,
         _production_db_alias: _production_db_file,
         _deployment_db_alias: _deployment_db_file,
+        _market3_db_alias: _market3_db_alias,
+        _market3_db_file: _market3_db_file,
     }
 
     _db_turso_urls = {
@@ -46,6 +49,7 @@ class DatabaseConfig:
         "fittings_turso": os.getenv("TURSO_FITTING_URL"),
         "buildcost_turso": os.getenv("TURSO_BUILDCOST_URL"),
         _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNEWKEEP_URL"),
+        _market3_db_alias + "_turso": os.getenv("TURSO_MARKET3_URL"),
     }
 
     _db_turso_auth_tokens = {
@@ -55,6 +59,8 @@ class DatabaseConfig:
         "fittings_turso": os.getenv("TURSO_FITTING_TOKEN"),
         "buildcost_turso": os.getenv("TURSO_BUILDCOST_TOKEN"),
         _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNEWKEEP_TOKEN"),
+        _market3_db_alias + "_turso": os.getenv("TURSO_MARKET3_TOKEN"),
+
     }
 
     def __init__(

@@ -167,12 +167,16 @@ def update_watchlist_data(esi: ESIConfig, watchlist_csv: str = "data/watchlist.c
     logger.info(f"Watchlist updated: {len(df)} items")
     return True
 
-
 def init_databases(aliases: str | list[str] | None = None) -> None:
     if aliases is None:
         aliases = ["sde", "fittings"]
     elif isinstance(aliases, str):
         aliases = [aliases]
+    
+    print("########")
+    for alias in aliases:
+        print(alias)
+    print("########")
 
     for alias in aliases:
         logger.debug(f"connecting to database {alias}")

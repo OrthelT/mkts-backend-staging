@@ -58,18 +58,15 @@ turso_url_env = "TURSO_WCMKTNEWKEEP_URL"
 turso_token_env = "TURSO_WCMKTNEWKEEP_TOKEN"
 gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit" # wc_northern_supply
 
-# ORIGINAL X47L-Q CONFIG — commented out during temporary 4-HWWF transition.
-# To revert: delete the active [markets.deployment] block below, then uncomment this block.
-# [markets.deployment]
-# name = "X47L-Q - Rogue Threshold"
-# region_id = 10000023
-# system_id = 30001967
-# structure_id = 1041669946862
-# database_alias = "wcmktnorth"
-# database_file = "wcmktnorth2.db"
-# turso_url_env = "TURSO_WCMKTNORTH_URL"
-# turso_token_env = "TURSO_WCMKTNORTH_TOKEN"
-# gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit"
+[markets.market3]
+name = "X47L-Q - Rogue Threshold"
+region_id = 10000023
+system_id = 30001967
+structure_id = 1041669946862
+database_alias = "market3"
+database_file = "wcmktnorth2.db"
+turso_url_env = "TURSO_WCMKTNORTH_URL"
+turso_token_env = "TURSO_WCMKTNORTH_TOKEN"
 #
 # [markets.deployment.gsheets_worksheets]
 # market_orders = "market_orders_b9"
@@ -92,10 +89,11 @@ testing_database_alias = "wcmkttest"
 testing_database_file = "wcmkttest.db"
 testing_turso_url_env = "TURSO_WCMKTTEST_URL"
 testing_turso_token_env = "TURSO_WCMKTTEST_TOKEN"
-#deployment_database_alias = "wcmktnorth"
-#deployment_database_file = "wcmktnorth2.db"
+market3_database_alias = "market3"
+market3_database_file = "wcmktnorth2.db"
 deployment_database_alias = "wcmktnewkeep"
 deployment_database_file = "wcmktnewkeep.db"
+
 
 # Shared databases (same for all markets)
 [db.shared]
