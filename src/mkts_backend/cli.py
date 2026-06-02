@@ -200,7 +200,6 @@ def process_market_stats(market_ctx: Optional[MarketContext] = None) -> bool:
         logger.error(f"Failed to update market stats: {e}")
         return False
 
-
 def process_doctrine_stats(market_ctx: Optional[MarketContext] = None) -> bool:
     logger.info("Calculating doctrines stats")
     logger.info("syncing database")
@@ -280,7 +279,7 @@ def _ensure_jita_prices_table(market_ctx: MarketContext) -> None:
     db = DatabaseConfig(market_context=market_ctx)
     engine = db.remote_engine
     try:
-        JitaPrices.__table__.create(engine, checkfirst=True)
+        JitaPrices.__table__.create(engine, checkfirst=True) # pyright: ignore[reportAttributeAccessIssue]
     finally:
         engine.dispose()
 

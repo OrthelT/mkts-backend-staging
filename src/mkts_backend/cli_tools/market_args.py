@@ -25,8 +25,8 @@ def expand_market_alias(alias: str) -> list[str]:
 
     ``"both"`` → ``["primary", "deployment"]``; anything else → ``[alias]``.
     """
-    if alias == "both":
-        return ["primary", "deployment"]
+    if alias in ["both","all"]:
+        return ["primary", "deployment", "market3"]
     return [alias]
 
 
