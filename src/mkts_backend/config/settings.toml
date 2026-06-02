@@ -22,12 +22,9 @@ log_level = "INFO" # INFO or DEBUG
 # Each market section defines all configuration needed for that market.
 # To add a new market, create a new [markets.<alias>] section.
 
-# X47L-Q - Rogue Threshold 1041669946862
-# 4-HWWF - Full Plates Star the Temp stager 1053654548169
-
-
 [markets]
 default = "primary"
+valid_aliases = ["primary", "deployment", "market3"]
 
 [markets.primary]
 name = "4-HWWF - Platestar"
@@ -40,12 +37,10 @@ turso_url_env = "TURSO_WCMKTPROD_URL"
 turso_token_env = "TURSO_WCMKTPROD_TOKEN"
 gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit" # wc_northern_supply
 
-
 [markets.primary.gsheets_worksheets]
 market_orders = "market_orders_4h"
 market_data = "market_data_4h"
 doctrines = "doctrines_mkt_4H"
-
 
 [markets.deployment]
 name = "4-HWWF - WinterCo. Central Station"
@@ -60,22 +55,14 @@ gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3o
 
 [markets.market3]
 name = "X47L-Q - Rogue Threshold"
-region_id = 10000023
+region_id = 10000023 # Pure Blind
 system_id = 30001967
 structure_id = 1041669946862
 database_alias = "market3"
 database_file = "wcmktnorth2.db"
-turso_url_env = "TURSO_WCMKTNORTH_URL"
-turso_token_env = "TURSO_WCMKTNORTH_TOKEN"
+turso_url_env = "TURSO_MARKET3_URL"
+turso_token_env = "TURSO_MARKET3_TOKEN"
 gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit" # wc_northern_supply
-
-# [markets.deployment.gsheets_worksheets]
-# market_orders = "market_orders_b9"
-# market_data = "market_data_b9"
-# doctrines = "doctrines_mkt_b9"
-
-# TEMPORARY: paste the replacement [markets.deployment] block here, pointing at the
-# second 4-HWWF Keepstar. Use the commented block above as a template.
 
 # ============================================================================
 # SHARED DATABASE CONFIGURATION

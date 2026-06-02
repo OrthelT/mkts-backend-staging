@@ -173,11 +173,6 @@ def init_databases(aliases: str | list[str] | None = None) -> None:
     elif isinstance(aliases, str):
         aliases = [aliases]
     
-    print("########")
-    for alias in aliases:
-        print(alias)
-    print("########")
-
     for alias in aliases:
         logger.debug(f"connecting to database {alias}")
         try:

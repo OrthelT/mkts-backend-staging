@@ -5,42 +5,37 @@ from mkts_backend.config.settings_service import SettingsService
 
 service = SettingsService()
 
-MARKET_DB_MAP: dict[str, str] = {
-    "primary": service.db_production_alias,
-    "deployment": service.db_deployment_alias,
-    }
 
+
+settings_service = SettingsService()
 
 MARKET_SYNONYMS: dict[str, str] = {
     "north": "deployment",
 }
 
-VALID_MARKET_ALIASES: set[str] = {"primary", "deployment", "both"}
-
+VALID_MARKET_ALIASES: set[str] = set(settings_service.markets_raw.get("valid_aliases", []))
+MARKET_DB_MAP = {k: settings_service.markets_raw[k]["database_alias"] for k in VALID_MARKET_ALIASES}
 _UNSPECIFIED = "__unspecified__"
-
+DEFAULT_MARKET_ALIAS = settings_service.default_market_alias
 
 def expand_market_alias(alias: str) -> list[str]:
     """Expand a market alias into the list of concrete markets to act on.
 
-    ``"both"`` → ``["primary", "deployment"]``; anything else → ``[alias]``.
+    ``"both" | "all"`` → ``["primary", "deployment", "market3"]``; anything else → ``[alias]``.
     """
-    if alias in ["both","all"]:
-        return ["primary", "deployment", "market3"]
-    return [alias]
-
+    return list(VALID_MARKET_ALIASES) if alias in ["both", "all"] else [alias]
 
 def resolve_market_alias(args: list[str]) -> str | None:
     """Return the explicit market alias if the user specified one, else ``None``.
 
-    Distinguishes "user gave no flag" from "user explicitly picked --primary",
+    Distinguishes "user gave no flag" from "user explicitly picked --market=<alias>",
     which the subcommand-default logic in ``parse_args`` needs.
     """
     resolved = parse_market_args(args, default=_UNSPECIFIED)
     return None if resolved == _UNSPECIFIED else resolved
 
 
-def resolve_market_alias_interactive(default: str = "primary") -> str:
+def resolve_market_alias_interactive(default: str = DEFAULT_MARKET_ALIAS) -> str:
     """Prompt the user to pick a market alias when the current choice is ambiguous.
 
     Returns one of ``primary`` / ``deployment`` / ``both``. In non-TTY

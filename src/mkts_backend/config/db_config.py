@@ -38,8 +38,7 @@ class DatabaseConfig:
         "buildcost": _service.db_buildcost_file,
         _production_db_alias: _production_db_file,
         _deployment_db_alias: _deployment_db_file,
-        _market3_db_alias: _market3_db_alias,
-        _market3_db_file: _market3_db_file,
+        _market3_db_alias: _market3_db_file,
     }
 
     _db_turso_urls = {

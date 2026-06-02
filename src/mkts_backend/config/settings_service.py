@@ -31,7 +31,6 @@ _DEFAULT_SETTINGS_PATH = Path(__file__).parent / "settings.toml"
 _cached_settings: dict | None = None
 _cached_settings_view: MappingProxyType | None = None
 
-
 def _load_settings(path: Optional[Path] = None) -> dict:
     """Load and cache the TOML file as-is.
 
@@ -53,7 +52,6 @@ def _load_settings(path: Optional[Path] = None) -> dict:
     _cached_settings_view = MappingProxyType(_cached_settings)
     return _cached_settings
 
-
 def _read_settings_file(settings_path: Path) -> dict:
     try:
         with open(settings_path, "rb") as f:
@@ -65,13 +63,11 @@ def _read_settings_file(settings_path: Path) -> dict:
         logger.error("Failed to load settings from %s: %s", settings_path, e)
         raise
 
-
 def clear_cache() -> None:
     """Drop the cached settings dict. Intended for tests that mutate the TOML."""
     global _cached_settings, _cached_settings_view
     _cached_settings = None
     _cached_settings_view = None
-
 
 class SettingsService:
     """Read-only accessor for application settings.
@@ -248,7 +244,6 @@ class SettingsService:
 
 # ---- Domain helpers ----
 
-
 def get_all_market_contexts() -> dict[str, "MarketContext"]:
     """Return ``{alias: MarketContext}`` for every market in settings.
 
@@ -265,7 +260,6 @@ def get_all_market_contexts() -> dict[str, "MarketContext"]:
             continue
         contexts[alias] = MarketContext.from_settings(alias)
     return contexts
-
 
 def get_all_characters() -> list["CharacterConfig"]:
     """Return all configured characters.
