@@ -26,6 +26,22 @@ log_level = "DEBUG" # INFO or DEBUG
 default = "primary"
 
 [markets.primary]
+name = "4-HWWF - Platestar"
+region_id = 10000003          # Vale of Silent
+system_id = 30000240
+structure_id = 1053654548169
+database_alias = "wcmktprod"
+database_file = "wcmktprodtest.db"
+turso_url_env = "TURSO_WCMKTPROD_URL"
+turso_token_env = "TURSO_WCMKTPROD_TOKEN"
+gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit" # wc_northern_supply
+
+
+[markets.primary.gsheets_worksheets]
+market_orders = "market_orders_4h"
+market_data = "market_data_4h"
+doctrines = "doctrines_mkt_4H"
+
 [markets.deployment]
 name = "X47L-Q - Rogue Threshold"
 region_id = 10000023
