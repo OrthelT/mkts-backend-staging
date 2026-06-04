@@ -29,8 +29,8 @@ class MarketContext:
     region_id: int
     system_id: int
     structure_id: int
-    database_alias: str         # "wcmktprod" or "wcmktnorth"
-    database_file: str          # "wcmktprod.db" or "wcmktnorth2.db"
+    database_alias: str         # market's configured DB alias, e.g. "wcmktnewkeep"
+    database_file: str          # market's configured DB file, e.g. "wcmktnewkeep.db"
     turso_url_env: str          # env var name for Turso URL
     turso_token_env: str        # env var name for Turso token
     gsheets_url: str
@@ -65,13 +65,13 @@ class MarketContext:
         turso_url_env = market_config["turso_url_env"]
         turso_token_env = market_config["turso_token_env"]
 
-        if environment == "development" and alias == "primary":
-            db_section = service.db_section
-            db_alias = db_section.get("testing_database_alias", db_alias)
-            db_file = db_section.get("testing_database_file", db_file)
-            turso_url_env = db_section.get("testing_turso_url_env", turso_url_env)
-            turso_token_env = db_section.get("testing_turso_token_env", turso_token_env)
-            logger.info(f"Development environment: using testing database '{db_alias}' for primary market")
+        if environment == "development" and alias == service.default_market_alias:
+            testing = service.shared_testing
+            db_alias = testing["database_alias"]
+            db_file = testing["database_file"]
+            turso_url_env = testing["turso_url_env"]
+            turso_token_env = testing["turso_token_env"]
+            logger.info(f"Development environment: using testing database '{db_alias}' for default market '{alias}'")
 
         context = cls(
             alias=alias,

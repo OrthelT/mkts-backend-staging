@@ -68,36 +68,6 @@ class TestDatabaseWriteIsolation:
         assert result.iloc[0]["type_name"] == "Test Item"
 
 
-class TestBackwardCompatibility:
-    """Tests for backward compatibility with legacy code."""
-
-    def test_legacy_alias_initialization_works(self):
-        """Test that legacy alias-based initialization still works."""
-        from mkts_backend.config.db_config import DatabaseConfig
-
-        # Legacy way of creating database config
-        db = DatabaseConfig("wcmkt")
-
-        # wcmkt maps to wcmktprod in the new configuration
-        assert db.alias in ["wcmkt", "wcmktprod"]
-
-    def test_none_market_context_uses_defaults(self):
-        """Test that None market_ctx uses default behavior."""
-        from mkts_backend.db.db_handlers import _get_db as handlers_get_db
-        from mkts_backend.db.db_queries import _get_db as queries_get_db
-        from mkts_backend.processing.data_processing import _get_db as processing_get_db
-
-        # All should return default database (wcmkt -> wcmktprod)
-        h_db = handlers_get_db(None)
-        q_db = queries_get_db(None)
-        p_db = processing_get_db(None)
-
-        # Default alias is wcmkt which maps to wcmktprod
-        assert h_db.alias in ["wcmkt", "wcmktprod"]
-        assert q_db.alias in ["wcmkt", "wcmktprod"]
-        assert p_db.alias in ["wcmkt", "wcmktprod"]
-
-
 class TestFunctionSignatures:
     """Tests to verify all pipeline functions accept a market_ctx parameter."""
 

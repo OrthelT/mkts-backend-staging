@@ -234,15 +234,12 @@ def display_fits_table(fits: List[dict]) -> None:
     table.add_column("Fit Name", style="white", min_width=30)
     table.add_column("Ship", style="cyan", min_width=20)
     table.add_column("Doctrine", style="green", min_width=20)
-    table.add_column("Primary", justify="right", style="green", width=9)
-    table.add_column("North", justify="right", style="yellow", width=9)
+    table.add_column("Target", justify="right", style="green", width=9)
     table.add_column("Friendly", style="dim", width=18)
 
     for fit in fits:
-        primary_target = fit.get("primary_target")
-        north_target = fit.get("north_target")
-        primary_str = str(primary_target) if primary_target is not None else "[dim]--[/dim]"
-        north_str = str(north_target) if north_target is not None else "[dim]--[/dim]"
+        target = fit.get("target")
+        target_str = str(target) if target is not None else "[dim]--[/dim]"
         friendly = fit.get("friendly_name") or "--"
 
         table.add_row(
@@ -250,8 +247,7 @@ def display_fits_table(fits: List[dict]) -> None:
             fit["fit_name"],
             fit["ship_name"],
             fit["doctrine_name"],
-            primary_str,
-            north_str,
+            target_str,
             friendly,
         )
 
@@ -640,7 +636,7 @@ def assign_market_command(
         rows = _get_doctrine_fits_rows(fit_id, db_alias, False, doctrine_id)
         if not rows:
             # Fit may live in the other market database — search all aliases
-            for fallback in ("wcmktprod", "wcmktnorth"):
+            for fallback in _configured_market_db_aliases():
                 if fallback == db_alias:
                     continue
                 rows = _get_doctrine_fits_rows(fit_id, fallback, False, doctrine_id)
@@ -717,7 +713,7 @@ def assign_doctrine_market(
     for fid in fit_ids:
         rows = _get_doctrine_fits_rows(fid, db_alias, False, doctrine_id)
         if not rows:
-            for fallback in ("wcmktprod", "wcmktnorth"):
+            for fallback in _configured_market_db_aliases():
                 if fallback == db_alias:
                     continue
                 rows = _get_doctrine_fits_rows(fid, fallback, False, doctrine_id)
@@ -918,12 +914,12 @@ def _get_remote_market_flags(
     fit_id: int,
     doctrine_id: int,
 ) -> List[str]:
-    """Fetch market_flag for a (fit_id, doctrine_id) from both remote databases.
+    """Fetch market_flag for a (fit_id, doctrine_id) from all configured remote markets.
 
-    Returns a list of flag values found (0-2 entries).
+    Returns a list of flag values found (one per market that has the fit).
     """
     flags = []
-    for target in ("wcmktprod", "wcmktnorth"):
+    for target in _configured_market_db_aliases():
         try:
             db = DatabaseConfig(target)
             engine = db.remote_engine
@@ -1493,7 +1489,7 @@ def unassign_market_command(
     try:
         rows = _get_doctrine_fits_rows(fit_id, db_alias, remote, doctrine_id)
         if not rows:
-            for fallback in ("wcmktprod", "wcmktnorth"):
+            for fallback in _configured_market_db_aliases():
                 if fallback == db_alias:
                     continue
                 rows = _get_doctrine_fits_rows(fit_id, fallback, remote, doctrine_id)
@@ -1565,7 +1561,7 @@ def unassign_doctrine_market(
     for fid in fit_ids:
         rows = _get_doctrine_fits_rows(fid, db_alias, remote, doctrine_id)
         if not rows:
-            for fallback in ("wcmktprod", "wcmktnorth"):
+            for fallback in _configured_market_db_aliases():
                 if fallback == db_alias:
                     continue
                 rows = _get_doctrine_fits_rows(fid, fallback, remote, doctrine_id)
@@ -1618,21 +1614,9 @@ def unassign_doctrine_market(
 
 
 def list_fits_command(db_alias: str = "wcmkt", remote: bool = False) -> None:
-    """List all fits, showing targets for both primary and north markets."""
-    primary_fits = get_fits_list(db_alias="wcmkt", remote=remote)
-    north_fits = get_fits_list(db_alias="wcmktnorth", remote=remote)
-
-    merged: dict[int, dict] = {}
-    for fit in primary_fits:
-        merged[fit["fit_id"]] = {**fit, "primary_target": fit["target"], "north_target": None}
-    for fit in north_fits:
-        fid = fit["fit_id"]
-        if fid in merged:
-            merged[fid]["north_target"] = fit["target"]
-        else:
-            merged[fid] = {**fit, "primary_target": None, "north_target": fit["target"]}
-
-    fits = sorted(merged.values(), key=lambda f: (f["ship_name"], f["fit_name"]))
+    """List all doctrine fits and their target quantity for the given market."""
+    fits = get_fits_list(db_alias=db_alias, remote=remote)
+    fits.sort(key=lambda f: (f["ship_name"], f["fit_name"]))
     if fits:
         display_fits_table(fits)
         console.print(f"\n[dim]Total: {len(fits)} fits[/dim]")
@@ -3116,15 +3100,18 @@ def fit_update_command(
             mkt_engine.dispose()
 
             if not rows:
-                # Fallback: check wcmktnorth
-                db_north = DatabaseConfig("wcmktnorth")
-                north_engine = db_north.remote_engine if use_remote else db_north.engine
-                with north_engine.connect() as conn:
-                    rows = conn.execute(
-                        text("SELECT doctrine_id, fit_name, ship_name, target FROM doctrine_fits WHERE fit_id = :fit_id"),
-                        {"fit_id": fit_id},
-                    ).fetchall()
-                north_engine.dispose()
+                # Fallback: check the other configured markets.
+                for fallback in _configured_market_db_aliases():
+                    fb_db = DatabaseConfig(fallback)
+                    fb_engine = fb_db.remote_engine if use_remote else fb_db.engine
+                    with fb_engine.connect() as conn:
+                        rows = conn.execute(
+                            text("SELECT doctrine_id, fit_name, ship_name, target FROM doctrine_fits WHERE fit_id = :fit_id"),
+                            {"fit_id": fit_id},
+                        ).fetchall()
+                    fb_engine.dispose()
+                    if rows:
+                        break
 
             if not rows:
                 console.print(f"[red]Error: fit {fit_id} not found in doctrine_fits[/red]")

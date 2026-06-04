@@ -186,9 +186,8 @@ Behavior:
 | `[app]` | Environment + log level |
 | `[esi]` | User-Agent, compatibility date |
 | `[auth]` | OAuth callback + token storage |
-| `[markets.<alias>]` | Per-market configuration (primary, deployment) — preferred over legacy `[market_data]` |
-| `[market_data]` | **Legacy.** Flat-keyed market values still read by `esi_config.py` class-level lookups. Falls back to deriving from `[markets.*]` if absent. |
-| `[db]` | Database aliases and shared file paths (`[db.shared]`) |
+| `[markets.<alias>]` | Per-market configuration (primary, deployment, market3) — the **single source** for all per-market DB config (alias, file, turso env vars, gsheets) |
+| `[shared]` | Market-independent databases (`sde_file`, `fittings_file`, `buildcost_file`) and `[shared.testing]` — the dev/test DB the default market routes to when `environment="development"` |
 | `[wipe_replace]` | `tables` — list of tables fully wiped/re-inserted on each upsert run (vs. incrementally upserted). Useful for resetting deployment history when switching regions. |
 | `[google_sheets]` | Sheets integration toggle + legacy URLs |
 | `[buildcost]` | `add_structure` CLI source sheet |

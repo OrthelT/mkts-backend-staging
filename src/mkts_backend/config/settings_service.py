@@ -187,60 +187,60 @@ class SettingsService:
         """Raw [markets] section as a read-only view, including the 'default' key."""
         return MappingProxyType(self.settings.get("markets", {}))
 
-    # ---- [db] ----
-
-    @property
-    def db_section(self) -> MappingProxyType:
-        """Raw [db] section as a read-only view."""
-        return MappingProxyType(self.settings.get("db", {}))
-
-    @property
-    def db_production_alias(self) -> str:
-        return self._require("db", "production_database_alias") # pyright: ignore[reportReturnType]
-
-    @property
-    def db_production_file(self) -> str:
-        return self._require("db", "production_database_file") # pyright: ignore[reportReturnType]
-
-    @property
-    def db_testing_alias(self) -> str:
-        return self._require("db", "testing_database_alias") # pyright: ignore[reportReturnType]
-
-    @property
-    def db_testing_file(self) -> str:
-        return self._require("db", "testing_database_file") # pyright: ignore[reportReturnType]
-
-    @property
-    def db_deployment_alias(self) -> str:
-        return self._require("db", "deployment_database_alias") # pyright: ignore[reportReturnType]
-
-    @property
-    def db_deployment_file(self) -> str:
-        return self._require("db", "deployment_database_file") # pyright: ignore[reportReturnType]
+    # ---- [shared] (market-independent databases) ----
 
     @property
     def db_sde_file(self) -> str:
-        return self._require("db", "shared", "sde_file") # pyright: ignore[reportReturnType]
+        return self._require("shared", "sde_file") # pyright: ignore[reportReturnType]
 
     @property
     def db_fittings_file(self) -> str:
-        return self._require("db", "shared", "fittings_file") # pyright: ignore[reportReturnType]
+        return self._require("shared", "fittings_file") # pyright: ignore[reportReturnType]
 
     @property
     def db_buildcost_file(self) -> str:
-        return self._require("db", "shared", "buildcost_file") # pyright: ignore[reportReturnType]
+        return self._require("shared", "buildcost_file") # pyright: ignore[reportReturnType]
 
     @property
-    def db_cli_cache_file(self) -> str:
-        return self._require("db", "shared", "cli_cache_file") # pyright: ignore[reportReturnType]
+    def shared_testing(self) -> dict:
+        """The dev/test database block ([shared.testing])."""
+        return dict(self._require("shared", "testing"))  # type: ignore[arg-type]
 
-    @property
-    def db_market3_file(self) -> str:
-        return self._require("db", "market3_database_file") # pyright: ignore[reportReturnType]
-    
-    @property
-    def db_market3_alias(self) -> str:
-        return self._require("db", "market3_database_alias") # pyright: ignore[reportReturnType]
+    # ---- market database routing (single source for DatabaseConfig) ----
+
+    def market_db_alias(self, alias: str) -> str:
+        """Production database alias for a market (from [markets.<alias>])."""
+        return self._require("markets", alias, "database_alias") # pyright: ignore[reportReturnType]
+
+    def default_market_db_alias(self) -> str:
+        """Database alias of the default market (markets.default)."""
+        return self.market_db_alias(self.default_market_alias)
+
+    def database_routing(self) -> dict[str, dict]:
+        """``alias -> {file, turso_url_env, turso_token_env}`` for every market
+        plus the shared test DB.
+
+        Single source for DatabaseConfig's alias/path/turso maps, replacing the
+        old [db] duplication. Derived from [markets.*] + [shared.testing], so a
+        market can never disagree with itself across two config sections again.
+        """
+        routing: dict[str, dict] = {}
+        for alias, cfg in self.settings.get("markets", {}).items():
+            if alias == "default" or not isinstance(cfg, dict):
+                continue
+            routing[cfg["database_alias"]] = {
+                "file": cfg["database_file"],
+                "turso_url_env": cfg.get("turso_url_env"),
+                "turso_token_env": cfg.get("turso_token_env"),
+            }
+        testing = self.settings.get("shared", {}).get("testing")
+        if testing:
+            routing[testing["database_alias"]] = {
+                "file": testing["database_file"],
+                "turso_url_env": testing.get("turso_url_env"),
+                "turso_token_env": testing.get("turso_token_env"),
+            }
+        return routing
 
 # ---- Domain helpers ----
 

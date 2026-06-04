@@ -57,16 +57,29 @@ class TestESIConfigRouting:
 
 
 class TestBackwardCompatibleDefaults:
-    def test_legacy_alias_initialization_works(self):
-        """Legacy alias-based DatabaseConfig (no market_context) still resolves."""
+    def test_legacy_alias_resolves_to_default_market_db(self, monkeypatch):
+        """Legacy DatabaseConfig('wcmkt') routes to the default market's DB.
+
+        After collapsing [db] onto [markets], the legacy/default path resolves
+        through markets.default (primary) rather than a separate [db] alias —
+        asserted against MarketContext so it tracks config, not a literal.
+        """
         from mkts_backend.config.db_config import DatabaseConfig
+        from mkts_backend.config.market_context import MarketContext
+        from mkts_backend.config.settings_service import clear_cache
 
+        monkeypatch.setenv("MKTS_ENVIRONMENT", "production")
+        clear_cache()
         db = DatabaseConfig("wcmkt")
-        assert db.alias in ["wcmkt", "wcmktprod"]
+        assert db.alias == MarketContext.from_settings("primary").database_alias
 
-    def test_get_db_without_context_uses_default(self):
-        """_get_db(None) falls back to the default database."""
+    def test_get_db_without_context_uses_default_market_db(self, monkeypatch):
+        """_get_db(None) falls back to the default market's database."""
         from mkts_backend.db.db_handlers import _get_db
+        from mkts_backend.config.market_context import MarketContext
+        from mkts_backend.config.settings_service import clear_cache
 
+        monkeypatch.setenv("MKTS_ENVIRONMENT", "production")
+        clear_cache()
         db = _get_db(None)
-        assert db.alias in ["wcmkt", "wcmktprod"]
+        assert db.alias == MarketContext.from_settings("primary").database_alias
