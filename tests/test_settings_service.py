@@ -53,7 +53,7 @@ def test_get_all_market_contexts_returns_primary_and_deployment():
     assert "deployment" in contexts
     assert "default" not in contexts
     assert contexts["primary"].database_alias == "wcmktprod"
-    assert contexts["deployment"].database_alias == "wcmktnorth"
+    assert contexts["deployment"].database_alias == "wcmktnewkeep"
 
 
 def test_get_all_characters_returns_configured_characters():

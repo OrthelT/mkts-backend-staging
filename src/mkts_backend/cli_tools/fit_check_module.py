@@ -118,7 +118,7 @@ def module_command(
         console.print(f"[red]Error: {e}[/red]")
         return False
 
-    show_both = market_alias == "both"
+    show_both = market_alias in ("both", "all")
 
     if show_both:
         try:

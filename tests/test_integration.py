@@ -27,13 +27,13 @@ class TestFullMarketContextFlow:
         assert "wcmkttest" in db.path
 
     def test_deployment_market_flow_uses_correct_database(self, deployment_market_context):
-        """Test that deployment market operations use wcmktnorth database."""
+        """Test that deployment market operations use wcmktnewkeep database."""
         from mkts_backend.config.db_config import DatabaseConfig
 
         db = DatabaseConfig(market_context=deployment_market_context)
 
-        assert db.alias == "wcmktnorth"
-        assert "wcmktnorth" in db.path
+        assert db.alias == "wcmktnewkeep"
+        assert "wcmktnewkeep" in db.path
 
 
 class TestMarketContextConfigChain:
@@ -65,9 +65,9 @@ class TestMarketContextConfigChain:
         esi = ESIConfig(market_context=deployment_market_context)
         gsheets = GoogleSheetConfig(market_context=deployment_market_context)
 
-        assert db.alias == "wcmktnorth"
-        assert esi.region_id == 10000023
-        assert esi.structure_id == 1041669946862
+        assert db.alias == "wcmktnewkeep"
+        assert esi.region_id == 10000003
+        assert esi.structure_id == 1053970513596
         assert gsheets.google_sheet_url == deployment_market_context.gsheets_url
 
 
@@ -258,8 +258,8 @@ class TestMarketContextEnvironmentVariables:
         url_env = deployment_market_context.turso_url_env
         token_env = deployment_market_context.turso_token_env
 
-        assert url_env == "TURSO_WCMKTNORTH_URL"
-        assert token_env == "TURSO_WCMKTNORTH_TOKEN"
+        assert url_env == "TURSO_WCMKTNEWKEEP_URL"
+        assert token_env == "TURSO_WCMKTNEWKEEP_TOKEN"
 
         # With mocked env vars
         assert os.environ.get(url_env) == "libsql://test-deployment.turso.io"
@@ -285,7 +285,7 @@ class TestConcurrentMarketOperations:
             if i % 2 == 0:
                 assert config.alias == "wcmkttest"
             else:
-                assert config.alias == "wcmktnorth"
+                assert config.alias == "wcmktnewkeep"
 
     def test_market_context_thread_safety(self, primary_market_context, deployment_market_context):
         """Test that market contexts maintain isolation in rapid succession."""
@@ -305,4 +305,4 @@ class TestConcurrentMarketOperations:
             if market == "primary":
                 assert alias == "wcmkttest"
             else:
-                assert alias == "wcmktnorth"
+                assert alias == "wcmktnewkeep"

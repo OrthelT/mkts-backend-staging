@@ -194,9 +194,9 @@ def _register_all(reg: CommandRegistry) -> None:
             return False
 
         # Resolve the effective market_alias and its single-DB fallback.
-        # Priority: explicit --db-alias > explicit --market (incl. "both") > prompt/default.
-        # Explicit --market=both is preserved as-is; subcommands that iterate
-        # markets use _configured_market_db_aliases(market_flag) and need "both"
+        # Priority: explicit --db-alias > explicit --market (incl. "all") > prompt/default.
+        # Explicit --market=all is preserved as-is; subcommands that iterate
+        # markets use _configured_market_db_aliases(market_flag) and need "all"
         # intact. db_alias is only the single-DB fallback for subcommands that
         # require one concrete DB.
         db_alias_override = p.get_string("db-alias")
@@ -210,7 +210,7 @@ def _register_all(reg: CommandRegistry) -> None:
                 else:
                     logger.warning(
                         "fit-update: no --market specified in non-TTY context; "
-                        "defaulting to 'primary'. Pass --market=primary/deployment/both "
+                        "defaulting to 'primary'. Pass --market=primary/deployment/all "
                         "explicitly to silence this warning."
                     )
                     market_alias = "primary"
@@ -537,7 +537,7 @@ def _register_all(reg: CommandRegistry) -> None:
         "sync",
         _handle_sync,
         description="Sync local mirrors from remote (markets + buildcost; --no-buildcost to skip)",
-        default_market="both",
+        default_market="all",
     )
 
     # ── validate ────────────────────────────────────────────────
@@ -607,8 +607,8 @@ def _register_all(reg: CommandRegistry) -> None:
         "update-markets",
         _handle_update_markets,
         aliases=["update"],
-        description="Run full market-data update pipeline (both markets by default)",
-        default_market="both",
+        description="Run full market-data update pipeline (all markets by default)",
+        default_market="all",
     )
 
     # ── parse-items ─────────────────────────────────────────────

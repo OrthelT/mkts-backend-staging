@@ -179,13 +179,15 @@ def upsert_doctrine_fits(
         doctrine_fit: DoctrineFit dataclass with fit information
         remote: Whether to use remote database
         db_alias: Database alias to use
-        market_flag: Market assignment ('primary', 'deployment', or 'both')
+        market_flag: Market assignment ('primary', 'deployment', or 'all')
         engine: Optional shared engine (caller manages lifecycle)
         conn: Optional caller-owned transactional connection. When provided,
             the function participates in the caller's transaction and does
             NOT commit; caller's ``with engine.begin()`` commits on exit.
     """
     _require_single_context(conn, engine)
+    if market_flag == "all":
+        market_flag = "both"  # canonical stored value (no DB migration)
     def _do(c):
         existing = c.execute(
             text("SELECT id FROM doctrine_fits WHERE fit_id = :fit_id AND doctrine_id = :doctrine_id"),
@@ -252,7 +254,7 @@ def update_fit_market_flag(
 
     Args:
         fit_id: The fit ID to update
-        market_flag: New market assignment ('primary', 'deployment', or 'both')
+        market_flag: New market assignment ('primary', 'deployment', or 'all')
         remote: Whether to use remote database
         db_alias: Database alias to use. When ``conn`` is passed without an
             explicit ``db_alias``, log attribution uses ``[conn]`` to avoid
@@ -267,8 +269,10 @@ def update_fit_market_flag(
         True if update succeeded, False if fit not found
     """
     _require_single_context(conn, engine)
-    if market_flag not in ("primary", "deployment", "both"):
-        raise ValueError(f"Invalid market_flag: {market_flag}. Must be 'primary', 'deployment', or 'both'")
+    if market_flag not in ("primary", "deployment", "both", "all"):
+        raise ValueError(f"Invalid market_flag: {market_flag}. Must be 'primary', 'deployment', or 'all'")
+    if market_flag == "all":
+        market_flag = "both"  # canonical stored value (no DB migration)
 
     def _do(c):
         if doctrine_id is not None:

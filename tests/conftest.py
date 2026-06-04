@@ -55,9 +55,15 @@ def mock_env_vars():
         # Primary market (development/testing)
         "TURSO_WCMKTTEST_URL": "libsql://test-wcmkttest.turso.io",
         "TURSO_WCMKTTEST_TOKEN": "test-wcmkttest-token",
-        # Deployment market
-        "TURSO_WCMKTNORTH_URL": "libsql://test-deployment.turso.io",
-        "TURSO_WCMKTNORTH_TOKEN": "test-deployment-token",
+        # Deployment market (WinterCo Keepstar)
+        "TURSO_WCMKTNEWKEEP_URL": "libsql://test-deployment.turso.io",
+        "TURSO_WCMKTNEWKEEP_TOKEN": "test-deployment-token",
+        # market3 (X47L-Q)
+        "TURSO_MARKET3_URL": "libsql://test-market3.turso.io",
+        "TURSO_MARKET3_TOKEN": "test-market3-token",
+        # Legacy north env vars (kept for any remaining references)
+        "TURSO_WCMKTNORTH_URL": "libsql://test-north.turso.io",
+        "TURSO_WCMKTNORTH_TOKEN": "test-north-token",
         # SDE and fittings
         "TURSO_SDE_URL": "libsql://test-sde.turso.io",
         "TURSO_SDE_TOKEN": "test-sde-token",
@@ -76,7 +82,7 @@ def mock_env_vars():
 def temp_db_dir(tmp_path):
     """Create a temporary directory with mock database files."""
     # Create mock database files
-    for db_name in ["wcmktprod.db", "wcmktnorth2.db", "wcmkttest.db", "sde.db", "wcfitting.db"]:
+    for db_name in ["wcmktprod.db", "wcmktnorth2.db", "wcmktnewkeep.db", "wcmkttest.db", "sde.db", "wcfitting.db"]:
         db_path = tmp_path / db_name
         conn = sqlite3.connect(str(db_path))
         # Create minimal schema for testing
@@ -187,7 +193,9 @@ def mock_database_config(temp_db_dir):
             self.alias = alias
             if alias in ["wcmkt", "wcmktprod"]:
                 self.path = str(temp_db_dir / "wcmktprod.db")
-            elif alias in ["wcmktnorth", "wcmktnorth2"]:
+            elif alias == "wcmktnewkeep":
+                self.path = str(temp_db_dir / "wcmktnewkeep.db")
+            elif alias in ["wcmktnorth", "wcmktnorth2", "market3"]:
                 self.path = str(temp_db_dir / "wcmktnorth2.db")
             elif alias == "sde":
                 self.path = str(temp_db_dir / "sde.db")

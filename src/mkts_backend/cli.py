@@ -436,8 +436,8 @@ def _run_market_pipeline(
         )
 
 
-def run_market_update(history: bool = False, market_alias: str = "both") -> bool:
-    """Run the full market-data update pipeline for one or both markets.
+def run_market_update(history: bool = False, market_alias: str = "all") -> bool:
+    """Run the full market-data update pipeline for one or all markets.
 
     Handles env validation, DB init, Jita-price fetch, and per-market pipeline.
     Returns True on success; exits non-zero on setup failures.

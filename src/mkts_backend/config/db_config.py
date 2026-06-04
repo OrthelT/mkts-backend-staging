@@ -48,6 +48,7 @@ class DatabaseConfig:
         "fittings_turso": os.getenv("TURSO_FITTING_URL"),
         "buildcost_turso": os.getenv("TURSO_BUILDCOST_URL"),
         _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNEWKEEP_URL"),
+        # env var matches settings.toml [markets.market3] turso_url_env.
         _market3_db_alias + "_turso": os.getenv("TURSO_MARKET3_URL"),
     }
 
@@ -59,7 +60,6 @@ class DatabaseConfig:
         "buildcost_turso": os.getenv("TURSO_BUILDCOST_TOKEN"),
         _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNEWKEEP_TOKEN"),
         _market3_db_alias + "_turso": os.getenv("TURSO_MARKET3_TOKEN"),
-
     }
 
     def __init__(

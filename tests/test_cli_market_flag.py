@@ -33,10 +33,27 @@ class TestParseMarketArgs:
 
         assert parse_market_args(["--primary"]) == "primary"
 
-    def test_both_shorthand(self):
+    def test_all_shorthand(self):
         from mkts_backend.cli_tools.market_args import parse_market_args
 
-        assert parse_market_args(["--both"]) == "both"
+        assert parse_market_args(["--all"]) == "all"
+
+    def test_both_shorthand_is_legacy_synonym_for_all(self):
+        from mkts_backend.cli_tools.market_args import parse_market_args
+
+        # "--both" predates the third market; it normalizes to the "all" alias.
+        assert parse_market_args(["--both"]) == "all"
+
+    def test_market_all_and_both_normalize_to_all(self):
+        from mkts_backend.cli_tools.market_args import parse_market_args
+
+        assert parse_market_args(["--market=all"]) == "all"
+        assert parse_market_args(["--market=both"]) == "all"
+
+    def test_market_market3(self):
+        from mkts_backend.cli_tools.market_args import parse_market_args
+
+        assert parse_market_args(["--market=market3"]) == "market3"
 
     def test_default_when_unspecified(self):
         from mkts_backend.cli_tools.market_args import parse_market_args
@@ -48,6 +65,26 @@ class TestParseMarketArgs:
 
         with pytest.raises(SystemExit):
             parse_market_args(["--market=invalid_market"])
+
+
+class TestExpandMarketAlias:
+    """Meta-alias expansion to concrete market lists."""
+
+    def test_all_expands_to_every_configured_market(self):
+        from mkts_backend.cli_tools.market_args import expand_market_alias
+
+        assert set(expand_market_alias("all")) == {"primary", "deployment", "market3"}
+
+    def test_both_is_legacy_synonym_for_all(self):
+        from mkts_backend.cli_tools.market_args import expand_market_alias
+
+        assert set(expand_market_alias("both")) == {"primary", "deployment", "market3"}
+
+    def test_single_market_passthrough(self):
+        from mkts_backend.cli_tools.market_args import expand_market_alias
+
+        assert expand_market_alias("primary") == ["primary"]
+        assert expand_market_alias("market3") == ["market3"]
 
 
 class TestResolveMarketAlias:
@@ -64,7 +101,8 @@ class TestResolveMarketAlias:
 
         assert resolve_market_alias(["--primary"]) == "primary"
         assert resolve_market_alias(["--market=deployment"]) == "deployment"
-        assert resolve_market_alias(["--both"]) == "both"
+        assert resolve_market_alias(["--all"]) == "all"
+        assert resolve_market_alias(["--both"]) == "all"
 
 
 class TestCliListMarketsCommand:

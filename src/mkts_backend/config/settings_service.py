@@ -196,51 +196,51 @@ class SettingsService:
 
     @property
     def db_production_alias(self) -> str:
-        return self._require("db", "production_database_alias") # pyright # pyright: ignore[reportReturnType]
+        return self._require("db", "production_database_alias") # pyright: ignore[reportReturnType]
 
     @property
     def db_production_file(self) -> str:
-        return self._require("db", "production_database_file") # pyright # pyright: ignore[reportReturnType]
+        return self._require("db", "production_database_file") # pyright: ignore[reportReturnType]
 
     @property
     def db_testing_alias(self) -> str:
-        return self._require("db", "testing_database_alias") # pyright # pyright: ignore[reportReturnType]
+        return self._require("db", "testing_database_alias") # pyright: ignore[reportReturnType]
 
     @property
     def db_testing_file(self) -> str:
-        return self._require("db", "testing_database_file") # pyright # pyright: ignore[reportReturnType]
+        return self._require("db", "testing_database_file") # pyright: ignore[reportReturnType]
 
     @property
     def db_deployment_alias(self) -> str:
-        return self._require("db", "deployment_database_alias") # pyright # pyright: ignore[reportReturnType]
+        return self._require("db", "deployment_database_alias") # pyright: ignore[reportReturnType]
 
     @property
     def db_deployment_file(self) -> str:
-        return self._require("db", "deployment_database_file") # pyright # pyright: ignore[reportReturnType]
+        return self._require("db", "deployment_database_file") # pyright: ignore[reportReturnType]
 
     @property
     def db_sde_file(self) -> str:
-        return self._require("db", "shared", "sde_file") # pyright # pyright: ignore[reportReturnType]
+        return self._require("db", "shared", "sde_file") # pyright: ignore[reportReturnType]
 
     @property
     def db_fittings_file(self) -> str:
-        return self._require("db", "shared", "fittings_file") # pyright # pyright: ignore[reportReturnType]
+        return self._require("db", "shared", "fittings_file") # pyright: ignore[reportReturnType]
 
     @property
     def db_buildcost_file(self) -> str:
-        return self._require("db", "shared", "buildcost_file") # pyright # pyright: ignore[reportReturnType]
+        return self._require("db", "shared", "buildcost_file") # pyright: ignore[reportReturnType]
 
     @property
     def db_cli_cache_file(self) -> str:
-        return self._require("db", "shared", "cli_cache_file") # pyright # pyright: ignore[reportReturnType]
+        return self._require("db", "shared", "cli_cache_file") # pyright: ignore[reportReturnType]
 
     @property
     def db_market3_file(self) -> str:
-        return self._require("db", "market3_database_file") # pyright # pyright: ignore[reportReturnType]
+        return self._require("db", "market3_database_file") # pyright: ignore[reportReturnType]
     
     @property
     def db_market3_alias(self) -> str:
-        return self._require("db", "market3_database_alias") # pyright # pyright: ignore[reportReturnType]
+        return self._require("db", "market3_database_alias") # pyright: ignore[reportReturnType]
 
 # ---- Domain helpers ----
 

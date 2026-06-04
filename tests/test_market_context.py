@@ -28,13 +28,13 @@ class TestMarketContextCreation:
         ctx = deployment_market_context
 
         assert ctx.alias == "deployment"
-        assert ctx.name == "X47L-Q - Rogue Threshold"
-        assert ctx.region_id == 10000023
-        assert ctx.structure_id == 1041669946862
-        assert ctx.database_alias == "wcmktnorth"
-        assert ctx.database_file == "wcmktnorth2.db"
-        assert ctx.turso_url_env == "TURSO_WCMKTNORTH_URL"
-        assert ctx.turso_token_env == "TURSO_WCMKTNORTH_TOKEN"
+        assert ctx.name == "4-HWWF - WinterCo. Central Station"
+        assert ctx.region_id == 10000003
+        assert ctx.structure_id == 1053970513596
+        assert ctx.database_alias == "wcmktnewkeep"
+        assert ctx.database_file == "wcmktnewkeep.db"
+        assert ctx.turso_url_env == "TURSO_WCMKTNEWKEEP_URL"
+        assert ctx.turso_token_env == "TURSO_WCMKTNEWKEEP_TOKEN"
 
     def test_create_primary_market_context_production(self, monkeypatch):
         """Test that primary market context uses production db in production mode."""
@@ -74,13 +74,14 @@ class TestMarketContextCreation:
     ):
         """Test that primary and deployment markets are distinct locations.
 
-        Primary is in region_id=10000003 (Vale of Silent), deployment is in
-        region_id=10000023 (Pure Blind). structure_id and system_id uniquely
-        identify the market hub within each region.
+        Primary (4-HWWF Platestar) and deployment (4-HWWF WinterCo. Central
+        Station) are both in 4-HWWF (region_id=10000003, system_id=30000240),
+        so they share region and system but are distinct structures.
+        structure_id uniquely identifies the market hub.
         """
         assert primary_market_context.structure_id != deployment_market_context.structure_id
-        assert primary_market_context.system_id != deployment_market_context.system_id
-        assert primary_market_context.region_id != deployment_market_context.region_id
+        assert primary_market_context.system_id == deployment_market_context.system_id
+        assert primary_market_context.region_id == deployment_market_context.region_id
 
     def test_invalid_market_alias_raises_error(self):
         """Test that invalid market alias raises ValueError."""
@@ -117,9 +118,9 @@ class TestMarketContextIsolation:
         assert "test" in primary_market_context.database_file.lower()
 
     def test_deployment_database_alias_mapping(self, deployment_market_context):
-        """Test deployment market maps to wcmktnorth database."""
-        assert deployment_market_context.database_alias == "wcmktnorth"
-        assert "north" in deployment_market_context.database_file.lower()
+        """Test deployment market maps to wcmktnewkeep database."""
+        assert deployment_market_context.database_alias == "wcmktnewkeep"
+        assert "newkeep" in deployment_market_context.database_file.lower()
 
     def test_market_contexts_are_independent(self, primary_market_context, deployment_market_context):
         """Test that modifying one context doesn't affect the other."""
@@ -139,7 +140,7 @@ class TestMarketContextIsolation:
         assert primary_url_env != deployment_url_env
         # In development mode, primary uses testing turso env vars
         assert "WCMKTTEST" in primary_url_env
-        assert "WCMKTNORTH" in deployment_url_env
+        assert "WCMKTNEWKEEP" in deployment_url_env
 
     def test_deployment_unaffected_by_environment(self, monkeypatch):
         """Test that deployment market is not affected by environment setting."""
@@ -157,5 +158,5 @@ class TestMarketContextIsolation:
         prod_ctx = MarketContext.from_settings("deployment")
         clear_cache()
 
-        assert dev_ctx.database_alias == prod_ctx.database_alias == "wcmktnorth"
-        assert dev_ctx.database_file == prod_ctx.database_file == "wcmktnorth2.db"
+        assert dev_ctx.database_alias == prod_ctx.database_alias == "wcmktnewkeep"
+        assert dev_ctx.database_file == prod_ctx.database_file == "wcmktnewkeep.db"

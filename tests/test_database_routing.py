@@ -27,8 +27,8 @@ class TestDatabaseConfigRouting:
 
         db = DatabaseConfig(market_context=deployment_market_context)
 
-        assert db.alias == "wcmktnorth"
-        assert "wcmktnorth" in db.path
+        assert db.alias == "wcmktnewkeep"
+        assert "wcmktnewkeep" in db.path
 
     def test_database_config_primary_and_deployment_different_paths(
         self, primary_market_context, deployment_market_context
@@ -81,17 +81,17 @@ class TestESIConfigRouting:
 
         esi = ESIConfig(market_context=deployment_market_context)
 
-        assert esi.region_id == 10000023
-        assert esi.structure_id == 1041669946862
+        assert esi.region_id == 10000003
+        assert esi.structure_id == 1053970513596
 
     def test_esi_config_primary_and_deployment_have_different_structures(
         self, primary_market_context, deployment_market_context
     ):
         """Test that primary and deployment ESI configs target different structures.
 
-        Primary is in region_id=10000003 (Vale of Silent), deployment is in
-        region_id=10000023 (Pure Blind). structure_id uniquely identifies the
-        market hub within each region.
+        Primary (Platestar) and deployment (WinterCo. Central Station) are both
+        in 4-HWWF (region_id=10000003), so they share a region but target
+        different structures. structure_id uniquely identifies the market hub.
         """
         from mkts_backend.config.esi_config import ESIConfig
 
@@ -216,7 +216,7 @@ class TestDbHandlersRouting:
 
         db = _get_db(deployment_market_context)
 
-        assert db.alias == "wcmktnorth"
+        assert db.alias == "wcmktnewkeep"
 
     def test_get_db_helper_without_context_uses_default(self):
         """Test _get_db helper without context uses default database."""
@@ -245,7 +245,7 @@ class TestDbQueriesRouting:
 
         db = _get_db(deployment_market_context)
 
-        assert db.alias == "wcmktnorth"
+        assert db.alias == "wcmktnewkeep"
 
 
 class TestDataProcessingRouting:
@@ -265,7 +265,7 @@ class TestDataProcessingRouting:
 
         db = _get_db(deployment_market_context)
 
-        assert db.alias == "wcmktnorth"
+        assert db.alias == "wcmktnewkeep"
 
     def test_get_db_helper_without_context_uses_default(self):
         """Test _get_db helper without context uses lazy-initialized default."""
@@ -321,8 +321,8 @@ class TestDatabaseIsolation:
         db = _get_db(deployment_market_context)
 
         # Verify correct database was selected
-        assert db.alias == "wcmktnorth"
-        assert "wcmktnorth" in db.path
+        assert db.alias == "wcmktnewkeep"
+        assert "wcmktnewkeep" in db.path
 
     def test_database_path_contains_correct_market_identifier(
         self, primary_market_context, deployment_market_context
@@ -336,8 +336,8 @@ class TestDatabaseIsolation:
         # Primary should reference wcmkttest in development mode
         assert "wcmkttest" in primary_db.path.lower() or "test" in primary_db.path.lower()
 
-        # Deployment should reference wcmktnorth
-        assert "wcmktnorth" in deployment_db.path.lower() or "north" in deployment_db.path.lower()
+        # Deployment should reference wcmktnewkeep
+        assert "wcmktnewkeep" in deployment_db.path.lower()
 
 
 class TestCrossMarketIsolation:
@@ -364,7 +364,7 @@ class TestCrossMarketIsolation:
 
         # Verify isolation
         assert primary_alias == "wcmkttest"
-        assert deployment_alias == "wcmktnorth"
+        assert deployment_alias == "wcmktnewkeep"
         assert db3.alias == primary_alias  # Back to primary
         assert db3.path == primary_path
 
@@ -384,6 +384,6 @@ class TestCrossMarketIsolation:
 
         # Verify each got the correct database
         assert h_primary.alias == "wcmkttest"
-        assert q_deployment.alias == "wcmktnorth"
+        assert q_deployment.alias == "wcmktnewkeep"
         assert p_primary.alias == "wcmkttest"
-        assert h_deployment.alias == "wcmktnorth"
+        assert h_deployment.alias == "wcmktnewkeep"

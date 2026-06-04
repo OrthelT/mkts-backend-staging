@@ -26,12 +26,12 @@ def display_cli_help():
     console.print(f"Commands:\n{_build_command_list()}")
     console.print("""
 Global Options (accepted by most commands):
-  --market=<alias>   Select market (primary, deployment, both).
-                     update-markets and sync default to both; other commands
+  --market=<alias>   Select market (primary, deployment, market3, all).
+                     update-markets and sync default to all; other commands
                      default to primary unless noted.
   --primary          Shorthand for --market=primary
   --deployment       Shorthand for --market=deployment
-  --both             Shorthand for --market=both
+  --all              Shorthand for --market=all (every configured market)
   --env=<env>        Override app.environment temporarily (production, development)
   --history          Include history processing (update-markets only)
   --check_tables     Check the tables in the database (supports --market)
@@ -42,12 +42,12 @@ Global Options (accepted by most commands):
 Use 'mkts-backend <command> --help' for more information about a command.
 
 Examples:
-  mkts-backend update-markets                 # Run full pipeline for both markets
+  mkts-backend update-markets                 # Run full pipeline for all markets
   mkts-backend update-markets --history       # With history processing
   mkts-backend update-markets --primary       # Primary market only
-  mkts-backend sync                           # Sync both databases
+  mkts-backend sync                           # Sync all databases
   mkts-backend sync --deployment              # Sync deployment only
-  mkts-backend validate --market=both         # Validate both databases
+  mkts-backend validate --market=all          # Validate all databases
   mkts-backend fit-check --file=fits/hfi.txt  # Check fit availability
   mkts-backend assets --name='Damage Control'   # Look up assets by partial name
   mkts-backend assets --id=11379                # Look up assets by type ID
@@ -297,7 +297,7 @@ OPTIONS:
     --file=<path>        Path to EFT fit file (for add/update)
     --meta-file=<path>   Path to metadata JSON file
     --fit-id=<id>        Fit ID to update or modify (can be comma-separated)
-    --market=<flag>      Market flag: primary, deployment, both
+    --market=<flag>      Market flag: primary, deployment, all
     --interactive        Use interactive prompts for metadata
     --dry-run            Preview changes without saving
     --remote             Use remote database
@@ -353,8 +353,8 @@ EXAMPLES:
     # Remove entire doctrine from deployment market
     mkts-backend fit-update unassign-market --doctrine-id=21 --market=deployment
 
-    # Remove doctrine from both markets (requires confirmation)
-    mkts-backend fit-update unassign-market --doctrine-id=21 --market=both
+    # Remove doctrine from all markets (requires confirmation)
+    mkts-backend fit-update unassign-market --doctrine-id=21 --market=all
 
     # Update target for fit
     mkts-backend fit-update update --fit-id=550 --target=300
@@ -396,10 +396,10 @@ def display_update_fit_help():
         --interactive        Prompt for metadata interactively (when no --meta-file)
 
         Market Selection (default: primary):
-        --market=<alias>     Target market: primary, deployment, both
+        --market=<alias>     Target market: primary, deployment, all
         --primary            Shorthand for --market=primary
         --deployment         Shorthand for --market=deployment
-        --both               Update both primary and deployment markets
+        --all                Update all configured markets
 
         Database Options:
         --remote             Use remote database (default: local)
@@ -427,8 +427,8 @@ def display_update_fit_help():
         # Update fit for deployment market
         mkts-backend update-fit --fit-file=fits/hfi.txt --fit-id=313 --deployment
 
-        # Update fit for both markets with ship targets
-        mkts-backend update-fit --fit-file=fits/hfi.txt --meta-file=meta.json --both --update-targets
+        # Update fit for all markets with ship targets
+        mkts-backend update-fit --fit-file=fits/hfi.txt --meta-file=meta.json --all --update-targets
 
         # Preview changes (dry run)
         mkts-backend update-fit --fit-file=fits/hfi.txt --fit-id=313 --interactive --dry-run
@@ -448,7 +448,7 @@ def display_update_target_help():
     Arguments:
     --fit-id=<id>        Fit ID to update (required)
     --target=<qty>       Target quantity (required)
-    --market=<flag>      Market flag: primary, deployment, both (default: primary)
+    --market=<flag>      Market flag: primary, deployment, all (default: primary)
     --remote             Use remote database (default: local)
     --local-only         Use local database only (default: no)
     --db-alias=<alias>   Target database alias (default: wcmkt)
@@ -459,7 +459,7 @@ def display_update_target_help():
     EXAMPLES:
     mkts-backend update-target --fit-id=123 --target=100 --market=primary
     mkts-backend update-target --fit-id=123 --target=100 --market=deployment
-    mkts-backend update-target --fit-id=123 --target=100 --market=both
+    mkts-backend update-target --fit-id=123 --target=100 --market=all
 
     DEFAULT:
     If no market flag is provided, the default is primary.

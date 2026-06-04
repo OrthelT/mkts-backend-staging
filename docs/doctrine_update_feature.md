@@ -55,7 +55,7 @@ mkts-backend update-fit --fit-file=new_zealot993.txt --fit-id=313 --interactive
 
 # Market-specific updates
 mkts-backend update-fit --fit-file=fit.txt --fit-id=313 --deployment  # Deployment market only
-mkts-backend update-fit --fit-file=fit.txt --fit-id=313 --both        # Both markets
+mkts-backend update-fit --fit-file=fit.txt --fit-id=313 --all          # All markets
 
 # With ship_targets table update
 mkts-backend update-fit --fit-file=fit.txt --fit-id=313 --interactive --update-targets
@@ -64,8 +64,8 @@ mkts-backend update-fit --fit-file=fit.txt --fit-id=313 --interactive --update-t
 **Key Features:**
 - `--fit-id=<id>`: Specify fit ID directly (no longer requires metadata file)
 - `--interactive`: Prompts for metadata interactively if no metadata file provided
-- `--market=<alias>`: Target specific market (primary, deployment, both)
-- `--primary`, `--deployment`, `--both`: Shorthand market flags
+- `--market=<alias>`: Target specific market (primary, deployment, market3, all)
+- `--primary`, `--deployment`, `--all`: Shorthand market flags
 - `--update-targets`: Optional ship_targets table update (defaults to skip)
 - `--remote`: Target production databases
 - `--no-clear`: Keep existing fittings_fittingitem rows
