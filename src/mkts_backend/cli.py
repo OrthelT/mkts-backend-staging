@@ -448,7 +448,6 @@ def run_market_update(history: bool = False, market_alias: str = "all") -> bool:
 
     validation_result = validate_all()
     if not validation_result["is_valid"]:
-        logger.error(validation_result["message"])
         if validation_result["missing_required"]:
             logger.error(
                 f"Missing required credentials: {', '.join(validation_result['missing_required'])}"
@@ -461,7 +460,6 @@ def run_market_update(history: bool = False, market_alias: str = "all") -> bool:
     logger.debug("Databases initialized")
     os.makedirs("data", exist_ok=True)
     logger.debug(f"Data directory created: {os.path.abspath('data')}")
-    logger.debug("=" * 80)
 
     market_aliases = expand_market_alias(market_alias)
 

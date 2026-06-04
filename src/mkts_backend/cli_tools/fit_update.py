@@ -1170,22 +1170,6 @@ def _cleanup_fit_in_market(
         console.print(f"  [dim]Cleaned up ship_targets for fit {fit_id}[/dim]")
 
 
-def _cleanup_market_db(
-    fit_id: int,
-    doctrine_id: int,
-    alias: str,
-    remote: bool,
-) -> None:
-    """Legacy entry point for cleanup on a dedicated engine + transaction."""
-    db = DatabaseConfig(alias)
-    engine = db.remote_engine if remote else db.engine
-    try:
-        with engine.begin() as conn:
-            _cleanup_fit_in_market(conn, fit_id, doctrine_id)
-    finally:
-        engine.dispose()
-
-
 def _report_lead_ship(adopted: bool, fit_id: int, doctrine_id: int) -> None:
     """Emit a user-visible message describing lead_ships outcome.
 
@@ -2749,9 +2733,9 @@ def doctrine_remove_fit_command(
 def update_target_command(
     fit_id: int,
     target: int,
+    db_alias: str = "wcmkt",
     remote: bool = False,
     market_flag: str = "primary",
-    db_alias: str = "wcmkt",
 ) -> bool:
     """
     Update the target quantity for a fit.
