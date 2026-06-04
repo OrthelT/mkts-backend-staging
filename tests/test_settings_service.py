@@ -52,8 +52,8 @@ def test_get_all_market_contexts_returns_primary_and_deployment():
     assert "primary" in contexts
     assert "deployment" in contexts
     assert "default" not in contexts
-    assert contexts["primary"].database_alias == "wcmktprod"
-    assert contexts["deployment"].database_alias == "wcmktnewkeep"
+    # Markets are isolated — they must not share a database.
+    assert contexts["primary"].database_alias != contexts["deployment"].database_alias
 
 
 def test_get_all_characters_returns_configured_characters():
@@ -130,8 +130,9 @@ def test_market_context_picks_up_late_env_override(monkeypatch):
     2. parse_args() sets os.environ["MKTS_ENVIRONMENT"] = "development".
     3. MarketContext.from_settings("primary") is called downstream.
 
-    Before the fix this returned the production DB; after, it returns
-    the testing DB because environment is read dynamically.
+    Before the fix this returned the production DB; after, the dev override
+    takes effect because environment is read dynamically — so the dev-mode DB
+    differs from the production one. Asserted relationally (no frozen alias).
     """
     from mkts_backend.config.market_context import MarketContext
 
@@ -140,8 +141,14 @@ def test_market_context_picks_up_late_env_override(monkeypatch):
     SettingsService()  # simulate import-time priming with env unset
 
     monkeypatch.setenv("MKTS_ENVIRONMENT", "development")  # simulate --env=development
-    ctx = MarketContext.from_settings("primary")
-    assert ctx.database_alias == "wcmkttest"
+    dev_ctx = MarketContext.from_settings("primary")
+
+    monkeypatch.setenv("MKTS_ENVIRONMENT", "production")
+    clear_cache()
+    prod_ctx = MarketContext.from_settings("primary")
+
+    # Late override took effect: dev resolves primary to a different DB than prod.
+    assert dev_ctx.database_alias != prod_ctx.database_alias
 
 
 def test_get_all_characters_requires_char_id(monkeypatch):

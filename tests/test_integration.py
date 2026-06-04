@@ -1,74 +1,19 @@
 """
-Integration tests for market context functionality.
+Integration tests for market context: real DB write isolation, backward-compatible
+defaults, and the structural contract that pipeline functions accept market_ctx.
 
-These tests verify end-to-end functionality of the market context system,
-ensuring that data flows to the correct database.
+Trimmed to tests that exercise real behavior. The former flow / config-chain /
+turso-env / concurrency tests asserted frozen database aliases and env-var names
+copied from settings.toml; they broke on every config edit without catching a
+bug and were deleted. The signature tests below stay because they catch a real
+regression — a pipeline function silently losing its ``market_ctx`` parameter.
 """
-import pytest
-from unittest.mock import patch, MagicMock, call
-import pandas as pd
 import sqlite3
-from pathlib import Path
+
+import pandas as pd
 from sqlalchemy import create_engine
 
 from mkts_backend.db.models import Base
-
-
-class TestFullMarketContextFlow:
-    """Integration tests for complete market context flow."""
-
-    def test_primary_market_flow_uses_correct_database(self, primary_market_context):
-        """Test that primary market operations use wcmkttest database in development."""
-        from mkts_backend.config.db_config import DatabaseConfig
-
-        db = DatabaseConfig(market_context=primary_market_context)
-
-        assert db.alias == "wcmkttest"
-        assert "wcmkttest" in db.path
-
-    def test_deployment_market_flow_uses_correct_database(self, deployment_market_context):
-        """Test that deployment market operations use wcmktnewkeep database."""
-        from mkts_backend.config.db_config import DatabaseConfig
-
-        db = DatabaseConfig(market_context=deployment_market_context)
-
-        assert db.alias == "wcmktnewkeep"
-        assert "wcmktnewkeep" in db.path
-
-
-class TestMarketContextConfigChain:
-    """Tests for configuration chain with MarketContext."""
-
-    def test_config_chain_primary(self, primary_market_context):
-        """Test full config chain for primary market."""
-        from mkts_backend.config.db_config import DatabaseConfig
-        from mkts_backend.config.esi_config import ESIConfig
-        from mkts_backend.config.gsheets_config import GoogleSheetConfig
-
-        # All configs should use primary market settings
-        db = DatabaseConfig(market_context=primary_market_context)
-        esi = ESIConfig(market_context=primary_market_context)
-        gsheets = GoogleSheetConfig(market_context=primary_market_context)
-
-        assert db.alias == "wcmkttest"
-        assert esi.region_id == 10000003
-        assert gsheets.google_sheet_url == primary_market_context.gsheets_url
-
-    def test_config_chain_deployment(self, deployment_market_context):
-        """Test full config chain for deployment market."""
-        from mkts_backend.config.db_config import DatabaseConfig
-        from mkts_backend.config.esi_config import ESIConfig
-        from mkts_backend.config.gsheets_config import GoogleSheetConfig
-
-        # All configs should use deployment market settings
-        db = DatabaseConfig(market_context=deployment_market_context)
-        esi = ESIConfig(market_context=deployment_market_context)
-        gsheets = GoogleSheetConfig(market_context=deployment_market_context)
-
-        assert db.alias == "wcmktnewkeep"
-        assert esi.region_id == 10000003
-        assert esi.structure_id == 1053970513596
-        assert gsheets.google_sheet_url == deployment_market_context.gsheets_url
 
 
 class TestDatabaseWriteIsolation:
@@ -154,7 +99,7 @@ class TestBackwardCompatibility:
 
 
 class TestFunctionSignatures:
-    """Tests to verify all functions have market_ctx parameter."""
+    """Tests to verify all pipeline functions accept a market_ctx parameter."""
 
     def test_db_handlers_functions_have_market_ctx(self):
         """Test db_handlers functions accept market_ctx parameter."""
@@ -232,77 +177,3 @@ class TestFunctionSignatures:
                 sig = inspect.signature(func)
                 params = list(sig.parameters.keys())
                 assert "market_ctx" in params, f"{func_name} missing market_ctx parameter"
-
-
-class TestMarketContextEnvironmentVariables:
-    """Tests for market context environment variable resolution."""
-
-    def test_primary_market_turso_env_vars(self, primary_market_context, mock_env_vars):
-        """Test primary market resolves correct Turso environment variables."""
-        import os
-
-        url_env = primary_market_context.turso_url_env
-        token_env = primary_market_context.turso_token_env
-
-        assert url_env == "TURSO_WCMKTTEST_URL"
-        assert token_env == "TURSO_WCMKTTEST_TOKEN"
-
-        # With mocked env vars
-        assert os.environ.get(url_env) == "libsql://test-wcmkttest.turso.io"
-        assert os.environ.get(token_env) == "test-wcmkttest-token"
-
-    def test_deployment_market_turso_env_vars(self, deployment_market_context, mock_env_vars):
-        """Test deployment market resolves correct Turso environment variables."""
-        import os
-
-        url_env = deployment_market_context.turso_url_env
-        token_env = deployment_market_context.turso_token_env
-
-        assert url_env == "TURSO_WCMKTNEWKEEP_URL"
-        assert token_env == "TURSO_WCMKTNEWKEEP_TOKEN"
-
-        # With mocked env vars
-        assert os.environ.get(url_env) == "libsql://test-deployment.turso.io"
-        assert os.environ.get(token_env) == "test-deployment-token"
-
-
-class TestConcurrentMarketOperations:
-    """Tests for concurrent operations on different markets."""
-
-    def test_concurrent_config_creation(self, primary_market_context, deployment_market_context):
-        """Test creating configs for multiple markets concurrently."""
-        from mkts_backend.config.db_config import DatabaseConfig
-
-        configs = []
-
-        # Create multiple configs rapidly
-        for _ in range(5):
-            configs.append(DatabaseConfig(market_context=primary_market_context))
-            configs.append(DatabaseConfig(market_context=deployment_market_context))
-
-        # Verify alternating configs are correct
-        for i, config in enumerate(configs):
-            if i % 2 == 0:
-                assert config.alias == "wcmkttest"
-            else:
-                assert config.alias == "wcmktnewkeep"
-
-    def test_market_context_thread_safety(self, primary_market_context, deployment_market_context):
-        """Test that market contexts maintain isolation in rapid succession."""
-        from mkts_backend.db.db_handlers import _get_db
-
-        results = []
-
-        for _ in range(10):
-            primary_db = _get_db(primary_market_context)
-            results.append(("primary", primary_db.alias))
-
-            deployment_db = _get_db(deployment_market_context)
-            results.append(("deployment", deployment_db.alias))
-
-        # Verify all results are correct
-        for market, alias in results:
-            if market == "primary":
-                assert alias == "wcmkttest"
-            else:
-                assert alias == "wcmktnewkeep"

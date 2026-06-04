@@ -26,7 +26,7 @@ log_level = "INFO" # INFO or DEBUG
 default = "primary"
 valid_aliases = ["primary", "deployment", "market3"]
 
-[markets.primary]
+[markets.deployment]
 name = "4-HWWF - Platestar"
 region_id = 10000003          # Vale of Silent
 system_id = 30000240
@@ -42,7 +42,7 @@ market_orders = "market_orders_4h"
 market_data = "market_data_4h"
 doctrines = "doctrines_mkt_4H"
 
-[markets.deployment]
+[markets.primary]
 name = "4-HWWF - WinterCo. Central Station"
 region_id = 10000003          # Vale of Silent
 system_id = 30000240
