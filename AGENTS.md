@@ -786,7 +786,7 @@ To track multiple markets simultaneously:
 ### GitHub Actions Cache Issues
 
 **Problem**: Scheduled `Market Data Collection` runs fail because a cached DB (e.g., `wcmktnorth2.db`) has drifted out of sync with Turso cloud.
-**Solution**: Wipe the cached DB bundle for the affected market matrix leg. The cache is an immutable bundle keyed per matrix leg (`turso-dbs-v2-<primary|deployment>-<run_id>`), so individual files cannot be removed — the whole entry must be deleted, after which the next run cold-starts and re-pulls from Turso.
+**Solution**: Wipe the cached DB bundle for the affected market matrix leg. The cache is an immutable bundle keyed per matrix leg per UTC date (`turso-dbs-v2-<primary|deployment|market3>-<YYYY-MM-DD>`), so individual files cannot be removed — the whole entry must be deleted, after which the next run cold-starts and re-pulls from Turso. (The date bucket means at most one new cache per market per day; restore-keys prefix-matches the most recent.)
 
 ```bash
 # Requires `gh` authenticated against the repo
