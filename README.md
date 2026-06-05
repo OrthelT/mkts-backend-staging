@@ -52,16 +52,15 @@ CLIENT_ID=<eve_client_id>
 SECRET_KEY=<eve_client_secret>
 REFRESH_TOKEN=<eve_sso_token[refresh_token]>
 
-TURSO_WCMKTPROD_URL=turso db url (production)
-TURSO_WCMKTPROD_TOKEN=turso db auth token (production)
+#credentials for configured databases, for example:
+TURSO_WCMKTNEWKEEP_URL=turso db url
+TURSO_WCMKTNEWKEEP_TOKEN=turso db auth token
 TURSO_WCMKTTEST_URL=turso db url (development/optional)
 TURSO_WCMKTTEST_TOKEN=turso db token (development/optional)
-TURSO_WCMKTNORTH_URL=turso db url (deployment market/optional)
-TURSO_WCMKTNORTH_TOKEN=turso db token (deployment market/optional)
+
+#credentials for fitting, sde, build_cost dabaseses in settings.toml
 TURSO_FITTING_URL=turso fitting db url
 TURSO_FITTING_TOKEN=turso fitting db token
-TURSO_SDE_URL=turso sde db url
-TURSO_SDE_TOKEN=turso sde db token
 
 (optional)
 GOOGLE_SHEETS_PRIVATE_KEY = <filename.json>
