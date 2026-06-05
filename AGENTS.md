@@ -29,9 +29,11 @@ uv run mkts-backend --check_tables --deployment  # Check deployment market table
 ```bash
 uv run mkts-backend sync              # Sync primary market database with Turso
 uv run mkts-backend sync --deployment # Sync deployment market database
-uv run mkts-backend sync --both       # Sync both primary and deployment markets
+uv run mkts-backend sync --all        # Sync EVERY configured market (primary, deployment, market3)
 uv run mkts-backend validate          # Validate primary market database sync status
 uv run mkts-backend validate --market=deployment  # Validate deployment market
+# NOTE: --both is a legacy synonym for --all. Since a third market (market3) was
+# added it now spans all three markets, not just primary+deployment. Use --all.
 ```
 
 **Check market availability for a ship fit:**

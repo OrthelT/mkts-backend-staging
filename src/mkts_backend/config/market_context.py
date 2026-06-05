@@ -108,8 +108,7 @@ class MarketContext:
         Returns:
             List of market alias strings (excludes "default" key)
         """
-        markets = SettingsService().markets_raw
-        return [k for k, v in markets.items() if k != "default" and isinstance(v, dict)]
+        return SettingsService().market_aliases
 
     @classmethod
     def get_available_markets(cls) -> list[str]:

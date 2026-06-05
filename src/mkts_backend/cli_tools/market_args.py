@@ -9,9 +9,11 @@ MARKET_SYNONYMS: dict[str, str] = {
     "north": "deployment",
 }
 
-# Ordered list of every configured market (preserves settings.toml order so
-# meta-alias expansion is deterministic); set form is for fast membership checks.
-_ALL_MARKETS: list[str] = list(settings_service.markets_raw.get("valid_aliases", []))
+# Every configured market, derived from the [markets.*] sections themselves
+# (settings.toml order → deterministic meta-alias expansion). Single source of
+# truth shared with database_routing/MarketContext — no parallel alias list to
+# drift. The set form is for fast membership checks.
+_ALL_MARKETS: list[str] = settings_service.market_aliases
 VALID_MARKET_ALIASES: set[str] = set(_ALL_MARKETS)
 MARKET_DB_MAP = {k: settings_service.markets_raw[k]["database_alias"] for k in _ALL_MARKETS}
 

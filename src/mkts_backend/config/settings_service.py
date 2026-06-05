@@ -187,6 +187,19 @@ class SettingsService:
         """Raw [markets] section as a read-only view, including the 'default' key."""
         return MappingProxyType(self.settings.get("markets", {}))
 
+    @property
+    def market_aliases(self) -> list[str]:
+        """Ordered list of configured market section names.
+
+        The single source for "which markets exist": every table under
+        ``[markets.*]``, in settings.toml order, excluding the ``default``
+        pointer and any scalar keys. Consumed by ``database_routing``,
+        ``get_all_market_contexts``, ``MarketContext.list_available`` and
+        ``market_args`` so they can never disagree about the set of markets.
+        """
+        return [k for k, v in self.settings.get("markets", {}).items()
+                if k != "default" and isinstance(v, dict)]
+
     # ---- [shared] (market-independent databases) ----
 
     @property
@@ -223,23 +236,51 @@ class SettingsService:
         Single source for DatabaseConfig's alias/path/turso maps, replacing the
         old [db] duplication. Derived from [markets.*] + [shared.testing], so a
         market can never disagree with itself across two config sections again.
+
+        A market missing ``database_alias``/``database_file`` raises ``KeyError``
+        naming the offending section (via ``_require``). Two markets declaring the
+        same ``database_alias`` raise ``ValueError`` — without this guard the
+        second would silently overwrite the first, routing one market to another's
+        database with no diagnostic.
         """
         routing: dict[str, dict] = {}
+        sources: dict[str, str] = {}
+
+        def _add(source: str, db_alias, db_file, url_env, token_env) -> None:
+            if db_alias in routing:
+                raise ValueError(
+                    f"settings.toml: duplicate database_alias '{db_alias}' "
+                    f"declared by both [{sources[db_alias]}] and [{source}]; "
+                    f"each market must have a unique database_alias or they will "
+                    f"silently route to the same database."
+                )
+            sources[db_alias] = source
+            routing[db_alias] = {
+                "file": db_file,
+                "turso_url_env": url_env,
+                "turso_token_env": token_env,
+            }
+
         for alias, cfg in self.settings.get("markets", {}).items():
             if alias == "default" or not isinstance(cfg, dict):
                 continue
-            routing[cfg["database_alias"]] = {
-                "file": cfg["database_file"],
-                "turso_url_env": cfg.get("turso_url_env"),
-                "turso_token_env": cfg.get("turso_token_env"),
-            }
-        testing = self.settings.get("shared", {}).get("testing")
-        if testing:
-            routing[testing["database_alias"]] = {
-                "file": testing["database_file"],
-                "turso_url_env": testing.get("turso_url_env"),
-                "turso_token_env": testing.get("turso_token_env"),
-            }
+            _add(
+                f"markets.{alias}",
+                self._require("markets", alias, "database_alias"),
+                self._require("markets", alias, "database_file"),
+                cfg.get("turso_url_env"),
+                cfg.get("turso_token_env"),
+            )
+
+        if self.settings.get("shared", {}).get("testing"):
+            testing = self.settings["shared"]["testing"]
+            _add(
+                "shared.testing",
+                self._require("shared", "testing", "database_alias"),
+                self._require("shared", "testing", "database_file"),
+                testing.get("turso_url_env"),
+                testing.get("turso_token_env"),
+            )
         return routing
 
 # ---- Domain helpers ----
@@ -252,14 +293,10 @@ def get_all_market_contexts() -> dict[str, "MarketContext"]:
     """
     from mkts_backend.config.market_context import MarketContext
 
-    settings = _load_settings()
-    markets_raw = settings.get("markets", {})
-    contexts: dict[str, "MarketContext"] = {}
-    for alias, market_cfg in markets_raw.items():
-        if alias == "default" or not isinstance(market_cfg, dict):
-            continue
-        contexts[alias] = MarketContext.from_settings(alias)
-    return contexts
+    return {
+        alias: MarketContext.from_settings(alias)
+        for alias in SettingsService().market_aliases
+    }
 
 def get_all_characters() -> list["CharacterConfig"]:
     """Return all configured characters.

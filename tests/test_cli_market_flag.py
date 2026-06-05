@@ -86,6 +86,15 @@ class TestExpandMarketAlias:
         assert expand_market_alias("primary") == ["primary"]
         assert expand_market_alias("market3") == ["market3"]
 
+    def test_market_set_matches_configured_sections(self):
+        # Regression guard for the removed `valid_aliases`: market_args derives
+        # its market set straight from the [markets.*] sections (one source of
+        # truth), so it can never drift from MarketContext's enumeration.
+        from mkts_backend.cli_tools import market_args
+        from mkts_backend.config.market_context import MarketContext
+
+        assert set(market_args.VALID_MARKET_ALIASES) == set(MarketContext.list_available())
+
 
 class TestResolveMarketAlias:
     """Optional-returning resolver used by the dispatcher."""

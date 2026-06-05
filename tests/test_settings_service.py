@@ -164,6 +164,42 @@ def test_get_all_characters_requires_char_id(monkeypatch):
         get_all_characters()
 
 
+def test_database_routing_derives_every_market_plus_test_db():
+    """Routing keys == each market's db alias + the shared test alias, nothing
+    else (the 'default' pointer and scalar keys are excluded). All derived."""
+    s = SettingsService()
+    expected = {s.market_db_alias(a) for a in s.market_aliases}
+    expected.add(s.shared_testing["database_alias"])
+    assert set(s.database_routing()) == expected
+
+
+def test_database_routing_rejects_duplicate_alias(monkeypatch):
+    """Two markets sharing a database_alias must fail loudly, not silently
+    overwrite one route (C1)."""
+    from mkts_backend.config import settings_service as svc
+
+    monkeypatch.setattr(svc, "_load_settings", lambda path=None: {"markets": {
+        "default": "primary",
+        "primary": {"database_alias": "dup", "database_file": "a.db"},
+        "deployment": {"database_alias": "dup", "database_file": "b.db"},
+    }})
+    with pytest.raises(ValueError, match="duplicate database_alias 'dup'"):
+        SettingsService().database_routing()
+
+
+def test_database_routing_missing_key_names_the_section(monkeypatch):
+    """A market missing database_alias raises a section-named error, not a bare
+    KeyError (C2)."""
+    from mkts_backend.config import settings_service as svc
+
+    monkeypatch.setattr(svc, "_load_settings", lambda path=None: {"markets": {
+        "default": "primary",
+        "primary": {"database_file": "a.db"},  # no database_alias
+    }})
+    with pytest.raises(KeyError, match=r"markets\.primary\.database_alias"):
+        SettingsService().database_routing()
+
+
 def test_get_all_characters_correct_section_overrides_typo(monkeypatch):
     """[characters.*] should override [chareacters.*] on key collision."""
     from mkts_backend.config import settings_service as svc

@@ -24,9 +24,11 @@ class DatabaseConfig:
     _service = SettingsService()
     # Per-market routing comes entirely from [markets.*] (+ [shared.testing])
     # via the settings service — the single source of truth. Shared,
-    # market-independent DBs (sde/fittings/buildcost) are layered on top. A
-    # missing or renamed market key surfaces as a normal config error, not an
-    # import-time crash of every module that touches the database.
+    # market-independent DBs (sde/fittings/buildcost) are layered on top.
+    # Materialized at import time: a malformed [markets.*] section (missing
+    # database_alias/database_file, or a duplicate database_alias) fails here
+    # with a clear, section-named error from database_routing() rather than a
+    # cryptic KeyError or a silently mis-routed database later on.
     _routing = _service.database_routing()
 
     _db_paths = {alias: r["file"] for alias, r in _routing.items()}
