@@ -1,4 +1,5 @@
 # Eve Online Market Data Collection & Analysis System
+### version 0.1.2
 
 A comprehensive market data collection and analysis system for Eve Online that fetches market data from the ESI API, processes it, and provides insights for market analysis and fleet doctrine planning.
 
@@ -52,7 +53,7 @@ CLIENT_ID=<eve_client_id>
 SECRET_KEY=<eve_client_secret>
 REFRESH_TOKEN=<eve_sso_token[refresh_token]>
 
-#credentials for configured databases, for example:
+# credentials for configured databases. must match settings.toml. for example:
 TURSO_WCMKTNEWKEEP_URL=turso db url
 TURSO_WCMKTNEWKEEP_TOKEN=turso db auth token
 TURSO_WCMKTTEST_URL=turso db url (development/optional)

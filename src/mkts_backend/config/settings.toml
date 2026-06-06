@@ -2,8 +2,8 @@
 # This file configures the market data collection system for multiple markets.
 
 [esi]
-user_agent = "wcmkts_backend/0.1.1, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)"
-compatibility_date = "2025-08-26"
+user_agent = "wcmkts_backend/0.1.2, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)"
+compatibility_date = "2026-05-19"
 
 [auth]
 # esi_client_id, esi_secret_key, and refresh token should be set in .env file for local development.

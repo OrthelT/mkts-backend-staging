@@ -23,9 +23,6 @@ on:
         default: false
         type: boolean
 
-# DEPRECIATE [actions/cache/restore@v4, actions/cache/save@v4, actions/checkout@v4, 
-# actions/setup-python@v5, actions/upload-artifact@v4, astral-sh/setup-uv@v5]
-
 jobs:
   collect-market-data:
     runs-on: ubuntu-latest
@@ -107,9 +104,9 @@ jobs:
           wcmktnorth2.db-info
           wcmktprod.db
           wcmktprod.db-info
-        key: turso-dbs-v2-${{ matrix.market }}-${{ steps.cachedate.outputs.date }}
+        key: turso-dbs-v3-${{ matrix.market }}-${{ steps.cachedate.outputs.date }}
         restore-keys: |
-          turso-dbs-v2-${{ matrix.market }}-
+          turso-dbs-v3-${{ matrix.market }}-
 
     - name: Log cache status
       run: |
@@ -206,7 +203,7 @@ jobs:
           wcmktnorth2.db-info
           wcmktprod.db
           wcmktprod.db-info
-        key: turso-dbs-v2-${{ matrix.market }}-${{ steps.cachedate.outputs.date }}
+        key: turso-dbs-v3-${{ matrix.market }}-${{ steps.cachedate.outputs.date }}
 
     - name: Upload logs as artifacts
       uses: actions/upload-artifact@v7
