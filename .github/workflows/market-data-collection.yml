@@ -150,7 +150,6 @@ jobs:
     - name: Set up EVE SSO refresh token
       run: |
         echo "REFRESH_TOKEN=${{ secrets.REFRESH_TOKEN }}" >> $GITHUB_ENV
-
     - name: Debug environment variables
       run: |
         echo "Processing market: ${{ matrix.market }}"

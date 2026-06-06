@@ -30,14 +30,14 @@ jobs:
             wcmktprod.db-info
             buildcost.db
             buildcost.db-info
-          key: builder-cost-dbs-v2-${{ github.run_id }}
+          key: builder-cost-dbs-v3-${{ github.run_id }}
           restore-keys: |
-            builder-cost-dbs-v2-
+            builder-cost-dbs-v3-
       - name: Run builder costs collection
         run: uv run mkts-backend update-builder-costs
         env:
-          TURSO_WCMKTPROD_URL: ${{ secrets.TURSO_WCMKTPROD_URL }}
-          TURSO_WCMKTPROD_TOKEN: ${{ secrets.TURSO_WCMKTPROD_TOKEN }}
+          TURSO_WCMKTNEWKEEP_URL: ${{ secrets.TURSO_WCMKTPROD_URL }}
+          TURSO_WCMKTNEWKEEP_TOKEN: ${{ secrets.TURSO_WCMKTPROD_TOKEN }}
           TURSO_SDE_URL: ${{ secrets.TURSO_SDE_URL }}
           TURSO_SDE_TOKEN: ${{ secrets.TURSO_SDE_TOKEN }}
           TURSO_BUILDCOST_URL: ${{ secrets.TURSO_BUILDCOST_URL }}
@@ -49,8 +49,8 @@ jobs:
           path: |
             sdelite.db
             sdelite.db-info
-            wcmktprod.db
-            wcmktprod.db-info
+            wcmktnewkeep.db
+            wcmktnewkeeo.db-info
             buildcost.db
             buildcost.db-info
           key: builder-cost-dbs-v2-${{ github.run_id }}
