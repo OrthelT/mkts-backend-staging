@@ -80,38 +80,67 @@ jobs:
         mkdir -p data
         mkdir -p databackup
 
-    # Cache key is bucketed by UTC date, not run_id: GitHub caches are immutable,
+    # Cache keys are bucketed by UTC date, not run_id: GitHub caches are immutable,
     # so a per-run key writes a brand-new entry every hour. A daily key reuses the
     # same entry within a day (restore-keys prefix still warm-starts from the most
-    # recent), so the cache is recreated at most once per market per day. The DBs
-    # stay fresh because libsql sync() pulls incrementally on every run regardless.
+    # recent), so each entry is recreated at most once per day. The DBs stay fresh
+    # because libsql sync() pulls incrementally on every run regardless.
+    #
+    # Single-writer cache layout (no concurrency guard needed): every cache key has
+    # exactly ONE matrix leg that writes it, so two legs can never race to reserve
+    # the same key.
+    #   * Each market DB is cached only by its own leg -> turso-dbs-v3-mkt-<market>-<date>
+    #   * The shared SDE + fitting DBs are cached only by the primary leg and
+    #     restored read-only by the others             -> turso-dbs-v3-shared-<date>
     - name: Compute cache date
       id: cachedate
       run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
-    - name: Restore cached databases
+    # Map the matrix market alias to its market-specific DB file. Done as a step
+    # (not a matrix `include`) so single-market dispatch can't spawn phantom legs:
+    # an `include` whose `market:` value isn't in the base matrix would be added as
+    # a new combination, forcing every market to run on a single-market dispatch.
+    - name: Resolve market DB file
+      id: dbfile
+      run: |
+        case "${{ matrix.market }}" in
+          primary)    echo "db=wcmktnewkeep.db" >> "$GITHUB_OUTPUT" ;;
+          deployment) echo "db=wcmktnorth2.db"  >> "$GITHUB_OUTPUT" ;;
+          market3)    echo "db=wcmktprod.db"    >> "$GITHUB_OUTPUT" ;;
+          *) echo "Unknown market: ${{ matrix.market }}" >&2; exit 1 ;;
+        esac
+
+    # Shared DBs (rarely change): restored by every leg, written only by primary.
+    - name: Restore shared databases (SDE + fittings)
       uses: actions/cache/restore@v5
-      id: db-cache
+      id: shared-cache
       with:
         path: |
           sdelite.db
           sdelite.db-info
           wcfitting.db
           wcfitting.db-info
-          wcmktnewkeep.db
-          wcmktnewkeep.db-info
-          wcmktnorth2.db
-          wcmktnorth2.db-info
-          wcmktprod.db
-          wcmktprod.db-info
-        key: turso-dbs-v3-${{ matrix.market }}-${{ steps.cachedate.outputs.date }}
+        key: turso-dbs-v3-shared-${{ steps.cachedate.outputs.date }}
         restore-keys: |
-          turso-dbs-v3-${{ matrix.market }}-
+          turso-dbs-v3-shared-
+
+    # This leg's own market DB only.
+    - name: Restore market database
+      uses: actions/cache/restore@v5
+      id: db-cache
+      with:
+        path: |
+          ${{ steps.dbfile.outputs.db }}
+          ${{ steps.dbfile.outputs.db }}-info
+        key: turso-dbs-v3-mkt-${{ matrix.market }}-${{ steps.cachedate.outputs.date }}
+        restore-keys: |
+          turso-dbs-v3-mkt-${{ matrix.market }}-
 
     - name: Log cache status
       run: |
-        echo "Cache hit: ${{ steps.db-cache.outputs.cache-hit }}"
-        echo "Cache key: ${{ steps.db-cache.outputs.cache-matched-key }}"
+        echo "Market: ${{ matrix.market }} (DB: ${{ steps.dbfile.outputs.db }})"
+        echo "Market cache hit: ${{ steps.db-cache.outputs.cache-hit }} (key: ${{ steps.db-cache.outputs.cache-matched-key }})"
+        echo "Shared cache hit: ${{ steps.shared-cache.outputs.cache-hit }} (key: ${{ steps.shared-cache.outputs.cache-matched-key }})"
         echo "Database files after restore:"
         ls -lh *.db *.db-info 2>/dev/null || echo "No database files found (cache miss)"
 
@@ -185,24 +214,29 @@ jobs:
         uv run mkts-backend update-markets --market=${{ matrix.market }} $HISTORY_FLAG
       timeout-minutes: 15
 
-    - name: Save database cache
+    # Save this leg's own market DB. Immutable daily key: only the first successful
+    # run per market per day actually writes; later runs no-op on the existing entry.
+    - name: Save market database cache
       uses: actions/cache/save@v5
-      # Skipped automatically when the daily key already exists (caches are
-      # immutable) — so within a day only the first successful run per market saves.
       if: success()
+      with:
+        path: |
+          ${{ steps.dbfile.outputs.db }}
+          ${{ steps.dbfile.outputs.db }}-info
+        key: turso-dbs-v3-mkt-${{ matrix.market }}-${{ steps.cachedate.outputs.date }}
+
+    # Save the shared SDE + fitting DBs from the primary leg ONLY, so this key has a
+    # single writer and the deployment/market3 legs never race to reserve it.
+    - name: Save shared databases cache
+      uses: actions/cache/save@v5
+      if: success() && matrix.market == 'primary'
       with:
         path: |
           sdelite.db
           sdelite.db-info
           wcfitting.db
           wcfitting.db-info
-          wcmktnewkeep.db
-          wcmktnewkeep.db-info
-          wcmktnorth2.db
-          wcmktnorth2.db-info
-          wcmktprod.db
-          wcmktprod.db-info
-        key: turso-dbs-v3-${{ matrix.market }}-${{ steps.cachedate.outputs.date }}
+        key: turso-dbs-v3-shared-${{ steps.cachedate.outputs.date }}
 
     - name: Upload logs as artifacts
       uses: actions/upload-artifact@v7
