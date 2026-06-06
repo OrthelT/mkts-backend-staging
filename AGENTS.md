@@ -29,9 +29,11 @@ uv run mkts-backend --check_tables --deployment  # Check deployment market table
 ```bash
 uv run mkts-backend sync              # Sync primary market database with Turso
 uv run mkts-backend sync --deployment # Sync deployment market database
-uv run mkts-backend sync --both       # Sync both primary and deployment markets
+uv run mkts-backend sync --all        # Sync EVERY configured market (primary, deployment, market3)
 uv run mkts-backend validate          # Validate primary market database sync status
 uv run mkts-backend validate --market=deployment  # Validate deployment market
+# NOTE: --both is a legacy synonym for --all. Since a third market (market3) was
+# added it now spans all three markets, not just primary+deployment. Use --all.
 ```
 
 **Check market availability for a ship fit:**
@@ -186,9 +188,8 @@ Behavior:
 | `[app]` | Environment + log level |
 | `[esi]` | User-Agent, compatibility date |
 | `[auth]` | OAuth callback + token storage |
-| `[markets.<alias>]` | Per-market configuration (primary, deployment) — preferred over legacy `[market_data]` |
-| `[market_data]` | **Legacy.** Flat-keyed market values still read by `esi_config.py` class-level lookups. Falls back to deriving from `[markets.*]` if absent. |
-| `[db]` | Database aliases and shared file paths (`[db.shared]`) |
+| `[markets.<alias>]` | Per-market configuration (primary, deployment, market3) — the **single source** for all per-market DB config (alias, file, turso env vars, gsheets) |
+| `[shared]` | Market-independent databases (`sde_file`, `fittings_file`, `buildcost_file`) and `[shared.testing]` — the dev/test DB the default market routes to when `environment="development"` |
 | `[wipe_replace]` | `tables` — list of tables fully wiped/re-inserted on each upsert run (vs. incrementally upserted). Useful for resetting deployment history when switching regions. |
 | `[google_sheets]` | Sheets integration toggle + legacy URLs |
 | `[buildcost]` | `add_structure` CLI source sheet |
@@ -785,7 +786,7 @@ To track multiple markets simultaneously:
 ### GitHub Actions Cache Issues
 
 **Problem**: Scheduled `Market Data Collection` runs fail because a cached DB (e.g., `wcmktnorth2.db`) has drifted out of sync with Turso cloud.
-**Solution**: Wipe the cached DB bundle for the affected market matrix leg. The cache is an immutable bundle keyed per matrix leg (`turso-dbs-v2-<primary|deployment>-<run_id>`), so individual files cannot be removed — the whole entry must be deleted, after which the next run cold-starts and re-pulls from Turso.
+**Solution**: Wipe the cached DB bundle for the affected market matrix leg. The cache is an immutable bundle keyed per matrix leg per UTC date (`turso-dbs-v2-<primary|deployment|market3>-<YYYY-MM-DD>`), so individual files cannot be removed — the whole entry must be deleted, after which the next run cold-starts and re-pulls from Turso. (The date bucket means at most one new cache per market per day; restore-keys prefix-matches the most recent.)
 
 ```bash
 # Requires `gh` authenticated against the repo

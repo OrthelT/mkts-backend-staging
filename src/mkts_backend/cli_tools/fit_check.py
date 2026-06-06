@@ -1133,7 +1133,7 @@ SUBCOMMANDS:
     module               Show which fits use a given module and market status
         --id=<type_id>       Look up module by type ID
         --name="<name>"      Look up module by name (exact or partial match)
-        --market=<alias>     Market to check: primary, deployment, both
+        --market=<alias>     Market to check: primary, deployment, all
                              (default: primary)
 
 DESCRIPTION:
@@ -1191,7 +1191,7 @@ EXAMPLES:
     # Check module usage across fits
     fitcheck module --id=11269
     fitcheck module --name="Multispectrum Energized Membrane II"
-    fitcheck module --id=11269 --market=both
+    fitcheck module --id=11269 --market=all
 """)
 
 

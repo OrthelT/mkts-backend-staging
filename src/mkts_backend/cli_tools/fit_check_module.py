@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import text
 
 from mkts_backend.cli_tools.arg_utils import ArgError, ParsedArgs
-from mkts_backend.cli_tools.market_args import parse_market_args
+from mkts_backend.cli_tools.market_args import expand_market_alias, parse_market_args
 from mkts_backend.cli_tools.rich_display import console, create_module_usage_table
 from mkts_backend.config import DatabaseConfig
 from mkts_backend.config.market_context import MarketContext
@@ -118,7 +118,7 @@ def module_command(
         console.print(f"[red]Error: {e}[/red]")
         return False
 
-    show_both = market_alias == "both"
+    show_both = market_alias in ("both", "all")
 
     if show_both:
         try:
@@ -183,6 +183,16 @@ def module_command(
         table = create_module_usage_table(resolved_name, resolved_id, merged, show_both=True)
         console.print(table)
         console.print(f"\n[dim]Total: {len(merged)} fit(s) using this module[/dim]")
+        # The side-by-side view is a primary-vs-deployment comparison (two column
+        # groups). Any other configured markets aren't in it — say so explicitly
+        # rather than silently dropping them from an "--all" request.
+        omitted = [m for m in expand_market_alias("all") if m not in ("primary", "deployment")]
+        if omitted:
+            console.print(
+                f"[dim]Comparison covers primary vs deployment only. "
+                f"Not shown: {', '.join(omitted)} — query individually with "
+                f"`fitcheck module --id={resolved_id} --market=<name>`.[/dim]"
+            )
         return True
 
     try:

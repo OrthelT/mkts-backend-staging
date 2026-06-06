@@ -31,7 +31,6 @@ _DEFAULT_SETTINGS_PATH = Path(__file__).parent / "settings.toml"
 _cached_settings: dict | None = None
 _cached_settings_view: MappingProxyType | None = None
 
-
 def _load_settings(path: Optional[Path] = None) -> dict:
     """Load and cache the TOML file as-is.
 
@@ -53,7 +52,6 @@ def _load_settings(path: Optional[Path] = None) -> dict:
     _cached_settings_view = MappingProxyType(_cached_settings)
     return _cached_settings
 
-
 def _read_settings_file(settings_path: Path) -> dict:
     try:
         with open(settings_path, "rb") as f:
@@ -65,13 +63,11 @@ def _read_settings_file(settings_path: Path) -> dict:
         logger.error("Failed to load settings from %s: %s", settings_path, e)
         raise
 
-
 def clear_cache() -> None:
     """Drop the cached settings dict. Intended for tests that mutate the TOML."""
     global _cached_settings, _cached_settings_view
     _cached_settings = None
     _cached_settings_view = None
-
 
 class SettingsService:
     """Read-only accessor for application settings.
@@ -191,55 +187,103 @@ class SettingsService:
         """Raw [markets] section as a read-only view, including the 'default' key."""
         return MappingProxyType(self.settings.get("markets", {}))
 
-    # ---- [db] ----
-
     @property
-    def db_section(self) -> MappingProxyType:
-        """Raw [db] section as a read-only view."""
-        return MappingProxyType(self.settings.get("db", {}))
+    def market_aliases(self) -> list[str]:
+        """Ordered list of configured market section names.
 
-    @property
-    def db_production_alias(self) -> str:
-        return self._require("db", "production_database_alias")
+        The single source for "which markets exist": every table under
+        ``[markets.*]``, in settings.toml order, excluding the ``default``
+        pointer and any scalar keys. Consumed by ``database_routing``,
+        ``get_all_market_contexts``, ``MarketContext.list_available`` and
+        ``market_args`` so they can never disagree about the set of markets.
+        """
+        return [k for k, v in self.settings.get("markets", {}).items()
+                if k != "default" and isinstance(v, dict)]
 
-    @property
-    def db_production_file(self) -> str:
-        return self._require("db", "production_database_file")
-
-    @property
-    def db_testing_alias(self) -> str:
-        return self._require("db", "testing_database_alias")
-
-    @property
-    def db_testing_file(self) -> str:
-        return self._require("db", "testing_database_file")
-
-    @property
-    def db_deployment_alias(self) -> str:
-        return self._require("db", "deployment_database_alias")
-
-    @property
-    def db_deployment_file(self) -> str:
-        return self._require("db", "deployment_database_file")
+    # ---- [shared] (market-independent databases) ----
 
     @property
     def db_sde_file(self) -> str:
-        return self._require("db", "shared", "sde_file")
+        return self._require("shared", "sde_file") # pyright: ignore[reportReturnType]
 
     @property
     def db_fittings_file(self) -> str:
-        return self._require("db", "shared", "fittings_file")
+        return self._require("shared", "fittings_file") # pyright: ignore[reportReturnType]
 
     @property
     def db_buildcost_file(self) -> str:
-        return self._require("db", "shared", "buildcost_file")
+        return self._require("shared", "buildcost_file") # pyright: ignore[reportReturnType]
 
     @property
-    def db_cli_cache_file(self) -> str:
-        return self._require("db", "shared", "cli_cache_file")
+    def shared_testing(self) -> dict:
+        """The dev/test database block ([shared.testing])."""
+        return dict(self._require("shared", "testing"))  # type: ignore[arg-type]
+
+    # ---- market database routing (single source for DatabaseConfig) ----
+
+    def market_db_alias(self, alias: str) -> str:
+        """Production database alias for a market (from [markets.<alias>])."""
+        return self._require("markets", alias, "database_alias") # pyright: ignore[reportReturnType]
+
+    def default_market_db_alias(self) -> str:
+        """Database alias of the default market (markets.default)."""
+        return self.market_db_alias(self.default_market_alias)
+
+    def database_routing(self) -> dict[str, dict]:
+        """``alias -> {file, turso_url_env, turso_token_env}`` for every market
+        plus the shared test DB.
+
+        Single source for DatabaseConfig's alias/path/turso maps, replacing the
+        old [db] duplication. Derived from [markets.*] + [shared.testing], so a
+        market can never disagree with itself across two config sections again.
+
+        A market missing ``database_alias``/``database_file`` raises ``KeyError``
+        naming the offending section (via ``_require``). Two markets declaring the
+        same ``database_alias`` raise ``ValueError`` — without this guard the
+        second would silently overwrite the first, routing one market to another's
+        database with no diagnostic.
+        """
+        routing: dict[str, dict] = {}
+        sources: dict[str, str] = {}
+
+        def _add(source: str, db_alias, db_file, url_env, token_env) -> None:
+            if db_alias in routing:
+                raise ValueError(
+                    f"settings.toml: duplicate database_alias '{db_alias}' "
+                    f"declared by both [{sources[db_alias]}] and [{source}]; "
+                    f"each market must have a unique database_alias or they will "
+                    f"silently route to the same database."
+                )
+            sources[db_alias] = source
+            routing[db_alias] = {
+                "file": db_file,
+                "turso_url_env": url_env,
+                "turso_token_env": token_env,
+            }
+
+        for alias, cfg in self.settings.get("markets", {}).items():
+            if alias == "default" or not isinstance(cfg, dict):
+                continue
+            _add(
+                f"markets.{alias}",
+                self._require("markets", alias, "database_alias"),
+                self._require("markets", alias, "database_file"),
+                cfg.get("turso_url_env"),
+                cfg.get("turso_token_env"),
+            )
+
+        if self.settings.get("shared", {}).get("testing"):
+            testing = self.settings["shared"]["testing"]
+            _add(
+                "shared.testing",
+                self._require("shared", "testing", "database_alias"),
+                self._require("shared", "testing", "database_file"),
+                testing.get("turso_url_env"),
+                testing.get("turso_token_env"),
+            )
+        return routing
 
 # ---- Domain helpers ----
-
 
 def get_all_market_contexts() -> dict[str, "MarketContext"]:
     """Return ``{alias: MarketContext}`` for every market in settings.
@@ -249,15 +293,10 @@ def get_all_market_contexts() -> dict[str, "MarketContext"]:
     """
     from mkts_backend.config.market_context import MarketContext
 
-    settings = _load_settings()
-    markets_raw = settings.get("markets", {})
-    contexts: dict[str, "MarketContext"] = {}
-    for alias, market_cfg in markets_raw.items():
-        if alias == "default" or not isinstance(market_cfg, dict):
-            continue
-        contexts[alias] = MarketContext.from_settings(alias)
-    return contexts
-
+    return {
+        alias: MarketContext.from_settings(alias)
+        for alias in SettingsService().market_aliases
+    }
 
 def get_all_characters() -> list["CharacterConfig"]:
     """Return all configured characters.

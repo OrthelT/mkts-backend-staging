@@ -13,6 +13,36 @@ from mkts_backend.cli_tools import fit_update
 from mkts_backend.utils.doctrine_update import _require_single_context
 
 
+class TestFlagToAliasesShim:
+    """market3 is shimmed to primary; all/both cover every configured market."""
+
+    def _aliases(self):
+        from mkts_backend.config.market_context import MarketContext
+        return {
+            m: MarketContext.from_settings(m).database_alias
+            for m in ("primary", "deployment", "market3")
+        }
+
+    def test_primary_includes_market3_shim(self):
+        a = self._aliases()
+        result = fit_update._flag_to_aliases("primary")
+        assert a["primary"] in result
+        assert a["market3"] in result          # shim: market3 mirrors primary
+        assert a["deployment"] not in result
+
+    def test_deployment_is_isolated(self):
+        a = self._aliases()
+        assert fit_update._flag_to_aliases("deployment") == {a["deployment"]}
+
+    def test_all_and_both_cover_every_market(self):
+        expected = set(self._aliases().values())
+        assert fit_update._flag_to_aliases("all") == expected
+        assert fit_update._flag_to_aliases("both") == expected
+
+    def test_unknown_flag_is_empty(self):
+        assert fit_update._flag_to_aliases("bogus") == set()
+
+
 class TestRequireSingleContext:
     def test_raises_when_both_conn_and_engine_non_none(self):
         with pytest.raises(ValueError, match="conn= or engine="):
@@ -81,17 +111,23 @@ class TestFitUpdateDispatcherNonTtyFallback:
         assert any("non-TTY" in rec.message for rec in caplog.records), \
             f"expected non-TTY warning, got: {[r.message for r in caplog.records]}"
 
-    def test_explicit_market_both_is_preserved_through_dispatcher(self):
-        """Regression lock for the C-1 fix: --market=both must not collapse to primary."""
+    def test_explicit_all_markets_flag_is_preserved_through_dispatcher(self):
+        """Regression lock for the C-1 fix: an explicit all-markets flag must not collapse to primary.
+
+        ``--market=all`` is the canonical alias; the legacy ``--market=both`` spelling
+        normalizes to it. Either way the dispatcher must forward ``all``, not ``primary``.
+        """
         handler = self._handler()
-        captured_kwargs: dict = {}
 
-        def fake_fit_update_command(**kwargs):
-            captured_kwargs.update(kwargs)
-            return True
+        for flag in ("--market=all", "--market=both"):
+            captured_kwargs: dict = {}
 
-        with patch("mkts_backend.cli_tools.fit_update.fit_update_command",
-                   side_effect=fake_fit_update_command):
-            handler(["fit-update", "list-fits", "--market=both"], "both")
+            def fake_fit_update_command(**kwargs):
+                captured_kwargs.update(kwargs)
+                return True
 
-        assert captured_kwargs.get("market_flag") == "both"
+            with patch("mkts_backend.cli_tools.fit_update.fit_update_command",
+                       side_effect=fake_fit_update_command):
+                handler(["fit-update", "list-fits", flag], "all")
+
+            assert captured_kwargs.get("market_flag") == "all", f"flag={flag}"

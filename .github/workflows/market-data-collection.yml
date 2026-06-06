@@ -10,12 +10,13 @@ on:
       market:
         description: 'Market to process'
         required: true
-        default: 'both'
+        default: 'all'
         type: choice
         options:
           - primary
           - deployment
-          - both
+          - market3
+          - all
       include_history:
         description: 'Include historical data processing'
         required: false
@@ -31,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        market: ${{ fromJSON(github.event.inputs.market == 'both' && '["primary", "deployment"]' || github.event.inputs.market == '' && '["primary", "deployment"]' || format('["{0}"]', github.event.inputs.market)) }}
+        market: ${{ fromJSON((github.event.inputs.market == 'all' || github.event.inputs.market == '') && '["primary", "deployment", "market3"]' || format('["{0}"]', github.event.inputs.market)) }}
 
     steps:
     - name: Checkout repository
@@ -82,6 +83,15 @@ jobs:
         mkdir -p data
         mkdir -p databackup
 
+    # Cache key is bucketed by UTC date, not run_id: GitHub caches are immutable,
+    # so a per-run key writes a brand-new entry every hour. A daily key reuses the
+    # same entry within a day (restore-keys prefix still warm-starts from the most
+    # recent), so the cache is recreated at most once per market per day. The DBs
+    # stay fresh because libsql sync() pulls incrementally on every run regardless.
+    - name: Compute cache date
+      id: cachedate
+      run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
     - name: Restore cached databases
       uses: actions/cache/restore@v5
       id: db-cache
@@ -91,11 +101,13 @@ jobs:
           sdelite.db-info
           wcfitting.db
           wcfitting.db-info
-          wcmktprod.db
-          wcmktprod.db-info
           wcmktnewkeep.db
           wcmktnewkeep.db-info
-        key: turso-dbs-v2-${{ matrix.market }}-${{ github.run_id }}
+          wcmktnorth2.db
+          wcmktnorth2.db-info
+          wcmktprod.db
+          wcmktprod.db-info
+        key: turso-dbs-v2-${{ matrix.market }}-${{ steps.cachedate.outputs.date }}
         restore-keys: |
           turso-dbs-v2-${{ matrix.market }}-
 
@@ -114,12 +126,15 @@ jobs:
         echo "TURSO_SDE_TOKEN=${{ secrets.TURSO_SDE_TOKEN }}" >> $GITHUB_ENV
         echo "TURSO_FITTING_URL=${{ secrets.TURSO_FITTING_URL }}" >> $GITHUB_ENV
         echo "TURSO_FITTING_TOKEN=${{ secrets.TURSO_FITTING_TOKEN }}" >> $GITHUB_ENV
-        # Primary market (4-HWWF / wcmktprod)
-        echo "TURSO_WCMKTPROD_URL=${{ secrets.TURSO_WCMKTPROD_URL }}" >> $GITHUB_ENV
-        echo "TURSO_WCMKTPROD_TOKEN=${{ secrets.TURSO_WCMKTPROD_TOKEN }}" >> $GITHUB_ENV
-        # Deployment market (4-HWWF second Keepstar / wcmktnewkeep)
+        # primary market (4-HWWF WinterCo Central Station / wcmktnewkeep.db)
         echo "TURSO_WCMKTNEWKEEP_URL=${{ secrets.TURSO_WCMKTNEWKEEP_URL }}" >> $GITHUB_ENV
         echo "TURSO_WCMKTNEWKEEP_TOKEN=${{ secrets.TURSO_WCMKTNEWKEEP_TOKEN }}" >> $GITHUB_ENV
+        # deployment market (X47L-Q Rogue Threshold / wcmktnorth2.db; env name TURSO_MARKET3_*)
+        echo "TURSO_MARKET3_URL=${{ secrets.TURSO_MARKET3_URL }}" >> $GITHUB_ENV
+        echo "TURSO_MARKET3_TOKEN=${{ secrets.TURSO_MARKET3_TOKEN }}" >> $GITHUB_ENV
+        # market3 market (4-HWWF Platestar / wcmktprod.db)
+        echo "TURSO_WCMKTPROD_URL=${{ secrets.TURSO_WCMKTPROD_URL }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKTPROD_TOKEN=${{ secrets.TURSO_WCMKTPROD_TOKEN }}" >> $GITHUB_ENV
         # Janice API key for Jita price fallback
         echo "JANICE_KEY=${{ secrets.JANICE_KEY }}" >> $GITHUB_ENV
 
@@ -151,10 +166,12 @@ jobs:
         echo "TURSO_SDE_TOKEN is set: $([ -n "$TURSO_SDE_TOKEN" ] && echo "YES" || echo "NO")"
         echo "TURSO_FITTING_URL is set: $([ -n "$TURSO_FITTING_URL" ] && echo "YES" || echo "NO")"
         echo "TURSO_FITTING_TOKEN is set: $([ -n "$TURSO_FITTING_TOKEN" ] && echo "YES" || echo "NO")"
-        echo "TURSO_WCMKTPROD_URL is set: $([ -n "$TURSO_WCMKTPROD_URL" ] && echo "YES" || echo "NO")"
-        echo "TURSO_WCMKTPROD_TOKEN is set: $([ -n "$TURSO_WCMKTPROD_TOKEN" ] && echo "YES" || echo "NO")"
-        echo "TURSO_WCMKTNEWKEEP_URL is set: $([ -n "$TURSO_WCMKTNEWKEEP_URL" ] && echo "YES" || echo "NO")"
-        echo "TURSO_WCMKTNEWKEEP_TOKEN is set: $([ -n "$TURSO_WCMKTNEWKEEP_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKTNEWKEEP_URL is set (primary): $([ -n "$TURSO_WCMKTNEWKEEP_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKTNEWKEEP_TOKEN is set (primary): $([ -n "$TURSO_WCMKTNEWKEEP_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_MARKET3_URL is set (deployment): $([ -n "$TURSO_MARKET3_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_MARKET3_TOKEN is set (deployment): $([ -n "$TURSO_MARKET3_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKTPROD_URL is set (market3): $([ -n "$TURSO_WCMKTPROD_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKTPROD_TOKEN is set (market3): $([ -n "$TURSO_WCMKTPROD_TOKEN" ] && echo "YES" || echo "NO")"
         echo "JANICE_KEY is set: $([ -n "$JANICE_KEY" ] && echo "YES" || echo "NO")"
 
     - name: Run market data collection
@@ -174,6 +191,8 @@ jobs:
 
     - name: Save database cache
       uses: actions/cache/save@v5
+      # Skipped automatically when the daily key already exists (caches are
+      # immutable) — so within a day only the first successful run per market saves.
       if: success()
       with:
         path: |
@@ -181,11 +200,13 @@ jobs:
           sdelite.db-info
           wcfitting.db
           wcfitting.db-info
-          wcmktprod.db
-          wcmktprod.db-info
           wcmktnewkeep.db
           wcmktnewkeep.db-info
-        key: turso-dbs-v2-${{ matrix.market }}-${{ github.run_id }}
+          wcmktnorth2.db
+          wcmktnorth2.db-info
+          wcmktprod.db
+          wcmktprod.db-info
+        key: turso-dbs-v2-${{ matrix.market }}-${{ steps.cachedate.outputs.date }}
 
     - name: Upload logs as artifacts
       uses: actions/upload-artifact@v7

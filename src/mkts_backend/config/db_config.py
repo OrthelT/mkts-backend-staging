@@ -22,40 +22,41 @@ logger = configure_logging(__name__)
 
 class DatabaseConfig:
     _service = SettingsService()
-    _production_db_alias = _service.db_production_alias
-    _production_db_file = _service.db_production_file
-    _testing_db_alias = _service.db_testing_alias
-    _testing_db_file = _service.db_testing_file
-    _deployment_db_alias = _service.db_deployment_alias
-    _deployment_db_file = _service.db_deployment_file
+    # Per-market routing comes entirely from [markets.*] (+ [shared.testing])
+    # via the settings service — the single source of truth. Shared,
+    # market-independent DBs (sde/fittings/buildcost) are layered on top.
+    # Materialized at import time: a malformed [markets.*] section (missing
+    # database_alias/database_file, or a duplicate database_alias) fails here
+    # with a clear, section-named error from database_routing() rather than a
+    # cryptic KeyError or a silently mis-routed database later on.
+    _routing = _service.database_routing()
 
-
-    _db_paths = {
-        _testing_db_alias: _testing_db_file,
+    _db_paths = {alias: r["file"] for alias, r in _routing.items()}
+    _db_paths.update({
         "sde": _service.db_sde_file,
         "fittings": _service.db_fittings_file,
         "buildcost": _service.db_buildcost_file,
-        _production_db_alias: _production_db_file,
-        _deployment_db_alias: _deployment_db_file,
-    }
+    })
 
     _db_turso_urls = {
-        _production_db_alias + "_turso": os.getenv("TURSO_WCMKTPROD_URL"),
-        _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_URL"),
+        f"{alias}_turso": os.getenv(r["turso_url_env"])
+        for alias, r in _routing.items() if r["turso_url_env"]
+    }
+    _db_turso_urls.update({
         "sde_turso": os.getenv("TURSO_SDE_URL"),
         "fittings_turso": os.getenv("TURSO_FITTING_URL"),
         "buildcost_turso": os.getenv("TURSO_BUILDCOST_URL"),
-        _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNEWKEEP_URL"),
-    }
+    })
 
     _db_turso_auth_tokens = {
-        _production_db_alias + "_turso": os.getenv("TURSO_WCMKTPROD_TOKEN"),
-        _testing_db_alias + "_turso": os.getenv("TURSO_WCMKTTEST_TOKEN"),
+        f"{alias}_turso": os.getenv(r["turso_token_env"])
+        for alias, r in _routing.items() if r["turso_token_env"]
+    }
+    _db_turso_auth_tokens.update({
         "sde_turso": os.getenv("TURSO_SDE_TOKEN"),
         "fittings_turso": os.getenv("TURSO_FITTING_TOKEN"),
         "buildcost_turso": os.getenv("TURSO_BUILDCOST_TOKEN"),
-        _deployment_db_alias + "_turso": os.getenv("TURSO_WCMKTNEWKEEP_TOKEN"),
-    }
+    })
 
     def __init__(
         self,
@@ -67,7 +68,8 @@ class DatabaseConfig:
         Initialize database configuration.
 
         Args:
-            alias: Database alias (e.g., "wcmkt", "wcmktprod", "wcmktnorth").
+            alias: Database alias (e.g., "wcmkt", "primary", or a market's
+                   configured database_alias). Legacy names map to the default market.
                    If market_context is provided, this is ignored.
             dialect: SQLAlchemy dialect string.
             market_context: Optional MarketContext that provides all config values.
@@ -86,11 +88,11 @@ class DatabaseConfig:
             # would freeze on the cached TOML default.
             env = SettingsService().environment
             if env == 'development':
-                alias = self._testing_db_alias
-            elif alias is None or alias in ["wcmkt", "primary", "wcmktprod"]:
-                alias = self._production_db_alias
+                alias = self._service.shared_testing["database_alias"]
+            elif alias is None or alias in ["wcmkt", "primary"]:
+                alias = self._service.default_market_db_alias()
             elif alias in ["deployment", "north"]:
-                alias = self._deployment_db_alias
+                alias = self._service.market_db_alias("deployment")
             if alias not in self._db_paths:
                 raise ValueError(
                     f"Unknown database alias '{alias}'. Available: {list(self._db_paths.keys())}"
@@ -156,7 +158,7 @@ class DatabaseConfig:
     @property
     def sqlite_local_connect(self):
         if self._sqlite_local_connect is None:
-            self._sqlite_local_connect = libsql.connect(self.path) 
+            self._sqlite_local_connect = libsql.connect(self.path)
         return self._sqlite_local_connect
 
     def sync(self):
@@ -168,6 +170,7 @@ class DatabaseConfig:
         logger.info("\n--------------------------------")
         logger.info(f"========== START SYNC {self.alias} ({self.path}) ==========")
         logger.info(f"Start sync for {self.alias} at {self.path}")
+        logger.debug(f"using url: {self.turso_url}")
         if start_info is not None:
             logger.info("--------------------------------")
             logger.info(f"Start info: {start_info}")

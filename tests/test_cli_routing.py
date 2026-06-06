@@ -97,14 +97,14 @@ class TestArgsParserRouting:
         assert kwargs["history"] is True
 
     @patch("mkts_backend.cli.run_market_update", return_value=True)
-    def test_update_markets_defaults_to_both(self, mock_run):
-        """update-markets with no --market flag dispatches market_alias='both'."""
+    def test_update_markets_defaults_to_all(self, mock_run):
+        """update-markets with no --market flag dispatches market_alias='all'."""
         from mkts_backend.cli_tools.args_parser import parse_args
 
         with pytest.raises(SystemExit):
             parse_args(["update-markets"])
         _, kwargs = mock_run.call_args
-        assert kwargs["market_alias"] == "both"
+        assert kwargs["market_alias"] == "all"
 
     @patch("mkts_backend.cli.run_market_update", return_value=True)
     def test_update_markets_history_before_subcommand(self, mock_run):
@@ -119,7 +119,7 @@ class TestArgsParserRouting:
 
     @patch("mkts_backend.cli.run_market_update", return_value=True)
     def test_update_markets_honors_explicit_primary(self, mock_run):
-        """Explicit --primary overrides the subcommand's 'both' default."""
+        """Explicit --primary overrides the subcommand's 'all' default."""
         from mkts_backend.cli_tools.args_parser import parse_args
 
         with pytest.raises(SystemExit):

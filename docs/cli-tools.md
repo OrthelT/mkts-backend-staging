@@ -75,8 +75,8 @@ uv run fitcheck module --id=11269
 # Check module usage by name (exact or partial match)
 uv run fitcheck module --name="Multispectrum Energized Membrane II"
 
-# Check both markets simultaneously for comparison
-uv run fitcheck module --id=11269 --market=both
+# Check all markets simultaneously for comparison
+uv run fitcheck module --id=11269 --market=all
 ```
 
 The `module` subcommand helps identify which doctrine fits use a specific module and shows their market status. Useful for:
@@ -108,8 +108,8 @@ uv run mkts-backend update-fit --fit-file=fits/hfi.txt --fit-id=313 --interactiv
 # Update fit for deployment market
 uv run mkts-backend update-fit --fit-file=fits/hfi.txt --fit-id=313 --interactive --deployment
 
-# Update fit for both markets
-uv run mkts-backend update-fit --fit-file=fits/hfi.txt --meta-file=meta.json --both
+# Update fit for all markets
+uv run mkts-backend update-fit --fit-file=fits/hfi.txt --meta-file=meta.json --all
 
 # Update fit with ship_targets table update
 uv run mkts-backend update-fit --fit-file=fits/hfi.txt --fit-id=313 --interactive --update-targets
@@ -128,10 +128,10 @@ uv run mkts-backend fit-update update --fit-id=313 --paste
 - `--meta-file=<path>`: Path to metadata JSON file (optional with --fit-id)
 - `--paste`: Open a multiline prompt to paste EFT fit text directly (uses prompt_toolkit)
 - `--interactive`: Prompt for metadata interactively (when no --meta-file)
-- `--market=<alias>`: Target market (primary, deployment, both)
+- `--market=<alias>`: Target market (primary, deployment, market3, all)
 - `--primary`: Shorthand for --market=primary
 - `--deployment`: Shorthand for --market=deployment
-- `--both`: Update both primary and deployment markets
+- `--all`: Update all configured markets
 - `--update-targets`: Update ship_targets table (default: skip)
 - `--remote`: Use remote database (default: local)
 - `--no-clear`: Keep existing items (default: clear and replace)

@@ -200,7 +200,6 @@ def process_market_stats(market_ctx: Optional[MarketContext] = None) -> bool:
         logger.error(f"Failed to update market stats: {e}")
         return False
 
-
 def process_doctrine_stats(market_ctx: Optional[MarketContext] = None) -> bool:
     logger.info("Calculating doctrines stats")
     logger.info("syncing database")
@@ -280,7 +279,7 @@ def _ensure_jita_prices_table(market_ctx: MarketContext) -> None:
     db = DatabaseConfig(market_context=market_ctx)
     engine = db.remote_engine
     try:
-        JitaPrices.__table__.create(engine, checkfirst=True)
+        JitaPrices.__table__.create(engine, checkfirst=True) # pyright: ignore[reportAttributeAccessIssue]
     finally:
         engine.dispose()
 
@@ -437,8 +436,8 @@ def _run_market_pipeline(
         )
 
 
-def run_market_update(history: bool = False, market_alias: str = "both") -> bool:
-    """Run the full market-data update pipeline for one or both markets.
+def run_market_update(history: bool = False, market_alias: str = "all") -> bool:
+    """Run the full market-data update pipeline for one or all markets.
 
     Handles env validation, DB init, Jita-price fetch, and per-market pipeline.
     Returns True on success; exits non-zero on setup failures.
@@ -449,7 +448,6 @@ def run_market_update(history: bool = False, market_alias: str = "both") -> bool
 
     validation_result = validate_all()
     if not validation_result["is_valid"]:
-        logger.error(validation_result["message"])
         if validation_result["missing_required"]:
             logger.error(
                 f"Missing required credentials: {', '.join(validation_result['missing_required'])}"
@@ -462,7 +460,6 @@ def run_market_update(history: bool = False, market_alias: str = "both") -> bool
     logger.debug("Databases initialized")
     os.makedirs("data", exist_ok=True)
     logger.debug(f"Data directory created: {os.path.abspath('data')}")
-    logger.debug("=" * 80)
 
     market_aliases = expand_market_alias(market_alias)
 

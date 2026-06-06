@@ -121,7 +121,7 @@ def main() -> int:
         return 1
 
     print("\nAll markets backfilled cleanly.")
-    print("Next step: run `mkts-backend sync --both` to pull updates into local DBs.")
+    print("Next step: run `mkts-backend sync --all` to pull updates into local DBs.")
     return 0
 
 

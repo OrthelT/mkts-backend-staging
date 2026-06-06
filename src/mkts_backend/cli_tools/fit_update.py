@@ -76,7 +76,7 @@ console = Console()
 def _configured_market_db_aliases(market_flag: Optional[str] = None) -> List[str]:
     """Return DB aliases for configured markets, optionally filtered by market_flag.
 
-    ``market_flag`` may be ``primary``, ``deployment``, or ``both`` — when
+    ``market_flag`` may be ``primary``, ``deployment``, or ``all`` — when
     provided, aliases are resolved via ``expand_market_alias``. When None
     (default), returns every configured market's DB alias. Always
     config-driven so new markets are picked up automatically.
@@ -172,7 +172,7 @@ def eft_text_to_file(eft_text: str) -> str:
     return file_path
 
 
-def get_fits_list(db_alias: str = "wcmkt", remote: bool = False) -> List[dict]:
+def get_fits_list(db_alias: str, remote: bool = False) -> List[dict]:
     """Get list of fits from doctrine_fits table."""
     db = DatabaseConfig(db_alias)
     engine = db.remote_engine if remote else db.engine
@@ -234,15 +234,12 @@ def display_fits_table(fits: List[dict]) -> None:
     table.add_column("Fit Name", style="white", min_width=30)
     table.add_column("Ship", style="cyan", min_width=20)
     table.add_column("Doctrine", style="green", min_width=20)
-    table.add_column("Primary", justify="right", style="green", width=9)
-    table.add_column("North", justify="right", style="yellow", width=9)
+    table.add_column("Target", justify="right", style="green", width=9)
     table.add_column("Friendly", style="dim", width=18)
 
     for fit in fits:
-        primary_target = fit.get("primary_target")
-        north_target = fit.get("north_target")
-        primary_str = str(primary_target) if primary_target is not None else "[dim]--[/dim]"
-        north_str = str(north_target) if north_target is not None else "[dim]--[/dim]"
+        target = fit.get("target")
+        target_str = str(target) if target is not None else "[dim]--[/dim]"
         friendly = fit.get("friendly_name") or "--"
 
         table.add_row(
@@ -250,8 +247,7 @@ def display_fits_table(fits: List[dict]) -> None:
             fit["fit_name"],
             fit["ship_name"],
             fit["doctrine_name"],
-            primary_str,
-            north_str,
+            target_str,
             friendly,
         )
 
@@ -482,9 +478,11 @@ def interactive_add_fit(
     fit_id = IntPrompt.ask("[bold]Fit ID[/bold] (unique identifier)")
 
     # Market assignment
-    market_choices = ["primary", "deployment", "both"]
+    market_choices = ["primary", "deployment", "all"]
     market_flag = Prompt.ask(
-        "[bold]Market assignment[/bold]", choices=market_choices, default=market_flag
+        "[bold]Market assignment[/bold]",
+        choices=market_choices,
+        default="all" if market_flag in ("both", "all") else (market_flag or "primary"),
     )
 
     # Show summary
@@ -545,7 +543,7 @@ def interactive_add_fit(
 
     try:
         # Determine which databases to update
-        if market_flag == "both":
+        if market_flag in ("both", "all"):
             target_aliases = _configured_market_db_aliases()
         else:
             target_aliases = [target_alias]
@@ -617,7 +615,7 @@ def assign_market_command(
 
     Args:
         fit_id: The fit ID to assign
-        market_flag: Market to assign ('primary', 'deployment', or 'both')
+        market_flag: Market to assign ('primary', 'deployment', or 'all')
         remote: Use remote database
         db_alias: Database alias
         doctrine_id: Optionally target a specific doctrine row only
@@ -627,10 +625,10 @@ def assign_market_command(
         Dict with counts: {"updated": int, "skipped": int}
         Empty dict on error or cancellation.
     """
-    if market_flag not in ("primary", "deployment", "both"):
+    if market_flag not in ("primary", "deployment", "both", "all"):
         console.print(
             f"[red]Error: invalid market '{market_flag}'. "
-            "Must be 'primary', 'deployment', or 'both'[/red]"
+            "Must be 'primary', 'deployment', or 'all'[/red]"
         )
         return {}
 
@@ -638,7 +636,7 @@ def assign_market_command(
         rows = _get_doctrine_fits_rows(fit_id, db_alias, False, doctrine_id)
         if not rows:
             # Fit may live in the other market database — search all aliases
-            for fallback in ("wcmktprod", "wcmktnorth"):
+            for fallback in _configured_market_db_aliases():
                 if fallback == db_alias:
                     continue
                 rows = _get_doctrine_fits_rows(fit_id, fallback, False, doctrine_id)
@@ -685,14 +683,14 @@ def assign_doctrine_market(
 
     Args:
         doctrine_id: The doctrine to assign
-        market_flag: Market to assign ('primary', 'deployment', or 'both')
+        market_flag: Market to assign ('primary', 'deployment', or 'all')
         remote: Use remote database
         db_alias: Database alias
     """
-    if market_flag not in ("primary", "deployment", "both"):
+    if market_flag not in ("primary", "deployment", "both", "all"):
         console.print(
             f"[red]Error: invalid market '{market_flag}'. "
-            "Must be 'primary', 'deployment', or 'both'[/red]"
+            "Must be 'primary', 'deployment', or 'all'[/red]"
         )
         return False
 
@@ -715,7 +713,7 @@ def assign_doctrine_market(
     for fid in fit_ids:
         rows = _get_doctrine_fits_rows(fid, db_alias, False, doctrine_id)
         if not rows:
-            for fallback in ("wcmktprod", "wcmktnorth"):
+            for fallback in _configured_market_db_aliases():
                 if fallback == db_alias:
                     continue
                 rows = _get_doctrine_fits_rows(fid, fallback, False, doctrine_id)
@@ -758,15 +756,33 @@ def assign_doctrine_market(
 
 
 def _flag_to_aliases(flag: str) -> set[str]:
-    """Return the set of explicit database aliases a market_flag implies."""
-    _FLAG_ALIAS_MAP = {
-        "primary": {"wcmktprod"},
-        "deployment": {"wcmktnorth"},
-        "both": {"wcmktprod", "wcmktnorth"},
+    """Return the set of explicit database aliases a market_flag implies.
+
+    Config-driven (aliases resolved from settings.toml, not hard-coded). market3
+    is shimmed to primary — a fit stocked in ``primary`` is also stocked in
+    market3 — so the ``primary`` set includes market3's alias. ``both`` (legacy)
+    and ``all`` both cover every configured market.
+    """
+    available = set(MarketContext.list_available())
+
+    def _alias(market: str) -> Optional[str]:
+        return MarketContext.from_settings(market).database_alias if market in available else None
+
+    primary = _alias("primary")
+    deployment = _alias("deployment")
+    market3 = _alias("market3")
+    all_markets = set(_configured_market_db_aliases())
+
+    flag_map: dict[str, set[str]] = {
+        "primary": {a for a in (primary, market3) if a},  # shim: market3 mirrors primary
+        "deployment": {a for a in (deployment,) if a},
+        "market3": {a for a in (market3,) if a},
+        "both": all_markets,
+        "all": all_markets,
     }
-    if flag not in _FLAG_ALIAS_MAP:
+    if flag not in flag_map:
         logger.warning(f"Unexpected market_flag '{flag}' — treating as empty alias set")
-    return _FLAG_ALIAS_MAP.get(flag, set())
+    return flag_map.get(flag, set())
 
 
 def _needs_provisioning(
@@ -898,12 +914,12 @@ def _get_remote_market_flags(
     fit_id: int,
     doctrine_id: int,
 ) -> List[str]:
-    """Fetch market_flag for a (fit_id, doctrine_id) from both remote databases.
+    """Fetch market_flag for a (fit_id, doctrine_id) from all configured remote markets.
 
-    Returns a list of flag values found (0-2 entries).
+    Returns a list of flag values found (one per market that has the fit).
     """
     flags = []
-    for target in ("wcmktprod", "wcmktnorth"):
+    for target in _configured_market_db_aliases():
         try:
             db = DatabaseConfig(target)
             engine = db.remote_engine
@@ -944,7 +960,7 @@ def _plan_market_action(
 
     Args:
         row: doctrine_fits row dict
-        target_market: 'primary', 'deployment', or 'both'
+        target_market: 'primary', 'deployment', or 'all'
         mode: "assign" or "unassign"
         remote_flags: market_flag values from remote databases (assign only).
             When provided, a row is only skipped if local AND all remotes
@@ -977,11 +993,11 @@ def _plan_market_action(
                 )
     else:
         # unassign logic (unchanged)
-        if target_market == "both":
+        if target_market in ("both", "all"):
             plan["action"] = "remove"
             plan["new_flag"] = None
-            plan["reason"] = "Remove from both markets"
-        elif current_flag == "both":
+            plan["reason"] = "Remove from all markets"
+        elif current_flag in ("both", "all"):
             new_flag = "deployment" if target_market == "primary" else "primary"
             plan["action"] = "update"
             plan["new_flag"] = new_flag
@@ -1152,22 +1168,6 @@ def _cleanup_fit_in_market(
             console.print(f"  [dim]Cleaned up {removed} orphaned doctrines rows for fit {fit_id}[/dim]")
         remove_ship_target(fit_id, conn=conn)
         console.print(f"  [dim]Cleaned up ship_targets for fit {fit_id}[/dim]")
-
-
-def _cleanup_market_db(
-    fit_id: int,
-    doctrine_id: int,
-    alias: str,
-    remote: bool,
-) -> None:
-    """Legacy entry point for cleanup on a dedicated engine + transaction."""
-    db = DatabaseConfig(alias)
-    engine = db.remote_engine if remote else db.engine
-    try:
-        with engine.begin() as conn:
-            _cleanup_fit_in_market(conn, fit_id, doctrine_id)
-    finally:
-        engine.dispose()
 
 
 def _report_lead_ship(adopted: bool, fit_id: int, doctrine_id: int) -> None:
@@ -1452,7 +1452,7 @@ def unassign_market_command(
 
     Args:
         fit_id: The fit ID to unassign
-        market_to_remove: Market to remove from ('primary', 'deployment', or 'both')
+        market_to_remove: Market to remove from ('primary', 'deployment', or 'all')
         remote: Use remote database
         db_alias: Database alias
         doctrine_id: Optionally target a specific doctrine row only
@@ -1463,17 +1463,17 @@ def unassign_market_command(
         Dict with counts: {"updated": int, "deleted": int, "skipped": int}
         Empty dict on error or cancellation.
     """
-    if market_to_remove not in ("primary", "deployment", "both"):
+    if market_to_remove not in ("primary", "deployment", "both", "all"):
         console.print(
             f"[red]Error: invalid market '{market_to_remove}'. "
-            "Must be 'primary', 'deployment', or 'both'[/red]"
+            "Must be 'primary', 'deployment', or 'all'[/red]"
         )
         return {}
 
     try:
         rows = _get_doctrine_fits_rows(fit_id, db_alias, remote, doctrine_id)
         if not rows:
-            for fallback in ("wcmktprod", "wcmktnorth"):
+            for fallback in _configured_market_db_aliases():
                 if fallback == db_alias:
                     continue
                 rows = _get_doctrine_fits_rows(fit_id, fallback, remote, doctrine_id)
@@ -1517,14 +1517,14 @@ def unassign_doctrine_market(
 
     Args:
         doctrine_id: The doctrine to unassign
-        market_to_remove: 'primary', 'deployment', or 'both'
+        market_to_remove: 'primary', 'deployment', or 'all'
         remote: Use remote database
         db_alias: Database alias
     """
-    if market_to_remove not in ("primary", "deployment", "both"):
+    if market_to_remove not in ("primary", "deployment", "both", "all"):
         console.print(
             f"[red]Error: invalid market '{market_to_remove}'. "
-            "Must be 'primary', 'deployment', or 'both'[/red]"
+            "Must be 'primary', 'deployment', or 'all'[/red]"
         )
         return False
 
@@ -1545,7 +1545,7 @@ def unassign_doctrine_market(
     for fid in fit_ids:
         rows = _get_doctrine_fits_rows(fid, db_alias, remote, doctrine_id)
         if not rows:
-            for fallback in ("wcmktprod", "wcmktnorth"):
+            for fallback in _configured_market_db_aliases():
                 if fallback == db_alias:
                     continue
                 rows = _get_doctrine_fits_rows(fid, fallback, remote, doctrine_id)
@@ -1567,9 +1567,9 @@ def unassign_doctrine_market(
     for p in all_plans:
         action_counts[p["action"]] = action_counts.get(p["action"], 0) + 1
 
-    if market_to_remove == "both":
+    if market_to_remove in ("both", "all"):
         prompt_msg = (
-            f"[bold red]Remove doctrine '{doctrine_name}' from BOTH markets? "
+            f"[bold red]Remove doctrine '{doctrine_name}' from ALL markets? "
             "This cannot be undone.[/bold red]"
         )
     else:
@@ -1598,21 +1598,9 @@ def unassign_doctrine_market(
 
 
 def list_fits_command(db_alias: str = "wcmkt", remote: bool = False) -> None:
-    """List all fits, showing targets for both primary and north markets."""
-    primary_fits = get_fits_list(db_alias="wcmkt", remote=remote)
-    north_fits = get_fits_list(db_alias="wcmktnorth", remote=remote)
-
-    merged: dict[int, dict] = {}
-    for fit in primary_fits:
-        merged[fit["fit_id"]] = {**fit, "primary_target": fit["target"], "north_target": None}
-    for fit in north_fits:
-        fid = fit["fit_id"]
-        if fid in merged:
-            merged[fid]["north_target"] = fit["target"]
-        else:
-            merged[fid] = {**fit, "primary_target": None, "north_target": fit["target"]}
-
-    fits = sorted(merged.values(), key=lambda f: (f["ship_name"], f["fit_name"]))
+    """List all doctrine fits and their target quantity for the given market."""
+    fits = get_fits_list(db_alias=db_alias, remote=remote)
+    fits.sort(key=lambda f: (f["ship_name"], f["fit_name"]))
     if fits:
         display_fits_table(fits)
         console.print(f"\n[dim]Total: {len(fits)} fits[/dim]")
@@ -1854,7 +1842,7 @@ def doctrine_add_fit_command(
         doctrine_id: Doctrine to add the fit(s) to
         fit_ids: List of fit IDs to add (or single ID will be wrapped)
         target: Default target quantity for new fits without existing targets
-        market_flag: Market assignment (primary, deployment, both)
+        market_flag: Market assignment (primary, deployment, all)
         remote: Use remote database
         interactive: Use interactive prompts
         db_alias: Target market database
@@ -1867,7 +1855,7 @@ def doctrine_add_fit_command(
     fit_targets: dict[int, int] = {}
 
     # Determine target market databases up front (used for both validation and writes)
-    if market_flag == "both":
+    if market_flag in ("both", "all"):
         target_aliases = _configured_market_db_aliases()
     else:
         target_aliases = [db_alias]
@@ -2000,11 +1988,11 @@ def doctrine_add_fit_command(
         console.print(fit_table)
 
         # Get market assignment first (applies to all fits)
-        market_choices = ["primary", "deployment", "both"]
+        market_choices = ["primary", "deployment", "all"]
         market_flag = Prompt.ask(
             "\n[bold]Market assignment[/bold]",
             choices=market_choices,
-            default=market_flag,
+            default="all" if market_flag in ("both", "all") else (market_flag or "primary"),
         )
 
         # Per-fit target collection
@@ -2367,7 +2355,7 @@ def update_lead_ship_command(
     """
     Set or change the lead ship for a doctrine across one or more markets.
 
-    ``market_flag`` must be ``primary``, ``deployment``, or ``both``; the
+    ``market_flag`` must be ``primary``, ``deployment``, or ``all``; the
     list of target DB aliases is resolved from settings via
     ``_configured_market_db_aliases``.
     """
@@ -2745,30 +2733,28 @@ def doctrine_remove_fit_command(
 def update_target_command(
     fit_id: int,
     target: int,
+    db_alias: str = "wcmkt",
     remote: bool = False,
     market_flag: str = "primary",
-    db_alias: str = "wcmkt",
 ) -> bool:
     """
     Update the target quantity for a fit.
+
+    Target databases are resolved from ``market_flag`` (config-driven, with
+    market3 shimmed to primary). ``db_alias`` is only a fallback when
+    ``market_flag`` maps to no configured market.
     """
-    if market_flag == "both":
-        primary_ok = _update_target_single(
-            fit_id, target, remote=remote, market_flag="primary", db_alias="wcmkt"
-        )
-        deploy_ok = _update_target_single(
-            fit_id, target, remote=remote, market_flag="deployment", db_alias="wcmktnorth"
-        )
-        return primary_ok and deploy_ok
+    target_aliases = sorted(_flag_to_aliases(market_flag))
+    if not target_aliases:
+        target_aliases = [db_alias]
 
-    if market_flag == "deployment":
-        db_alias = "wcmktnorth"
-    elif market_flag not in ["primary", "deployment"]:
-        db_alias = "wcmkt"
-
-    return _update_target_single(
-        fit_id, target, remote=remote, market_flag=market_flag, db_alias=db_alias
-    )
+    ok = True
+    for alias in target_aliases:
+        if not _update_target_single(
+            fit_id, target, remote=remote, market_flag=market_flag, db_alias=alias
+        ):
+            ok = False
+    return ok
 
 
 def _update_target_single(
@@ -2784,6 +2770,8 @@ def _update_target_single(
     If the fit does not exist in ship_targets, creates the record using
     metadata from doctrine_fits.
     """
+    if market_flag == "all":
+        market_flag = "both"  # canonical stored value (no DB migration)
     db = DatabaseConfig(db_alias)
     engine = db.remote_engine if remote else db.engine
     try:
@@ -2938,7 +2926,7 @@ def fit_update_command(
         fit_ids: List of fit IDs for doctrine-add-fit/doctrine-remove-fit (multiple)
         file_path: Path to EFT fit file
         meta_file: Path to metadata JSON file
-        market_flag: Market assignment (primary, deployment, both)
+        market_flag: Market assignment (primary, deployment, all)
         remote: Use remote database
         local_only: Use local database only (no Turso sync)
         dry_run: Preview without committing
@@ -3030,7 +3018,7 @@ def fit_update_command(
                 metadata = parse_fit_metadata(meta_file)
 
                 # Determine which databases to update
-                if market_flag == "both":
+                if market_flag in ("both", "all"):
                     aliases = _configured_market_db_aliases()
                 else:
                     aliases = [target_alias]
@@ -3096,15 +3084,18 @@ def fit_update_command(
             mkt_engine.dispose()
 
             if not rows:
-                # Fallback: check wcmktnorth
-                db_north = DatabaseConfig("wcmktnorth")
-                north_engine = db_north.remote_engine if use_remote else db_north.engine
-                with north_engine.connect() as conn:
-                    rows = conn.execute(
-                        text("SELECT doctrine_id, fit_name, ship_name, target FROM doctrine_fits WHERE fit_id = :fit_id"),
-                        {"fit_id": fit_id},
-                    ).fetchall()
-                north_engine.dispose()
+                # Fallback: check the other configured markets.
+                for fallback in _configured_market_db_aliases():
+                    fb_db = DatabaseConfig(fallback)
+                    fb_engine = fb_db.remote_engine if use_remote else fb_db.engine
+                    with fb_engine.connect() as conn:
+                        rows = conn.execute(
+                            text("SELECT doctrine_id, fit_name, ship_name, target FROM doctrine_fits WHERE fit_id = :fit_id"),
+                            {"fit_id": fit_id},
+                        ).fetchall()
+                    fb_engine.dispose()
+                    if rows:
+                        break
 
             if not rows:
                 console.print(f"[red]Error: fit {fit_id} not found in doctrine_fits[/red]")
@@ -3197,10 +3188,10 @@ def fit_update_command(
                 "[red]Error: --fit-id is required for remove command[/red]"
             )
             return False
-        # Default to both markets unless a specific market was given
-        if market_flag in ("both", "primary"):
+        # Default to all markets unless a specific market was given
+        if market_flag in ("both", "all", "primary"):
             # "primary" is the default when no --market flag is passed,
-            # so treat it the same as "both" for remove.
+            # so treat it the same as "all" for remove.
             aliases = _configured_market_db_aliases()
         else:
             aliases = [target_alias]

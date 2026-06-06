@@ -3,7 +3,7 @@ import csv
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.utils.db_utils import add_missing_items_to_watchlist
 from mkts_backend.cli_tools.arg_utils import ParsedArgs
-from mkts_backend.cli_tools.market_args import MARKET_DB_MAP
+from mkts_backend.cli_tools.market_args import MARKET_DB_MAP, expand_market_alias
 from mkts_backend.cli_tools.prompter import get_multiline_input
 from mkts_backend.utils.get_type_info import get_type_from_list
 logger = configure_logging(__name__)
@@ -35,7 +35,7 @@ def add_watchlist(args: list[str], market_alias: str = "primary") -> bool:
     Args:
         args: Raw CLI arguments (used to extract --type_id, --file, and --local).
         market_alias: Normalized market alias from parse_market_args
-                      ("primary", "deployment", or "both").
+                      ("primary", "deployment", "market3", or "all").
 
     Returns:
         True if every market write succeeded, False otherwise. The buildcost
@@ -75,15 +75,15 @@ def add_watchlist(args: list[str], market_alias: str = "primary") -> bool:
         print("Usage: mkts-backend add_watchlist --type_id=12345,67890")
         print("       mkts-backend add_watchlist --file=data/expanded_typeids.csv")
         print("       mkts-backend add_watchlist --type_id=12345 --deployment")
-        print("       mkts-backend add_watchlist --type_id=12345 --both")
+        print("       mkts-backend add_watchlist --type_id=12345 --all")
         return False
 
     # Default to remote database, use --local flag for local database
     remote = not p.has_flag("local")
 
     # Determine target database(s) from market alias
-    if market_alias == "both":
-        target_aliases = [MARKET_DB_MAP["primary"], MARKET_DB_MAP["deployment"]]
+    if market_alias in ("both", "all"):
+        target_aliases = [MARKET_DB_MAP[m] for m in expand_market_alias(market_alias)]
     else:
         target_aliases = [MARKET_DB_MAP.get(market_alias, "wcmkt")]
 
