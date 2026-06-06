@@ -156,11 +156,10 @@ def fill_nulls_from_history(stats: pd.DataFrame, market_ctx: Optional["MarketCon
     stats['days_remaining'] = stats['days_remaining'].fillna(0)
     stats['total_volume_remain'] = stats['total_volume_remain'].fillna(0)
 
-    logger.info("Getting nulls")
+    logger.debug("Getting nulls")
     nulls = stats[stats.isnull().any(axis=1)]
     nulls_type_ids = nulls.type_id.unique().tolist()
-    logger.info(f"nulls: {len(nulls)} items")
-    logger.info(f"nulls_type_ids: {nulls_type_ids}")
+    logger.debug(f"nulls: {len(nulls)} items")
 
     if not nulls_type_ids:
         logger.info("No type_ids with nulls found")

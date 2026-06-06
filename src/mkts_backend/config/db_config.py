@@ -158,7 +158,7 @@ class DatabaseConfig:
     @property
     def sqlite_local_connect(self):
         if self._sqlite_local_connect is None:
-            self._sqlite_local_connect = libsql.connect(self.path) 
+            self._sqlite_local_connect = libsql.connect(self.path)
         return self._sqlite_local_connect
 
     def sync(self):
@@ -170,6 +170,7 @@ class DatabaseConfig:
         logger.info("\n--------------------------------")
         logger.info(f"========== START SYNC {self.alias} ({self.path}) ==========")
         logger.info(f"Start sync for {self.alias} at {self.path}")
+        logger.debug(f"using url: {self.turso_url}")
         if start_info is not None:
             logger.info("--------------------------------")
             logger.info(f"Start info: {start_info}")
