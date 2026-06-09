@@ -228,7 +228,9 @@ def _register_all(reg: CommandRegistry) -> None:
         try:
             fit_ids_str = p.get_string("fit-id", "fit_id", "id")
             doctrine_id = p.get_int("doctrine-id")
-            target_qty = p.get_int("target", default=100)
+            # No default: update-target must distinguish "missing" (prompt/error)
+            # from an explicit value. doctrine-add-fit falls back to 100 itself.
+            target_qty = p.get_int("target")
         except ArgError as e:
             print(f"Error: {e}")
             return False

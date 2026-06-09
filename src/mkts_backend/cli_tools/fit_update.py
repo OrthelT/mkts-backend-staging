@@ -21,6 +21,7 @@ Supports --paste mode for pasting EFT text directly via multiline prompt
 instead of requiring a file path.
 """
 
+import sys
 from collections import defaultdict
 from typing import List, Optional
 from rich.console import Console
@@ -2895,7 +2896,7 @@ def fit_update_command(
     dry_run: bool = False,
     interactive: bool = False,
     target_alias: str = "wcmkt",
-    target: int = 100,
+    target: Optional[int] = None,
     skip_targets: bool = False,
     paste_mode: bool = False,
     friendly_name: Optional[str] = None,
@@ -2932,7 +2933,8 @@ def fit_update_command(
         dry_run: Preview without committing
         interactive: Use interactive prompts
         target_alias: Target database alias
-        target: Default target quantity for new fits (used by doctrine-add-fit)
+        target: Target quantity. ``None`` means "not supplied": update-target
+            prompts (TTY) or errors (non-TTY); doctrine-add-fit falls back to 100.
         skip_targets: Preserve existing targets, skip target prompts (doctrine-add-fit)
         paste_mode: whether to use pasted fit.
 
@@ -3174,7 +3176,7 @@ def fit_update_command(
         return doctrine_add_fit_command(
             doctrine_id=None,  # Will prompt in interactive mode
             fit_ids=fit_ids_list,
-            target=target,
+            target=target if target is not None else 100,
             market_flag=market_flag,
             remote=use_remote,
             interactive=interactive or True,  # Default to interactive
@@ -3227,10 +3229,18 @@ def fit_update_command(
                 "[red]Error: --fit-id is required for update-target command[/red]"
             )
             return False
-        if not target:
-            console.print(
-                "[red]Error: --target is required for update-target command[/red]"
-            )
+        interactive_tty = sys.stdin.isatty()
+        if target is None:
+            if not interactive_tty:
+                console.print(
+                    "[red]Error: --target is required for update-target command[/red]"
+                )
+                return False
+            target = IntPrompt.ask("[bold]Target quantity[/bold]")
+        if interactive_tty and not Confirm.ask(
+            f"Update target for fit {fit_id} to [yellow]{target}[/yellow]?"
+        ):
+            console.print("[yellow]Aborted: target unchanged[/yellow]")
             return False
         return update_target_command(
             fit_id,
