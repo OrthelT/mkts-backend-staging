@@ -383,3 +383,40 @@ uv run mkts-backend equiv add --type-ids=13984,17838 --market=primary
 - `add --type-ids=<ids>` - Create a new group from comma-separated type IDs
 - `remove --id=<group_id>` - Remove all members from a group
 
+## seed_new_market.py Script
+
+A standalone script (not a `mkts-backend` subcommand) that bootstraps a newly-created market by copying the reference/config tables from an existing market into the new market's **remote** Turso database. Run it after creating the new Turso database, configuring its keys, and adding its `[markets.<alias>]` section to `settings.toml`.
+
+```bash
+# Dry-run / preview (default): shows source vs. destination row counts and the plan
+uv run python scripts/seed_new_market.py
+
+# Apply: writes to the destination remote (Turso cloud)
+uv run python scripts/seed_new_market.py --apply
+
+# Different source/destination markets (by database alias)
+uv run python scripts/seed_new_market.py --source wcmktnewkeep --dest wcmktbkg --apply
+
+# Restrict to specific tables (repeatable)
+uv run python scripts/seed_new_market.py --dest wcmktbkg --only watchlist --only doctrines --apply
+```
+
+**Options:**
+- `--source=<alias>`: Source market DB alias to copy from (read from its **local** `.db`). Default: `wcmktnewkeep`
+- `--dest=<alias>`: Destination market DB alias to seed (written to its **remote** Turso db). Default: `wcmktbkg`
+- `--only=<table>`: Restrict to specific reference tables. Repeatable
+- `--apply`: Actually perform the migration. Omit for a dry-run
+
+**Tables copied** (reference/config only — market-data tables are deliberately excluded):
+- `watchlist`, `doctrines`, `doctrine_fits`, `doctrine_map`, `lead_ships`, `ship_targets`, `module_equivalents`
+
+**Behavior:**
+- **Ensures schema first**: creates any missing target tables from `Base` (`create_all`, idempotent — existing tables are left alone), so a brand-new remote works
+- **Wipe-and-replace per table**: each table runs in its own transaction (`DELETE` then bulk `INSERT`); a row-count mismatch rolls the table back, so it is safe to re-run
+- **Preserves `id` values** exactly, keeping cross-table references (`doctrine_map`, `doctrines`, `lead_ships`, …) consistent
+- **CSV backup**: any existing destination rows are dumped to `data/migration_backups/<dest>_<table>_<timestamp>.csv` before being wiped
+- Writes to the destination **cloud only** — the destination's local `.db` mirror stays stale until a subsequent `uv run mkts-backend sync --market=<alias>`. Market-data tables fill on the first collection run (`uv run mkts-backend --market=<alias> --history`)
+- To add another reference table to the set, append its model to `REFERENCE_MODELS` in the script — table name and columns are derived from the model
+
+**Location:** `/home/orthel/workspace/github/mkts_backend/scripts/seed_new_market.py`
+
