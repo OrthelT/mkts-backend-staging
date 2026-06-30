@@ -158,9 +158,9 @@ jobs:
         # deployment market (X47L-Q Rogue Threshold / wcmktnorth2.db; env name TURSO_MARKET3_*)
         echo "TURSO_WCMKTNORTH_URL=${{ secrets.TURSO_WCMKTNORTH_URL }}" >> $GITHUB_ENV
         echo "TURSO_WCMKTNORTH_TOKEN=${{ secrets.TURSO_WCMKTNORTH_TOKEN }}" >> $GITHUB_ENV
-        # market3 market (4-HWWF Platestar / wcmktprod.db)
-        echo "TURSO_WCMKTPROD_URL=${{ secrets.TURSO_WCMKTPROD_URL }}" >> $GITHUB_ENV
-        echo "TURSO_WCMKTPROD_TOKEN=${{ secrets.TURSO_WCMKTPROD_TOKEN }}" >> $GITHUB_ENV
+        # market3 market (BKG-Q2 Insidious Prime / wcmktbkg.db)
+        echo "TURSO_WCMKTBKG_URL=${{ secrets.TURSO_WCMKTBKG_URL }}" >> $GITHUB_ENV
+        echo "TURSO_WCMKTBKG_TOKEN=${{ secrets.TURSO_WCMKTBKG_TOKEN }}" >> $GITHUB_ENV
         # Janice API key for Jita price fallback
         echo "JANICE_KEY=${{ secrets.JANICE_KEY }}" >> $GITHUB_ENV
 
@@ -195,8 +195,8 @@ jobs:
         echo "TURSO_WCMKTNEWKEEP_TOKEN is set (primary): $([ -n "$TURSO_WCMKTNEWKEEP_TOKEN" ] && echo "YES" || echo "NO")"
         echo "TURSO_WCMKTNORTH_URL is set (deployment): $([ -n "$TURSO_WCMKTNORTH_URL" ] && echo "YES" || echo "NO")"
         echo "TURSO_WCMTNORTH_TOKEN is set (deployment): $([ -n "$TURSO_WCMKTNORTH_TOKEN" ] && echo "YES" || echo "NO")"
-        echo "TURSO_WCMKTPROD_URL is set (market3): $([ -n "$TURSO_WCMKTPROD_URL" ] && echo "YES" || echo "NO")"
-        echo "TURSO_WCMKTPROD_TOKEN is set (market3): $([ -n "$TURSO_WCMKTPROD_TOKEN" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKTBKG_URL is set (market3): $([ -n "$TURSO_WCMKTBKG_URL" ] && echo "YES" || echo "NO")"
+        echo "TURSO_WCMKTBKG_TOKEN is set (market3): $([ -n "$TURSO_WCMKTBKG_TOKEN" ] && echo "YES" || echo "NO")"
         echo "JANICE_KEY is set: $([ -n "$JANICE_KEY" ] && echo "YES" || echo "NO")"
 
     - name: Run market data collection

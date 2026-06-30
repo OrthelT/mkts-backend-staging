@@ -2,6 +2,7 @@ import os
 import pathlib
 from typing import Dict, List, Tuple
 from mkts_backend.config.logging_config import configure_logging
+from mkts_backend.config.settings_service import SettingsService
 
 logger = configure_logging(__name__)
 
@@ -55,16 +56,25 @@ def validate_required_credentials() -> Tuple[bool, List[str], List[str]]:
     Returns:
         Tuple[bool, List[str], List[str]]: (is_valid, missing_credentials, present_credentials)
     """
+
+    service = SettingsService()
+    routing = service.database_routing()
+
+
     required_credentials = [
         "CLIENT_ID", 
         "SECRET_KEY", 
         "REFRESH_TOKEN", 
-        "TURSO_WCMKTPROD_URL", 
-        "TURSO_WCMKTPROD_TOKEN", 
         "TURSO_SDE_URL", 
         "TURSO_SDE_TOKEN", 
         "TURSO_FITTING_URL", 
         "TURSO_FITTING_TOKEN"]
+
+    for alias, cfg in routing.items():
+        if alias != "wcmkttest":
+            required_credentials.append(cfg["turso_url_env"])
+            required_credentials.append(cfg["turso_token_env"])
+
     missing = []
     present = []
 
