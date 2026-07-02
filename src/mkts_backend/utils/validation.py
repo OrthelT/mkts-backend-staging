@@ -44,36 +44,51 @@ def validate_env_file_exists() -> Tuple[bool, str]:
         return False, f".env file not found at: {env_path}"
 
 
-def validate_required_credentials() -> Tuple[bool, List[str], List[str]]:
+def validate_required_credentials(
+    market_aliases: List[str] | None = None,
+) -> Tuple[bool, List[str], List[str]]:
     """
     Validate that all required credentials are present in the environment.
 
     Required credentials:
-        - CLIENT_ID: Eve Online ESI application client ID
-        - SECRET_KEY: Eve Online ESI application secret key
-        - REFRESH_TOKEN: Eve Online SSO refresh token
+        - CLIENT_ID / SECRET_KEY / REFRESH_TOKEN: Eve Online ESI application
+        - TURSO_SDE_* / TURSO_FITTING_*: shared databases
+        - Per-market Turso URL/token env vars, derived from [markets.*] in
+          settings.toml. Scoped to ``market_aliases`` (e.g. ["primary"]) when
+          given, so a single-market run doesn't demand other markets'
+          credentials; None means every configured market. The shared test DB
+          is always optional (see validate_optional_credentials).
 
     Returns:
         Tuple[bool, List[str], List[str]]: (is_valid, missing_credentials, present_credentials)
     """
-
     service = SettingsService()
     routing = service.database_routing()
+    testing_alias = (
+        service.settings_dict.get("shared", {}).get("testing", {}).get("database_alias")
+    )
 
+    if market_aliases is None:
+        db_aliases = set(routing)
+    else:
+        db_aliases = {service.market_db_alias(a) for a in market_aliases}
 
     required_credentials = [
-        "CLIENT_ID", 
-        "SECRET_KEY", 
-        "REFRESH_TOKEN", 
-        "TURSO_SDE_URL", 
-        "TURSO_SDE_TOKEN", 
-        "TURSO_FITTING_URL", 
+        "CLIENT_ID",
+        "SECRET_KEY",
+        "REFRESH_TOKEN",
+        "TURSO_SDE_URL",
+        "TURSO_SDE_TOKEN",
+        "TURSO_FITTING_URL",
         "TURSO_FITTING_TOKEN"]
 
     for alias, cfg in routing.items():
-        if alias != "wcmkttest":
-            required_credentials.append(cfg["turso_url_env"])
-            required_credentials.append(cfg["turso_token_env"])
+        if alias not in db_aliases or alias == testing_alias:
+            continue
+        # env-var keys may be absent for a local-only market (cfg.get upstream)
+        for env_var in (cfg["turso_url_env"], cfg["turso_token_env"]):
+            if env_var:
+                required_credentials.append(env_var)
 
     missing = []
     present = []
@@ -134,9 +149,14 @@ def validate_optional_credentials() -> Tuple[List[str], List[str]]:
     return present, missing
 
 
-def validate_all() -> Dict:
+def validate_all(market_aliases: List[str] | None = None) -> Dict:
     """
     Perform complete validation of .env file and credentials.
+
+    Args:
+        market_aliases: Restrict the required per-market Turso credentials to
+            these markets (e.g. ["primary"]). None requires every configured
+            market's credentials.
 
     Returns:
         Dict: Validation results with the following keys:
@@ -160,7 +180,7 @@ def validate_all() -> Dict:
         load_dotenv()
 
     # Always validate credentials - they may be set via .env OR environment variables (GitHub Actions)
-    required_valid, missing_required, present_required = validate_required_credentials()
+    required_valid, missing_required, present_required = validate_required_credentials(market_aliases)
     present_optional, missing_optional = validate_optional_credentials()
 
     # Overall validation result - credentials are what matter, not .env file existence

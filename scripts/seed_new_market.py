@@ -9,13 +9,20 @@ copied — those are populated by the normal collection run for the new market.
 Use this to bootstrap a freshly-created market so the frontend has doctrines,
 watchlist, and targets to display before the first data-collection run.
 
-Flow per table (one transaction each, on the destination remote engine):
+Once up front (only when applying): ensure schema — create any missing target
+tables from Base (checkfirst leaves existing tables alone).
+
+Flow per table:
   1. Read source rows (model column set) from <source> local DB.
-  2. Ensure schema: create any missing target tables from Base (checkfirst).
-  3. CSV backup of current destination rows (if any).
-  4. DELETE all destination rows, then INSERT the source rows (ids preserved
-     so cross-table references stay consistent).
-  5. Verify destination row count == source row count, else roll back.
+  2. CSV backup of current destination rows (if any).
+  3. In one transaction on the destination remote engine: DELETE all
+     destination rows, INSERT the source rows (ids preserved so cross-table
+     references stay consistent), then verify destination row count ==
+     source row count — a mismatch rolls the whole transaction back.
+
+Market-derived columns (stock, price, timestamps — see MARKET_DERIVED_RESET)
+are reset on insert so the new market starts at zero availability instead of
+reporting the source market's numbers until its first collection run.
 
 Writes to the destination CLOUD only. The destination's local .db mirror stays
 stale until a subsequent `mkts-backend sync`.
@@ -73,6 +80,22 @@ REFERENCE_MODELS = [
     ModuleEquivalents,
 ]
 
+# Columns whose values are snapshots of the SOURCE market's state, recalculated
+# per-market by process_doctrine_stats() on every collection run. Copying them
+# verbatim would make a fresh market report the source market's availability,
+# so they are reset on insert (zero stock, no price/history) instead.
+MARKET_DERIVED_RESET: dict[str, dict] = {
+    Doctrines.__tablename__: {
+        "hulls": 0,
+        "fits_on_mkt": 0.0,
+        "total_stock": 0,
+        "price": None,
+        "avg_vol": None,
+        "days": None,
+        "timestamp": None,
+    },
+}
+
 
 def table_exists(engine, table: str) -> bool:
     with engine.connect() as conn:
@@ -113,7 +136,10 @@ def dest_count(dest: DatabaseConfig, table: str) -> int | None:
         return conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
 
 
-def seed_table(src: DatabaseConfig, dest: DatabaseConfig, model, *, apply: bool) -> bool:
+def seed_table(
+    src: DatabaseConfig, dest: DatabaseConfig, model, *, apply: bool,
+    allow_empty_source: bool = False,
+) -> bool:
     table = model.__tablename__
     cols = list(model.__table__.columns.keys())
 
@@ -122,6 +148,21 @@ def seed_table(src: DatabaseConfig, dest: DatabaseConfig, model, *, apply: bool)
     before = dest_count(dest, table)
     before_str = "missing" if before is None else str(before)
     print(f"Source rows: {len(rows)} | Destination rows: {before_str}")
+
+    # An empty source table against a populated destination almost always means
+    # the wrong --source or a stale/never-synced local db — wiping the
+    # destination and inserting nothing would destroy live data and still
+    # report success (0 == 0 passes verification).
+    if not rows and (before or 0) > 0 and not allow_empty_source:
+        print(f"REFUSED: source {src.alias}.{table} is empty but destination has "
+              f"{before} rows. Wrong --source or stale local db? "
+              f"Pass --allow-empty-source to wipe anyway.")
+        return False
+
+    reset = MARKET_DERIVED_RESET.get(table)
+    if reset:
+        rows = [{**r, **reset} for r in rows]
+        print(f"Resetting market-derived columns: {sorted(reset)}")
 
     if not apply:
         print(f"Plan: ensure schema, backup {before_str} dest rows, "
@@ -174,6 +215,11 @@ def main() -> int:
         "--apply", action="store_true",
         help="Actually run the migration. Default is dry-run.",
     )
+    parser.add_argument(
+        "--allow-empty-source", action="store_true",
+        help="Permit wiping a populated destination table even when the source "
+             "table is empty. Without this flag such tables are refused.",
+    )
     args = parser.parse_args()
 
     models = REFERENCE_MODELS
@@ -188,6 +234,14 @@ def main() -> int:
 
     src = DatabaseConfig(args.source)
     dest = DatabaseConfig(args.dest)
+
+    # A missing/empty source file would otherwise surface as one confusing
+    # "no such table" error per table (SQLite creates an empty db on connect).
+    src_path = Path(src.path)
+    if not src_path.exists() or src_path.stat().st_size == 0:
+        print(f"Source database missing or empty: {src.path}\n"
+              f"Sync it first: uv run mkts-backend sync --market=<market alias>")
+        return 2
 
     print(f"Mode: {'APPLY' if args.apply else 'DRY-RUN'}")
     print(f"Source (local): {src.alias} ({src.path})")
@@ -206,7 +260,8 @@ def main() -> int:
     failed = []
     for model in models:
         try:
-            if not seed_table(src, dest, model, apply=args.apply):
+            if not seed_table(src, dest, model, apply=args.apply,
+                              allow_empty_source=args.allow_empty_source):
                 failed.append(model.__tablename__)
         except Exception as e:
             logger.exception(f"Seeding failed for {model.__tablename__}")

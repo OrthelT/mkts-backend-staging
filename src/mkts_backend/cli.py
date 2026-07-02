@@ -446,7 +446,11 @@ def run_market_update(history: bool = False, market_alias: str = "all") -> bool:
 
     start_time = time.perf_counter()
 
-    validation_result = validate_all()
+    market_aliases = expand_market_alias(market_alias)
+
+    # Scope credential validation to the markets actually being processed so a
+    # single-market run doesn't require every market's Turso credentials.
+    validation_result = validate_all(market_aliases)
     if not validation_result["is_valid"]:
         if validation_result["missing_required"]:
             logger.error(
@@ -460,8 +464,6 @@ def run_market_update(history: bool = False, market_alias: str = "all") -> bool:
     logger.debug("Databases initialized")
     os.makedirs("data", exist_ok=True)
     logger.debug(f"Data directory created: {os.path.abspath('data')}")
-
-    market_aliases = expand_market_alias(market_alias)
 
     all_contexts = []
     for alias in market_aliases:

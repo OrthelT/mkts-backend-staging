@@ -406,6 +406,7 @@ uv run python scripts/seed_new_market.py --dest wcmktbkg --only watchlist --only
 - `--dest=<alias>`: Destination market DB alias to seed (written to its **remote** Turso db). Default: `wcmktbkg`
 - `--only=<table>`: Restrict to specific reference tables. Repeatable
 - `--apply`: Actually perform the migration. Omit for a dry-run
+- `--allow-empty-source`: Permit wiping a populated destination table when the source table is empty (refused by default)
 
 **Tables copied** (reference/config only — market-data tables are deliberately excluded):
 - `watchlist`, `doctrines`, `doctrine_fits`, `doctrine_map`, `lead_ships`, `ship_targets`, `module_equivalents`
@@ -415,8 +416,10 @@ uv run python scripts/seed_new_market.py --dest wcmktbkg --only watchlist --only
 - **Wipe-and-replace per table**: each table runs in its own transaction (`DELETE` then bulk `INSERT`); a row-count mismatch rolls the table back, so it is safe to re-run
 - **Preserves `id` values** exactly, keeping cross-table references (`doctrine_map`, `doctrines`, `lead_ships`, …) consistent
 - **CSV backup**: any existing destination rows are dumped to `data/migration_backups/<dest>_<table>_<timestamp>.csv` before being wiped
-- Writes to the destination **cloud only** — the destination's local `.db` mirror stays stale until a subsequent `uv run mkts-backend sync --market=<alias>`. Market-data tables fill on the first collection run (`uv run mkts-backend --market=<alias> --history`)
+- **Resets market-derived columns**: `doctrines` stock/price/timestamp fields are zeroed on insert (see `MARKET_DERIVED_RESET` in the script) so the new market starts at zero availability instead of showing the source market's numbers
+- **Refuses empty-source wipes**: if a source table is empty while the destination has rows (usually a wrong `--source` or a stale local db), the table is skipped and reported as failed; override with `--allow-empty-source`
+- Writes to the destination **cloud only** — the destination's local `.db` mirror stays stale until a subsequent sync. Note these follow-up commands take the **market** alias (e.g. `market3`), not the database alias used by `--source`/`--dest`: `uv run mkts-backend sync --market=market3`, then market-data tables fill on the first collection run (`uv run mkts-backend --market=market3 --history`)
 - To add another reference table to the set, append its model to `REFERENCE_MODELS` in the script — table name and columns are derived from the model
 
-**Location:** `/home/orthel/workspace/github/mkts_backend/scripts/seed_new_market.py`
+**Location:** `scripts/seed_new_market.py`
 
