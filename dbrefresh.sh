@@ -6,9 +6,9 @@ echo "Removing current instances..."
 echo "--------------"
 
 dbfiles=(
-  "wcmktprod"
   "wcmktnewkeep"
   "wcmktnorth2"
+  "wcmktbkg"
   "buildcost"
 )
 

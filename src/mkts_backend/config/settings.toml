@@ -2,8 +2,8 @@
 # This file configures the market data collection system for multiple markets.
 
 [esi]
-user_agent = "wcmkts_backend/0.1.2, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)"
-compatibility_date = "2026-05-19"
+user_agent = "wcmkts_backend/0.1.3, orthel.toralen@gmail.com, (https://github.com/OrthelT/wcmkts_backend)"
+compatibility_date = "2026-06-09"
 
 [auth]
 # esi_client_id, esi_secret_key, and refresh token should be set in .env file for local development.
@@ -48,14 +48,14 @@ turso_token_env = "TURSO_WCMKTNORTH_TOKEN"
 gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit" # wc_northern_supply
 
 [markets.market3]
-name = "4-HWWF - Platestar"
-region_id = 10000003          # Vale of Silent
-system_id = 30000240
-structure_id = 1053654548169
-database_alias = "wcmktprod"
-database_file = "wcmktprod.db"
-turso_url_env = "TURSO_WCMKTPROD_URL"
-turso_token_env = "TURSO_WCMKTPROD_TOKEN"
+name = "BKG-Q2 - Insidious Prime"
+region_id = 10000055  # Branch
+system_id = 30004333 # BKG-Q2
+structure_id = 1032721770598 # Insidious Prime
+database_alias = "wcmktbkg"
+database_file = "wcmktbkg.db"
+turso_url_env = "TURSO_WCMKTBKG_URL"
+turso_token_env = "TURSO_WCMKTBKG_TOKEN"
 gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit" # wc_northern_supply
 
 [markets.primary.gsheets_worksheets]

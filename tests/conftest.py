@@ -49,21 +49,18 @@ def deployment_market_context():
 def mock_env_vars():
     """Mock environment variables for Turso database connections."""
     env_vars = {
-        # Primary market (production)
-        "TURSO_WCMKTPROD_URL": "libsql://test-primary.turso.io",
-        "TURSO_WCMKTPROD_TOKEN": "test-primary-token",
-        # Primary market (development/testing)
+        # Shared test DB
         "TURSO_WCMKTTEST_URL": "libsql://test-wcmkttest.turso.io",
         "TURSO_WCMKTTEST_TOKEN": "test-wcmkttest-token",
-        # Deployment market (WinterCo Keepstar)
-        "TURSO_WCMKTNEWKEEP_URL": "libsql://test-deployment.turso.io",
-        "TURSO_WCMKTNEWKEEP_TOKEN": "test-deployment-token",
-        # market3 (X47L-Q)
-        "TURSO_MARKET3_URL": "libsql://test-market3.turso.io",
-        "TURSO_MARKET3_TOKEN": "test-market3-token",
-        # Legacy north env vars (kept for any remaining references)
+        # Primary market (4-HWWF WinterCo. Central Station)
+        "TURSO_WCMKTNEWKEEP_URL": "libsql://test-primary.turso.io",
+        "TURSO_WCMKTNEWKEEP_TOKEN": "test-primary-token",
+        # Deployment market (X47L-Q Rogue Threshold)
         "TURSO_WCMKTNORTH_URL": "libsql://test-north.turso.io",
         "TURSO_WCMKTNORTH_TOKEN": "test-north-token",
+        # market3 (BKG-Q2 Insidious Prime)
+        "TURSO_WCMKTBKG_URL": "libsql://test-bkg.turso.io",
+        "TURSO_WCMKTBKG_TOKEN": "test-bkg-token",
         # SDE and fittings
         "TURSO_SDE_URL": "libsql://test-sde.turso.io",
         "TURSO_SDE_TOKEN": "test-sde-token",
@@ -82,7 +79,7 @@ def mock_env_vars():
 def temp_db_dir(tmp_path):
     """Create a temporary directory with mock database files."""
     # Create mock database files
-    for db_name in ["wcmktprod.db", "wcmktnorth2.db", "wcmktnewkeep.db", "wcmkttest.db", "sde.db", "wcfitting.db"]:
+    for db_name in ["wcmktbkg.db", "wcmktnorth2.db", "wcmktnewkeep.db", "wcmkttest.db", "sde.db", "wcfitting.db"]:
         db_path = tmp_path / db_name
         conn = sqlite3.connect(str(db_path))
         # Create minimal schema for testing
