@@ -14,7 +14,7 @@ token_file = "file:token.json"
 [app]
 name = "WinterCo Markets Backend"
 environment = "production" # "production" or "development"
-log_level = "DEBUG" # INFO or DEBUG
+log_level = "INFO" # INFO or DEBUG
 
 # ============================================================================
 # MARKETS CONFIGURATION
@@ -26,26 +26,26 @@ log_level = "DEBUG" # INFO or DEBUG
 default = "primary"
 
 [markets.primary]
-name = "4-HWWF - Platestar"
+name = "4-HWWF - WinterCo. Central Station"
 region_id = 10000003          # Vale of Silent
 system_id = 30000240
-structure_id = 1053654548169
+structure_id = 1053970513596
 database_alias = "wcmktnewkeep"
-database_file = "wcmktnewkeeptest.db"
-turso_url_env = "TURSO_WCMKTNEWKEEPTEST_URL"
-turso_token_env = "TURSO_WCMKTNEWKEEPTEST_TOKEN"
+database_file = "wcmktnewkeep.db"
+turso_url_env = "TURSO_WCMKTNEWKEEP_URL"
+turso_token_env = "TURSO_WCMKTNEWKEEP_TOKEN"
 gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit" # wc_northern_supply
 
 [markets.deployment]
 name = "X47L-Q - Rogue Threshold"
-region_id = 10000023
+region_id = 10000023 # Pure Blind
 system_id = 30001967
 structure_id = 1041669946862
-database_alias = "wcmktnorth"
-database_file = "wcmktnorth2test.db"
-turso_url_env = "TURSO_WCMKTNORTHTEST_URL"
-turso_token_env = "TURSO_WCMKTNORTHTEST_TOKEN"
-gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit"
+database_alias = "wckmktnorth"
+database_file = "wcmktnorth2.db"
+turso_url_env = "TURSO_WCMKTNORTH_URL"
+turso_token_env = "TURSO_WCMKTNORTH_TOKEN"
+gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit" # wc_northern_supply
 
 [markets.market3]
 name = "BKG-Q2 - Insidious Prime"
@@ -53,9 +53,9 @@ region_id = 10000055  # Branch
 system_id = 30004333 # BKG-Q2
 structure_id = 1032721770598 # Insidious Prime
 database_alias = "wcmktbkg"
-database_file = "wcmktbkgtest.db"
-turso_url_env = "TURSO_WCMKTBKGTEST_URL"
-turso_token_env = "TURSO_WCMKTBKGTEST_TOKEN"
+database_file = "wcmktbkg.db"
+turso_url_env = "TURSO_WCMKTBKG_URL"
+turso_token_env = "TURSO_WCMKTBKG_TOKEN"
 gsheets_url = "https://docs.google.com/spreadsheets/d/1I5XwtI9dfAVE4E73v3Lwr8z3od-ibr3h_evBeaAuhaw/edit" # wc_northern_supply
 
 [markets.primary.gsheets_worksheets]
@@ -68,11 +68,10 @@ doctrines = "doctrines_mkt_4H"
 # Market-independent databases (same for every market). All per-market DB
 # config lives in [markets.<alias>] above — this is the only other pathway.
 
-# Shared databases (same for all markets)
 [shared]
-sde_file = "sdelitetest.db"
-fittings_file = "wcfittingtest.db"
-buildcost_file = "buildcosttest.db"
+sde_file = "sdelite.db"
+fittings_file = "wcfitting.db"
+buildcost_file = "buildcost.db"
 
 # Test/dev database. When environment="development", the default market routes
 # here instead of its production DB (see MarketContext.from_settings).
