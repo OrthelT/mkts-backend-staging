@@ -267,13 +267,9 @@ def update_google_sheet(
 
 
 def _ensure_jita_prices_table(market_ctx: MarketContext) -> None:
-    """Create the jita_prices table on the remote DB if it doesn't exist."""
+    """Create the jita_prices table on the local DB if it doesn't exist."""
     db = DatabaseConfig(market_context=market_ctx)
-    engine = db.remote_engine
-    try:
-        JitaPrices.__table__.create(engine, checkfirst=True) # pyright: ignore[reportAttributeAccessIssue]
-    finally:
-        engine.dispose()
+    JitaPrices.__table__.create(db.engine, checkfirst=True) # pyright: ignore[reportAttributeAccessIssue]
 
 
 def process_jita_prices(market_contexts: list[MarketContext]) -> bool:
@@ -308,12 +304,13 @@ def process_jita_prices(market_contexts: list[MarketContext]) -> bool:
     any_success = False
     for ctx in market_contexts:
         try:
-            # Ensure table exists on remote (first run won't have it)
+            # Ensure table exists locally (first run won't have it)
             _ensure_jita_prices_table(ctx)
             status = upsert_database(JitaPrices, df, market_ctx=ctx)
             if status:
                 log_update("jita_prices", remote=True, market_ctx=ctx)
                 logger.info(f"Jita prices updated for {ctx.alias}: {len(df)} items")
+                DatabaseConfig(market_context=ctx).push()
                 any_success = True
             else:
                 logger.error(f"Failed to update Jita prices for {ctx.alias}")
@@ -463,8 +460,7 @@ def run_market_update(history: bool = False, market_alias: str = "all") -> bool:
             logger.info(f"Initializing market database: {db.alias}")
             db.verify_db_exists()
 
-    # jita_ok = process_jita_prices(all_contexts)
-    jita_ok = False
+    jita_ok = process_jita_prices(all_contexts)
     if not jita_ok:
         logger.warning(
             "Jita price update failed; downstream stats will lack Jita comparisons"
