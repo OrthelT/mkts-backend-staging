@@ -20,24 +20,23 @@ jobs:
       - run: uv sync
       - run: uv pip install -e .
       - run: mkdir -p logs data databackup
+      # Each DB is cached as `<file>.db*` so the pyturso sync engine's sidecar
+      # files (-info, -changes, -wal, -wal-revert) travel with the db file.
       - name: Restore cached databases
         uses: actions/cache/restore@v5
         with:
           path: |
-            sdelite.db
-            sdelite.db-info
-            wcmktprod.db
-            wcmktprod.db-info
-            buildcost.db
-            buildcost.db-info
-          key: builder-cost-dbs-v3-${{ github.run_id }}
+            sdelitetest.db*
+            wcmktnewkeeptest.db*
+            buildcosttest.db*
+          key: builder-cost-dbs-v4-${{ github.run_id }}
           restore-keys: |
-            builder-cost-dbs-v3-
+            builder-cost-dbs-v4-
       - name: Run builder costs collection
         run: uv run mkts-backend update-builder-costs
         env:
-          TURSO_WCMKTNEWKEEP_URL: ${{ secrets.TURSO_WCMKTPROD_URL }}
-          TURSO_WCMKTNEWKEEP_TOKEN: ${{ secrets.TURSO_WCMKTPROD_TOKEN }}
+          TURSO_WCMKTNEWKEEP_URL: ${{ secrets.TURSO_WCMKTNEWKEEP_URL }}
+          TURSO_WCMKTNEWKEEP_TOKEN: ${{ secrets.TURSO_WCMKTNEWKEEP_TOKEN }}
           TURSO_SDE_URL: ${{ secrets.TURSO_SDE_URL }}
           TURSO_SDE_TOKEN: ${{ secrets.TURSO_SDE_TOKEN }}
           TURSO_BUILDCOST_URL: ${{ secrets.TURSO_BUILDCOST_URL }}
@@ -47,13 +46,10 @@ jobs:
         if: success()
         with:
           path: |
-            sdelite.db
-            sdelite.db-info
-            wcmktnewkeep.db
-            wcmktnewkeeo.db-info
-            buildcost.db
-            buildcost.db-info
-          key: builder-cost-dbs-v2-${{ github.run_id }}
+            sdelitetest.db*
+            wcmktnewkeeptest.db*
+            buildcosttest.db*
+          key: builder-cost-dbs-v4-${{ github.run_id }}
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v7
