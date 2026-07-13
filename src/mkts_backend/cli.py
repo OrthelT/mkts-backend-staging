@@ -201,14 +201,11 @@ def process_market_stats(market_ctx: Optional[MarketContext] = None) -> bool:
 
 def process_doctrine_stats(market_ctx: Optional[MarketContext] = None) -> bool:
     logger.info("Calculating doctrines stats")
-    logger.info("syncing database")
     db = (
         DatabaseConfig(market_context=market_ctx)
         if market_ctx
         else DatabaseConfig("wcmkt")
     )
-    db.sync()
-    logger.info("database synced")
     doctrine_stats_df = calculate_doctrine_stats(market_ctx=market_ctx)
     doctrine_stats_df = convert_datetime_columns(doctrine_stats_df, ["timestamp"])
     status = upsert_database(Doctrines, doctrine_stats_df, market_ctx=market_ctx)

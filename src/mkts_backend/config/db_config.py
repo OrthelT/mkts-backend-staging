@@ -110,7 +110,6 @@ class DatabaseConfig:
         self.url = f"{dialect}:///{self.path}"
         self.sync_url = f"{sync_dialect}:///{self.path}"
         self._engine = None
-        self._remote_engine = None
         self._sqlite_local_connect = None
         self._turso_connect: turso.Connection
         self._turso_sync_connection: tursosync.ConnectionSync
@@ -118,24 +117,27 @@ class DatabaseConfig:
     @property
     def engine(self):
         if self._engine is None:
-            self._engine = create_engine(self.url)
+            if self.turso_url:
+                # Sync-managed DBs must only be accessed through sync-aware
+                # connections: a plain connection auto-checkpoints the WAL at
+                # 1000 frames, destroying the baseline conn.pull() needs and
+                # panicking turso core (wal.rs frame_watermark assertion).
+                self._engine = create_engine(
+                    self.sync_url,
+                    connect_args={
+                        "remote_url": self.turso_url,
+                        "auth_token": self.token,
+                    },
+                )
+            else:
+                self._engine = create_engine(self.url)
         return self._engine
 
     @property
     def remote_engine(self):
-        if self._remote_engine is None:
-            turso_url = self._db_turso_urls[f"{self.alias}_turso"]
-            auth_token = self._db_turso_auth_tokens[f"{self.alias}_turso"]
-
-            self._remote_engine = create_engine(
-                self.sync_url,
-                connect_args={
-                    "remote_url": turso_url,
-                    "auth_token": auth_token,
-                },
-            )
-
-        return self._remote_engine
+        # Writes land locally and reach Turso via push(), so the local and
+        # "remote" engines are the same sync-dialect engine.
+        return self.engine
 
     @property
     def turso_sync_connection(self) -> tursosync.ConnectionSync:
