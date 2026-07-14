@@ -20,7 +20,7 @@ from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.db.models import Base, MarketHistory, MarketOrders, UpdateLog
 from mkts_backend.config.db_config import DatabaseConfig
 from mkts_backend.config.settings_service import SettingsService
-from mkts_backend.db.db_queries import get_table_length, get_remote_status
+from mkts_backend.db.db_queries import get_table_length
 
 if TYPE_CHECKING:
     from mkts_backend.config.market_context import MarketContext
@@ -479,14 +479,10 @@ def update_history(
         logger.error(f"history data update failed: {e}")
         return False
 
-    status = get_remote_status(market_ctx=market_ctx)["market_history"]
-    if status > 0:
-        logger.info(
-            f"History updated:{get_table_length('market_history', market_ctx=market_ctx)} items"
-        )
-        print(
-            f"History updated:{get_table_length('market_history', market_ctx=market_ctx)} items"
-        )
+    row_count = get_table_length("market_history", market_ctx=market_ctx)
+    if row_count > 0:
+        logger.info(f"History updated:{row_count} items")
+        print(f"History updated:{row_count} items")
     else:
         logger.error("Failed to update market history")
         return False

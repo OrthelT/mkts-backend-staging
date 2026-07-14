@@ -99,7 +99,6 @@ class TestFunctionSignatures:
             "get_market_history",
             "get_market_orders",
             "get_market_stats",
-            "get_remote_status",
             "get_doctrine_stats",
             "get_table_length",
             "get_watchlist_ids",
