@@ -140,7 +140,7 @@ def process_history(market_ctx: Optional[MarketContext] = None) -> bool:
             logger.info(
                 f"History updated:{get_table_length('market_history', market_ctx=market_ctx)} items"
             )
-            db = DatabaseConfig(market_ctx.alias)
+            db = DatabaseConfig(market_context=market_ctx)
             db.push()
             return True
         else:
