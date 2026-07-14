@@ -543,11 +543,23 @@ def log_update(
     db = _get_db(market_ctx)
     engine = db.remote_engine if remote else db.engine
 
-    with Session(bind=engine) as session, session.begin():
-        session.execute(delete(UpdateLog).where(UpdateLog.table_name == table_name))
-        session.add(
-            UpdateLog(table_name=table_name, timestamp=datetime.now(timezone.utc))
+    # Upsert in place rather than delete+insert. The old pattern churned the
+    # autoincrement PK (deleting a non-max rowid then re-inserting yields a new
+    # id), which the Turso sync engine replays to the remote as a new-rowid
+    # INSERT against a replica still holding the old row -> UNIQUE constraint
+    # failure on table_name. ON CONFLICT DO UPDATE keeps the rowid stable so the
+    # pushed change is a clean in-place update.
+    now = datetime.now(timezone.utc)
+    stmt = (
+        sqlite_insert(UpdateLog)
+        .values(table_name=table_name, timestamp=now)
+        .on_conflict_do_update(
+            index_elements=[UpdateLog.table_name],
+            set_={"timestamp": now},
         )
+    )
+    with Session(bind=engine) as session, session.begin():
+        session.execute(stmt)
 
     return True
 
