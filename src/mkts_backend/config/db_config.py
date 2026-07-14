@@ -97,6 +97,8 @@ class DatabaseConfig:
                 alias = self._service.default_market_db_alias()
             elif alias in ["deployment", "north"]:
                 alias = self._service.market_db_alias("deployment")
+            elif alias == "market3":
+                alias  = self._service.market_db_alias(alias="market3")
             if alias not in self._db_paths:
                 raise ValueError(
                     f"Unknown database alias '{alias}'. Available: {list(self._db_paths.keys())}"
