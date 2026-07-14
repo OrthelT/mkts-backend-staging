@@ -6,7 +6,6 @@ from mkts_backend.db.models import MarketStats, MarketHistory
 from mkts_backend.config.db_config import DatabaseConfig
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
-from mkts_backend.db.db_queries import get_remote_status
 
 if TYPE_CHECKING:
     from mkts_backend.config.market_context import MarketContext

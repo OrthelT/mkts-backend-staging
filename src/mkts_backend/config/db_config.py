@@ -252,11 +252,6 @@ class DatabaseConfig:
             else:
                 return result[0]
 
-    def get_status(self):
-        with self.turso_sync_connection as conn:
-            stats = conn.stats()
-            return stats
-
     def get_watchlist(self):
         engine = self.engine
         with engine.connect() as conn:

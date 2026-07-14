@@ -55,10 +55,6 @@ def get_market_stats(
     )
 
 
-def get_remote_status(market_ctx: Optional["MarketContext"] = None):
-    return _get_db(market_ctx).get_status()
-
-
 def get_doctrine_stats(
     type_id: int, market_ctx: Optional["MarketContext"] = None
 ) -> pd.DataFrame:
