@@ -6,10 +6,10 @@ echo "Removing current instances..."
 echo "--------------"
 
 dbfiles=(
-  "wcmktnewkeep"
-  "wcmktnorth2"
-  "wcmktbkg"
-  "buildcost"
+  "wcmktnewkeeptest"
+  "wcmktnorth2test"
+  "wcmktbkgtest"
+  "buildcosttest"
 )
 
 preview_deletes() {
