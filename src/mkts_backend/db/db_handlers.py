@@ -1,5 +1,5 @@
 import pandas as pd
-from sqlalchemy import select, insert, func, or_, delete
+from sqlalchemy import select, insert, func, or_, delete, update
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -543,23 +543,24 @@ def log_update(
     db = _get_db(market_ctx)
     engine = db.remote_engine if remote else db.engine
 
-    # Upsert in place rather than delete+insert. The old pattern churned the
-    # autoincrement PK (deleting a non-max rowid then re-inserting yields a new
-    # id), which the Turso sync engine replays to the remote as a new-rowid
-    # INSERT against a replica still holding the old row -> UNIQUE constraint
-    # failure on table_name. ON CONFLICT DO UPDATE keeps the rowid stable so the
-    # pushed change is a clean in-place update.
+    # Update the existing row in place rather than delete+insert. The old
+    # pattern churned the autoincrement PK (deleting a non-max rowid then
+    # re-inserting yields a new id), which the Turso sync engine replays to the
+    # remote as a new-rowid INSERT against a replica still holding the old row
+    # -> UNIQUE constraint failure on table_name when it flushes the CDC queue.
+    # An UPDATE keyed on table_name keeps the rowid stable (a clean type-0 CDC
+    # entry) and does not depend on a physical UNIQUE constraint, which only
+    # some of the market DBs actually carry (so ON CONFLICT(table_name) would
+    # parse-error on the others). A genuinely-new table_name still inserts once.
     now = datetime.now(timezone.utc)
-    stmt = (
-        sqlite_insert(UpdateLog)
-        .values(table_name=table_name, timestamp=now)
-        .on_conflict_do_update(
-            index_elements=[UpdateLog.table_name],
-            set_={"timestamp": now},
-        )
-    )
     with Session(bind=engine) as session, session.begin():
-        session.execute(stmt)
+        result = session.execute(
+            update(UpdateLog)
+            .where(UpdateLog.table_name == table_name)
+            .values(timestamp=now)
+        )
+        if result.rowcount == 0:
+            session.add(UpdateLog(table_name=table_name, timestamp=now))
 
     return True
 
