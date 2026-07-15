@@ -194,6 +194,21 @@ class DatabaseConfig:
             "========================================================================="
         )
 
+    def pull(self):
+        pull_start = perf_counter()
+        conn = self.turso_sync_connection
+        with conn:
+            conn.pull()
+            logger.debug(conn.stats())
+        conn.close()
+        pull_end = perf_counter()
+        logger.info(f"Database: {self.alias} ({self.path})")
+        logger.info(f"Sync time: {pull_end - pull_start:.1f} seconds")
+        logger.info(
+            "========================================================================="
+        )
+
+
     def get_table_list(self, local_only: bool = True) -> list[tuple]:
         if local_only:
             engine = self.engine
