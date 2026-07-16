@@ -1,5 +1,5 @@
 import pandas as pd
-from sqlalchemy import select, insert, func, or_, delete
+from sqlalchemy import select, insert, func, or_, delete, text
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -530,18 +530,15 @@ def update_market_orders(
         return False
 
 
-def log_update(
-    table_name: str, remote: bool = False, market_ctx: Optional["MarketContext"] = None
-):
+def log_update(table_name: str, market_ctx: Optional["MarketContext"] = None):
     """Log a table update timestamp.
 
     Args:
         table_name: Name of the table that was updated
-        remote: Whether to use remote database
         market_ctx: Optional MarketContext for market-specific database
     """
     db = _get_db(market_ctx)
-    engine = db.remote_engine if remote else db.engine
+    engine = db.engine
 
     # Upsert in place — never delete+insert. Rowid churn on this table poisons
     # the Turso CDC push queue with duplicate-key INSERTs against the remote.
@@ -558,11 +555,19 @@ def log_update(
     return True
 
 
+_CACHE_UPSERT = text("""
+    INSERT INTO esi_request_cache (type_id, region_id, etag, last_modified, last_checked)
+    VALUES (:type_id, :region_id, :etag, :last_modified, :last_checked)
+    ON CONFLICT(type_id, region_id) DO UPDATE SET
+        etag = excluded.etag,
+        last_modified = excluded.last_modified,
+        last_checked = excluded.last_checked
+""")
+
+
 def ensure_cache_table(engine):
     """Create the esi_request_cache table if it doesn't exist."""
-    from sqlalchemy import text
-
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         conn.execute(
             text("""
             CREATE TABLE IF NOT EXISTS esi_request_cache (
@@ -575,7 +580,20 @@ def ensure_cache_table(engine):
             )
         """)
         )
-        conn.commit()
+
+
+def _cache_entry(
+    type_id: int, region_id: int, etag: str | None = None, last_modified: str | None = None
+) -> dict:
+    """Build one esi_request_cache row. region_id doubles as structure_id for
+    sentinel rows (type_id <= 0)."""
+    return {
+        "type_id": type_id,
+        "region_id": region_id,
+        "etag": etag,
+        "last_modified": last_modified,
+        "last_checked": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def load_esi_cache(
@@ -586,12 +604,9 @@ def load_esi_cache(
     Returns:
         Dict mapping type_id -> {"etag": ..., "last_modified": ...}
     """
-    db = _get_db(market_ctx)
-    engine = db.engine
+    engine = _get_db(market_ctx).engine
     try:
         ensure_cache_table(engine)
-        from sqlalchemy import text
-
         with engine.connect() as conn:
             rows = conn.execute(
                 text(
@@ -603,8 +618,6 @@ def load_esi_cache(
     except Exception as e:
         logger.warning(f"Failed to load ESI cache: {e}")
         return {}
-    finally:
-        engine.dispose()
 
 
 def save_esi_cache(
@@ -615,67 +628,22 @@ def save_esi_cache(
     Only saves entries that have an etag or last_modified value.
     Uses SQLite upsert on (type_id, region_id).
     """
-    db = _get_db(market_ctx)
-    engine = db.engine
+    engine = _get_db(market_ctx).engine
     try:
         ensure_cache_table(engine)
-        from sqlalchemy import text
-
-        entries = []
-        for r in results:
-            if r is None:
-                continue
-            etag = r.get("etag")
-            last_modified = r.get("last_modified")
-            if etag or last_modified:
-                entries.append(
-                    {
-                        "type_id": r["type_id"],
-                        "region_id": region_id,
-                        "etag": etag,
-                        "last_modified": last_modified,
-                        "last_checked": datetime.now(timezone.utc).isoformat(),
-                    }
-                )
-
+        entries = [
+            _cache_entry(r["type_id"], region_id, r.get("etag"), r.get("last_modified"))
+            for r in results
+            if r is not None and (r.get("etag") or r.get("last_modified"))
+        ]
         if not entries:
             logger.info("No cache entries to save")
             return
-
-        # Batch inserts into multi-row VALUES to minimize remote round trips.
-        # SQLite limit is 999 params; 5 params per row → 199 max, use 100 for safety.
-        chunk_size = 100
-        with engine.connect() as conn:
-            for i in range(0, len(entries), chunk_size):
-                chunk = entries[i : i + chunk_size]
-                # Build multi-row VALUES clause with unique param names per row
-                value_clauses = []
-                params = {}
-                for j, entry in enumerate(chunk):
-                    suffix = f"_{j}"
-                    value_clauses.append(
-                        f"(:type_id{suffix}, :region_id{suffix}, :etag{suffix}, "
-                        f":last_modified{suffix}, :last_checked{suffix})"
-                    )
-                    for key, val in entry.items():
-                        params[f"{key}{suffix}"] = val
-
-                sql = f"""
-                    INSERT INTO esi_request_cache (type_id, region_id, etag, last_modified, last_checked)
-                    VALUES {", ".join(value_clauses)}
-                    ON CONFLICT(type_id, region_id) DO UPDATE SET
-                        etag = excluded.etag,
-                        last_modified = excluded.last_modified,
-                        last_checked = excluded.last_checked
-                """
-                conn.execute(text(sql), params)
-            conn.commit()
+        with engine.begin() as conn:
+            conn.execute(_CACHE_UPSERT, entries)
         logger.info(f"Saved {len(entries)} ESI cache entries for region {region_id}")
     except Exception as e:
         logger.warning(f"Failed to save ESI cache: {e}")
-    finally:
-        logger.debug(f"pushing to remote. {db.alias}")
-        db.push()
 
 
 def load_orders_cache(
@@ -691,12 +659,10 @@ def load_orders_cache(
         {"expires": "HTTP-date string or None",
          "pages": {1: "etag", 2: "etag", ...}}
     """
-    db = _get_db(market_ctx)
-    engine = db.engine
+    engine = _get_db(market_ctx).engine
+    result: dict = {"expires": None, "pages": {}}
     try:
         ensure_cache_table(engine)
-        from sqlalchemy import text
-
         with engine.connect() as conn:
             rows = conn.execute(
                 text(
@@ -704,19 +670,15 @@ def load_orders_cache(
                 ),
                 {"sid": structure_id},
             ).fetchall()
-
-        result: dict = {"expires": None, "pages": {}}
-        for row in rows:
-            tid, etag, last_modified = row[0], row[1], row[2]
+        for tid, etag, last_modified in rows:
             if tid == 0:
                 result["expires"] = last_modified
             else:
                 # tid is -page_number
                 result["pages"][abs(tid)] = etag
-        return result
     except SQLAlchemyError as e:
         logger.error(f"Failed to load orders cache: {e}")
-        return {"expires": None, "pages": {}}
+    return result
 
 
 def save_orders_cache(
@@ -729,79 +691,30 @@ def save_orders_cache(
 
     Wipes old entries for this structure (type_id <= 0) and writes fresh ones.
     """
-    db = _get_db(market_ctx)
-    engine = db.engine
+    engine = _get_db(market_ctx).engine
     try:
         ensure_cache_table(engine)
-        from sqlalchemy import text
-
-        with engine.connect() as conn:
-            # Wipe old entries
+        entries = []
+        if expires:
+            entries.append(_cache_entry(0, structure_id, last_modified=expires))
+        entries += [
+            _cache_entry(-page, structure_id, etag=etag)
+            for page, etag in page_etags.items()
+        ]
+        with engine.begin() as conn:
             conn.execute(
                 text(
                     "DELETE FROM esi_request_cache WHERE region_id = :sid AND type_id <= 0"
                 ),
                 {"sid": structure_id},
             )
-
-            entries = []
-            # type_id=0 stores the Expires header
-            if expires:
-                entries.append(
-                    {
-                        "type_id": 0,
-                        "region_id": structure_id,
-                        "etag": None,
-                        "last_modified": expires,
-                        "last_checked": datetime.now(timezone.utc).isoformat(),
-                    }
-                )
-
-            # type_id=-N stores per-page etags
-            for page_num, etag in page_etags.items():
-                entries.append(
-                    {
-                        "type_id": -page_num,
-                        "region_id": structure_id,
-                        "etag": etag,
-                        "last_modified": None,
-                        "last_checked": datetime.now(timezone.utc).isoformat(),
-                    }
-                )
-
             if entries:
-                chunk_size = 100
-                for i in range(0, len(entries), chunk_size):
-                    chunk = entries[i : i + chunk_size]
-                    value_clauses = []
-                    params = {}
-                    for j, entry in enumerate(chunk):
-                        suffix = f"_{j}"
-                        value_clauses.append(
-                            f"(:type_id{suffix}, :region_id{suffix}, :etag{suffix}, "
-                            f":last_modified{suffix}, :last_checked{suffix})"
-                        )
-                        for key, val in entry.items():
-                            params[f"{key}{suffix}"] = val
-
-                    sql = f"""
-                        INSERT INTO esi_request_cache (type_id, region_id, etag, last_modified, last_checked)
-                        VALUES {", ".join(value_clauses)}
-                        ON CONFLICT(type_id, region_id) DO UPDATE SET
-                            etag = excluded.etag,
-                            last_modified = excluded.last_modified,
-                            last_checked = excluded.last_checked
-                    """
-                    conn.execute(text(sql), params)
-                conn.commit()
-            logger.info(
-                f"Saved orders cache for structure {structure_id}: expires={expires}, {len(page_etags)} page etags"
-            )
+                conn.execute(_CACHE_UPSERT, entries)
+        logger.info(
+            f"Saved orders cache for structure {structure_id}: expires={expires}, {len(page_etags)} page etags"
+        )
     except SQLAlchemyError as e:
         logger.error(f"Failed to save orders cache: {e}")
-    finally:
-        logger.debug(f"pushing to remote {db.turso_url}")
-        db.push()
 
 
 if __name__ == "__main__":
