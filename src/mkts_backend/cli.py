@@ -102,7 +102,7 @@ def process_market_orders(
         logger.info(f"ESI returned {len(data)} market orders. Saved to {save_path}")
         status = update_market_orders(data, market_ctx=market_ctx)
         if status:
-            log_update("marketorders", remote=True, market_ctx=market_ctx)
+            log_update("marketorders", market_ctx=market_ctx)
             logger.info(
                 f"Orders updated:{get_table_length('marketorders', market_ctx=market_ctx)} items"
             )
@@ -136,12 +136,10 @@ def process_history(market_ctx: Optional[MarketContext] = None) -> bool:
                 json.dump(data_with_content, f)
         status = update_history(data, market_ctx=market_ctx)
         if status:
-            log_update("market_history", remote=True, market_ctx=market_ctx)
+            log_update("market_history", market_ctx=market_ctx)
             logger.info(
                 f"History updated:{get_table_length('market_history', market_ctx=market_ctx)} items"
             )
-            db = DatabaseConfig(market_context=market_ctx)
-            db.push()
             return True
         else:
             logger.error("Failed to update market history")
@@ -150,12 +148,6 @@ def process_history(market_ctx: Optional[MarketContext] = None) -> bool:
 
 def process_market_stats(market_ctx: Optional[MarketContext] = None) -> bool:
     logger.info("Calculating market stats")
-    logger.info("syncing database")
-    db = (
-        DatabaseConfig(market_context=market_ctx)
-        if market_ctx
-        else DatabaseConfig("wcmkt")
-    )
     try:
         market_stats_df = calculate_market_stats(market_ctx=market_ctx)
         if len(market_stats_df) > 0:
@@ -186,11 +178,10 @@ def process_market_stats(market_ctx: Optional[MarketContext] = None) -> bool:
         logger.info("Updating market stats in database")
         status = upsert_database(MarketStats, market_stats_df, market_ctx=market_ctx)
         if status:
-            log_update("marketstats", remote=True, market_ctx=market_ctx)
+            log_update("marketstats", market_ctx=market_ctx)
             logger.info(
                 f"Market stats updated:{get_table_length('marketstats', market_ctx=market_ctx)} items"
             )
-            db.push()
             return True
         else:
             logger.error("Failed to update market stats")
@@ -201,20 +192,14 @@ def process_market_stats(market_ctx: Optional[MarketContext] = None) -> bool:
 
 def process_doctrine_stats(market_ctx: Optional[MarketContext] = None) -> bool:
     logger.info("Calculating doctrines stats")
-    db = (
-        DatabaseConfig(market_context=market_ctx)
-        if market_ctx
-        else DatabaseConfig("wcmkt")
-    )
     doctrine_stats_df = calculate_doctrine_stats(market_ctx=market_ctx)
     doctrine_stats_df = convert_datetime_columns(doctrine_stats_df, ["timestamp"])
     status = upsert_database(Doctrines, doctrine_stats_df, market_ctx=market_ctx)
     if status:
-        log_update("doctrines", remote=True, market_ctx=market_ctx)
+        log_update("doctrines", market_ctx=market_ctx)
         logger.info(
             f"Doctrines updated:{get_table_length('doctrines', market_ctx=market_ctx)} items"
         )
-        db.push()
         return True
     else:
         logger.error("Failed to update doctrines")
@@ -305,9 +290,8 @@ def process_jita_prices(market_contexts: list[MarketContext]) -> bool:
             _ensure_jita_prices_table(ctx)
             status = upsert_database(JitaPrices, df, market_ctx=ctx)
             if status:
-                log_update("jita_prices", remote=True, market_ctx=ctx)
+                log_update("jita_prices", market_ctx=ctx)
                 logger.info(f"Jita prices updated for {ctx.alias}: {len(df)} items")
-                DatabaseConfig(market_context=ctx).push()
                 any_success = True
             else:
                 logger.error(f"Failed to update Jita prices for {ctx.alias}")
@@ -390,6 +374,9 @@ def _run_market_pipeline(
     else:
         logger.error("Failed to update doctrines")
         exit()
+
+    logger.info(f"Market update complete for {market_ctx.alias}; pushing local changes")
+    db.push()
 
     env = SettingsService().environment
 
