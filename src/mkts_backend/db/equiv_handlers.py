@@ -207,6 +207,10 @@ def add_equiv_group(
         logger.warning(
             f"Type IDs overlap with existing group {existing_gid}, skipping"
         )
+        # The local insert is a no-op, but the remote may still be out of date
+        # (an earlier sync failed, or the remote was reset). Reconcile anyway so
+        # re-running the command repairs drift instead of silently skipping.
+        sync_equiv_to_remote(market_ctx)
         return None
 
     db = _get_db(market_ctx)
