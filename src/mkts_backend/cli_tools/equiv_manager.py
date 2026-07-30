@@ -143,7 +143,7 @@ def _equiv_add_all(args: list[str], target_aliases: list[str]) -> bool:
         ensure_equiv_table(market_ctx)
         new_group_id = add_equiv_group(type_ids, market_ctx)
         if new_group_id is None:
-            console.print(f"  [yellow]{alias}[/yellow]: skipped - type IDs already in an existing group")
+            console.print(f"  [yellow]{alias}[/yellow]: already grouped - remote reconciled")
             success = False
         else:
             console.print(f"  [green]{alias}[/green]: created group {new_group_id}")
@@ -275,7 +275,7 @@ def _equiv_find(args: list[str], target_aliases: list[str]) -> bool:
             ensure_equiv_table(market_ctx)
             new_group_id = add_equiv_group(equiv_type_ids, market_ctx)
             if new_group_id is None:
-                console.print(f"  [yellow]{alias}[/yellow]: skipped - type IDs already in an existing group")
+                console.print(f"  [yellow]{alias}[/yellow]: already grouped - remote reconciled")
             else:
                 console.print(f"  [green]{alias}[/green]: created group {new_group_id}")
 
@@ -303,6 +303,10 @@ def _display_equiv_help():
 [bold]NOTE:[/bold]
     Module equivalents are universal EVE game data, so add/remove
     operates on ALL markets by default. Use --market to target one.
+
+    add/remove/find --add always push the table to Turso; there is no
+    --remote flag (writes are never local-only). If the remote has drifted,
+    re-running the command reconciles it.
 
 [bold]EXAMPLES:[/bold]
     mkts-backend equiv list
