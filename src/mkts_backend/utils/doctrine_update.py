@@ -53,6 +53,7 @@ class DoctrineFit:
     doctrine_id: int
     fit_id: int
     target: int
+    remote: bool = False
     doctrine_name: str = field(init=False)
     fit_name: str = field(init=False)
     ship_type_id: int = field(init=False)
@@ -68,6 +69,7 @@ class DoctrineFit:
     def from_resolved(cls, *, doctrine_id, fit_id, target, doctrine_name, fit_name, ship_type_id, ship_name):
         """Create a DoctrineFit with pre-resolved values, bypassing DB lookups."""
         obj = object.__new__(cls)
+        obj.remote = False
         obj.doctrine_id = doctrine_id
         obj.fit_id = fit_id
         obj.target = target
@@ -77,9 +79,12 @@ class DoctrineFit:
         obj.ship_name = ship_name
         return obj
 
-    def get_doctrine_name(self):
+    def _fittings_engine(self):
         db = DatabaseConfig("fittings")
-        engine = db.engine
+        return db.remote_engine if self.remote else db.engine
+
+    def get_doctrine_name(self):
+        engine = self._fittings_engine()
         with engine.connect() as conn:
             stmt = text("SELECT * FROM fittings_doctrine WHERE id = :doctrine_id")
             result = conn.execute(stmt, {"doctrine_id": self.doctrine_id})
@@ -90,8 +95,7 @@ class DoctrineFit:
             return name.strip()
 
     def get_ship_type_id(self):
-        db = DatabaseConfig("fittings")
-        engine = db.engine
+        engine = self._fittings_engine()
         with engine.connect() as conn:
             stmt = text("SELECT * FROM fittings_fitting WHERE id = :fit_id")
             result = conn.execute(stmt, {"fit_id": self.fit_id})
@@ -102,8 +106,7 @@ class DoctrineFit:
             return type_id
 
     def get_fit_name(self):
-        db = DatabaseConfig("fittings")
-        engine = db.engine
+        engine = self._fittings_engine()
         with engine.connect() as conn:
             stmt = text("SELECT * FROM fittings_fitting WHERE id = :fit_id")
             result = conn.execute(stmt, {"fit_id": self.fit_id})
@@ -113,9 +116,9 @@ class DoctrineFit:
             name = row[2]
             return name.strip()
 
-    def get_ship_name(self, remote=False):
-        db = DatabaseConfig("sde")
-        engine = db.engine
+    def get_ship_name(self):
+        # SDE is a read-only local mirror; there is no remote variant to consult.
+        engine = DatabaseConfig("sde").engine
         with engine.connect() as conn:
             stmt = text("SELECT * FROM inv_info WHERE typeID = :type_id")
             result = conn.execute(stmt, {"type_id": self.ship_type_id})

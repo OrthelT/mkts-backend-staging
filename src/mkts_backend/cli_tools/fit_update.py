@@ -2118,6 +2118,7 @@ def doctrine_add_fit_command(
                 doctrine_id=doctrine_id,
                 fit_id=fit_id,
                 target=fit_target,
+                remote=remote,
             )
             prepared.append((fit_info, doctrine_fit, fit_target))
         except Exception as e:

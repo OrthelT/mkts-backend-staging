@@ -792,7 +792,10 @@ def update_fit_workflow(
         ensure_doctrine_link(doctrine_id, fit_id, remote=remote)
 
         doctrine_fit = DoctrineFit(
-            doctrine_id=doctrine_id, fit_id=fit_id, target=metadata.target
+            doctrine_id=doctrine_id,
+            fit_id=fit_id,
+            target=metadata.target,
+            remote=remote,
         )
 
         # Propagate to market/production dbs (wcmktprod.db or wcmktnorth2.db)
