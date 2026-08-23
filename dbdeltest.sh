@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Every database named in settings.toml, production and test variants.
 prod=(
     "wcmktnewkeep"
     "wcmktnorth2"
     "wcmktbkg"
     "buildcost"
+    "sdelite"
+    "wcfitting"
 )
 
 test=(
@@ -13,6 +16,8 @@ test=(
     "wcmktnorth2test"
     "wcmktbkgtest"
     "buildcosttest"
+    "sdelitetest"
+    "wcfittingtest"
 )
 
 parse_args() {

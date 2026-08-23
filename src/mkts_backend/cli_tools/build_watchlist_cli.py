@@ -90,7 +90,7 @@ def _handle_add(p: ParsedArgs) -> bool:
     result = add_to_build_watchlist(buildcost_db, sde_db, type_ids, force=force)
     _print_add_summary(result)
     if result.added > 0 and not p.has_flag("no-sync"):
-        _sync_buildcost_mirror(buildcost_db)
+        _push_buildcost_changes(buildcost_db)
     return True
 
 
@@ -107,18 +107,22 @@ def _handle_remove(p: ParsedArgs) -> bool:
     result = remove_from_build_watchlist(buildcost_db, type_ids)
     _print_remove_summary(result)
     if result.removed > 0 and not p.has_flag("no-sync"):
-        _sync_buildcost_mirror(buildcost_db)
+        _push_buildcost_changes(buildcost_db)
     return True
 
 
-def _sync_buildcost_mirror(buildcost_db: DatabaseConfig) -> None:
-    """Pull the buildcost local mirror after a remote write. Best-effort."""
+def _push_buildcost_changes(buildcost_db: DatabaseConfig) -> None:
+    """Push the local buildcost write up to Turso. Best-effort.
+
+    pyturso writes land locally first, so without this the change stays on
+    this machine until some later run pushes.
+    """
     try:
         buildcost_db.push()
-        print("Synced local buildcost mirror")
+        print("Pushed buildcost changes to Turso")
     except Exception as exc:
-        logger.warning(f"buildcost local sync failed (remote write succeeded): {exc}")
-        print(f"Warning: local buildcost sync failed: {exc}")
+        logger.warning(f"buildcost push failed (local write succeeded): {exc}")
+        print(f"Warning: buildcost push failed: {exc}")
 
 
 def _handle_mirror(p: ParsedArgs) -> bool:
@@ -157,7 +161,7 @@ def _handle_mirror(p: ParsedArgs) -> bool:
     result = sync_from_market(buildcost_db, sde_db, primary_db)
     _print_mirror_summary(result)
     if result.added > 0 and not p.has_flag("no-sync"):
-        _sync_buildcost_mirror(buildcost_db)
+        _push_buildcost_changes(buildcost_db)
     return True
 
 

@@ -5,7 +5,6 @@ from typing import Optional, TYPE_CHECKING
 
 import turso
 import turso.sync as tursosync
-from turso.sqlalchemy import get_sync_connection
 from dotenv import load_dotenv
 from mkts_backend.config.logging_config import configure_logging
 from mkts_backend.config.settings_service import SettingsService
@@ -20,44 +19,41 @@ load_dotenv()
 
 logger = configure_logging(__name__)
 
+# Every file pyturso keeps for one database: the database itself plus the WAL,
+# shared-memory, sync-metadata, CDC change-queue and revert-WAL sidecars. They
+# must be deleted together — a stale change queue or WAL left beside a freshly
+# pulled database replays local state that is no longer there. Same set as
+# dbdeltest.sh.
+DB_FILE_SUFFIXES = ("", "-shm", "-wal", "-info", "-changes", "-wal-revert")
+
+# Older names for market sections, still passed by some call sites and CLI
+# invocations. "wcmkt" means "the default market" and is resolved separately
+# because markets.default is configurable.
+LEGACY_MARKET_SYNONYMS = {"north": "deployment"}
+
 
 class DatabaseConfig:
     _service = SettingsService()
-    # Per-market routing comes entirely from [markets.*] (+ [shared.testing])
-    # via the settings service — the single source of truth. Shared,
-    # market-independent DBs (sde/fittings/buildcost) are layered on top.
-    # Materialized at import time: a malformed [markets.*] section (missing
+    # Routing for every database — per-market ([markets.*]) and
+    # market-independent ([shared.*]: sde, fittings, buildcost, testing) —
+    # comes entirely from the settings service, the single source of truth.
+    # Materialized at import time: a malformed section (missing
     # database_alias/database_file, or a duplicate database_alias) fails here
     # with a clear, section-named error from database_routing() rather than a
     # cryptic KeyError or a silently mis-routed database later on.
     _routing = _service.database_routing()
 
     _db_paths = {alias: r["file"] for alias, r in _routing.items()}
-    _db_paths.update({
-        "sde": _service.db_sde_file,
-        "fittings": _service.db_fittings_file,
-        "buildcost": _service.db_buildcost_file,
-    })
 
     _db_turso_urls = {
         f"{alias}_turso": os.getenv(r["turso_url_env"])
         for alias, r in _routing.items() if r["turso_url_env"]
     }
-    _db_turso_urls.update({
-        "sde_turso": os.getenv("TURSO_SDE_URL"),
-        "fittings_turso": os.getenv("TURSO_FITTING_URL"),
-        "buildcost_turso": os.getenv("TURSO_BUILDCOST_URL"),
-    })
 
     _db_turso_auth_tokens = {
         f"{alias}_turso": os.getenv(r["turso_token_env"])
         for alias, r in _routing.items() if r["turso_token_env"]
     }
-    _db_turso_auth_tokens.update({
-        "sde_turso": os.getenv("TURSO_SDE_TOKEN"),
-        "fittings_turso": os.getenv("TURSO_FITTING_TOKEN"),
-        "buildcost_turso": os.getenv("TURSO_BUILDCOST_TOKEN"),
-    })
 
     def __init__(
         self,
@@ -91,14 +87,20 @@ class DatabaseConfig:
             # module import is still picked up. Reading self.settings directly
             # would freeze on the cached TOML default.
             env = SettingsService().environment
+            # A market section name ([markets.<name>]) resolves to that
+            # market's database_alias, so adding a market to settings.toml
+            # needs no code change here. LEGACY_MARKET_SYNONYMS keeps older
+            # names working for existing CLI invocations and call sites.
+            if alias == "wcmkt":
+                market_alias = self._service.default_market_alias
+            else:
+                market_alias = LEGACY_MARKET_SYNONYMS.get(alias, alias)
             if env == 'development':
                 alias = self._service.shared_testing["database_alias"]
-            elif alias is None or alias in ["wcmkt", "primary"]:
+            elif alias is None:
                 alias = self._service.default_market_db_alias()
-            elif alias in ["deployment", "north"]:
-                alias = self._service.market_db_alias("deployment")
-            elif alias == "market3":
-                alias  = self._service.market_db_alias(alias="market3")
+            elif market_alias in self._service.market_aliases:
+                alias = self._service.market_db_alias(market_alias)
             if alias not in self._db_paths:
                 raise ValueError(
                     f"Unknown database alias '{alias}'. Available: {list(self._db_paths.keys())}"
@@ -112,7 +114,6 @@ class DatabaseConfig:
         self.url = f"{dialect}:///{self.path}"
         self.sync_url = f"{sync_dialect}:///{self.path}"
         self._engine = None
-        self._sqlite_local_connect = None
         self._turso_connect: turso.Connection
         self._turso_sync_connection: tursosync.ConnectionSync
 
@@ -193,6 +194,25 @@ class DatabaseConfig:
         logger.info(
             "========================================================================="
         )
+
+    def validate_sync(self) -> bool:
+        """True when no local writes are waiting to reach Turso.
+
+        pyturso is local-first: writes land in the local CDC queue and reach
+        the remote only on push(). ``cdc_operations`` counts the rows in that
+        queue past the last pushed change, so a non-zero count means the local
+        database is ahead of Turso and push() has not run (or failed).
+        """
+        conn = self.turso_sync_connection
+        with conn:
+            stats = conn.stats()
+        conn.close()
+        pending = stats.cdc_operations
+        logger.info(f"Database: {self.alias} ({self.path})")
+        logger.info(f"Pending operations to push: {pending}")
+        logger.info(f"Last pull: {datetime.fromtimestamp(stats.last_pull_unix_time)}")
+        logger.info(f"Last push: {datetime.fromtimestamp(stats.last_push_unix_time)}")
+        return pending == 0
 
     def pull(self):
         pull_start = perf_counter()
@@ -308,14 +328,14 @@ class DatabaseConfig:
             # Case 3: DB without metadata (improperly created, e.g., bare sqlite.connect)
             # MUST nuke before sync - cannot sync a db without its -info file
             logger.warning(f"DB exists without metadata, nuking: {self.path}")
-            if not self._nuke_db_file():
+            if not self.nuke_db():
                 logger.error(f"Failed to delete db file: {self.path}")
                 return False
 
         if not db_exists and metadata_exists:
             # Case 4: Orphaned metadata
             logger.warning(f"Orphaned metadata found, removing: {self.path}-info")
-            if not self._nuke_metadata_file():
+            if not self.nuke_db():
                 logger.error(f"Failed to delete metadata: {self.path}-info")
                 return False
 
@@ -366,52 +386,24 @@ class DatabaseConfig:
             return False
         return True
 
-    def _nuke_db_file(self) -> bool:
-        """
-        Delete just the database file.
-
-        Returns:
-            True if file was deleted or didn't exist, False on error.
-        """
-        db_path = Path(self.path)
-        if db_path.exists():
-            try:
-                db_path.unlink()
-                logger.info(f"Deleted db file: {db_path}")
-                return True
-            except OSError as e:
-                logger.error(f"Failed to delete db file {db_path}: {e}")
-                return False
-        return True  # Already gone
-
-    def _nuke_metadata_file(self) -> bool:
-        """
-        Delete just the metadata (-info) file.
-
-        Returns:
-            True if file was deleted or didn't exist, False on error.
-        """
-        info_path = Path(f"{self.path}-info")
-        if info_path.exists():
-            try:
-                info_path.unlink()
-                logger.info(f"Deleted metadata file: {info_path}")
-                return True
-            except OSError as e:
-                logger.error(f"Failed to delete metadata file {info_path}: {e}")
-                return False
-        return True  # Already gone
-
     def nuke_db(self) -> bool:
-        """
-        Delete both database and metadata files.
+        """Delete the database file and every pyturso sidecar beside it.
 
         Returns:
-            True if both files were deleted (or didn't exist), False on any error.
+            True if every file was deleted or already absent, False on any error.
         """
-        db_ok = self._nuke_db_file()
-        meta_ok = self._nuke_metadata_file()
-        return db_ok and meta_ok
+        all_ok = True
+        for suffix in DB_FILE_SUFFIXES:
+            path = Path(f"{self.path}{suffix}")
+            if not path.exists():
+                continue
+            try:
+                path.unlink()
+                logger.info(f"Deleted {path}")
+            except OSError as e:
+                logger.error(f"Failed to delete {path}: {e}")
+                all_ok = False
+        return all_ok
 
 
 if __name__ == "__main__":

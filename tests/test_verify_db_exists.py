@@ -10,7 +10,7 @@ These tests verify that:
 import pytest
 import json
 from pathlib import Path
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import patch
 
 
 class TestVerifyDbExists:
@@ -155,8 +155,8 @@ class TestVerifyDbExists:
         # Create db file without metadata
         self._create_db_file(temp_db_path)
 
-        # Mock _nuke_db_file to fail
-        with patch.object(mock_db_config, '_nuke_db_file', return_value=False):
+        # Mock nuke_db to fail
+        with patch.object(mock_db_config, 'nuke_db', return_value=False):
             with patch.object(mock_db_config, 'sync', side_effect=AssertionError("sync should not be called after nuke failure")):
                 result = mock_db_config.verify_db_exists()
 
@@ -233,7 +233,7 @@ class TestNeedsInit:
 
 
 class TestNukeMethods:
-    """Tests for _nuke_db_file, _nuke_metadata_file, and nuke_db methods."""
+    """Tests for nuke_db(): the db file and every pyturso sidecar go together."""
 
     @pytest.fixture
     def temp_db_path(self, tmp_path):
@@ -258,52 +258,29 @@ class TestNukeMethods:
         info_path.parent.mkdir(parents=True, exist_ok=True)
         info_path.write_text(json.dumps({"generation": 1}))
 
-    def test_nuke_db_file_deletes_existing_file(self, mock_db_config, temp_db_path):
-        """_nuke_db_file deletes the db file when it exists."""
-        self._create_db_file(temp_db_path)
-        assert temp_db_path.exists()
+    def _sidecar_paths(self, path: Path) -> list[Path]:
+        from mkts_backend.config.db_config import DB_FILE_SUFFIXES
 
-        result = mock_db_config._nuke_db_file()
+        return [Path(f"{path}{suffix}") for suffix in DB_FILE_SUFFIXES]
 
-        assert result is True
-        assert not temp_db_path.exists()
+    def test_nuke_db_deletes_every_sidecar(self, mock_db_config, temp_db_path):
+        """Regression guard: nuke_db once removed only .db and -info, leaving a
+        stale CDC queue and WAL beside the next freshly pulled database."""
+        temp_db_path.parent.mkdir(parents=True, exist_ok=True)
+        paths = self._sidecar_paths(temp_db_path)
+        for path in paths:
+            path.touch()
 
-    def test_nuke_db_file_returns_true_when_not_exists(self, mock_db_config, temp_db_path):
-        """_nuke_db_file returns True when file doesn't exist."""
-        assert not temp_db_path.exists()
-
-        result = mock_db_config._nuke_db_file()
-
-        assert result is True
-
-    def test_nuke_metadata_file_deletes_existing_file(self, mock_db_config, temp_db_path):
-        """_nuke_metadata_file deletes the metadata file when it exists."""
-        self._create_metadata_file(temp_db_path)
-        info_path = Path(f"{temp_db_path}-info")
-        assert info_path.exists()
-
-        result = mock_db_config._nuke_metadata_file()
+        result = mock_db_config.nuke_db()
 
         assert result is True
-        assert not info_path.exists()
+        assert [p for p in paths if p.exists()] == []
 
-    def test_nuke_metadata_file_returns_true_when_not_exists(self, mock_db_config, temp_db_path):
-        """_nuke_metadata_file returns True when file doesn't exist."""
-        info_path = Path(f"{temp_db_path}-info")
-        assert not info_path.exists()
-
-        result = mock_db_config._nuke_metadata_file()
-
-        assert result is True
-
-    def test_nuke_db_deletes_both_files(self, mock_db_config, temp_db_path):
-        """nuke_db deletes both db and metadata files."""
+    def test_nuke_db_deletes_db_and_metadata(self, mock_db_config, temp_db_path):
+        """The common case: db file plus its -info metadata."""
         self._create_db_file(temp_db_path)
         self._create_metadata_file(temp_db_path)
         info_path = Path(f"{temp_db_path}-info")
-
-        assert temp_db_path.exists()
-        assert info_path.exists()
 
         result = mock_db_config.nuke_db()
 
@@ -331,7 +308,7 @@ class TestNukeMethods:
         assert not info_path.exists()
 
     def test_nuke_db_handles_neither_exists(self, mock_db_config, temp_db_path):
-        """nuke_db returns True when neither file exists."""
+        """nuke_db returns True when no files exist."""
         result = mock_db_config.nuke_db()
 
         assert result is True
@@ -368,43 +345,6 @@ class TestConfirmMetadataExists:
         assert not info_path.exists()
 
         assert mock_db_config.confirm_metadata_exists() is False
-
-
-class TestReadDbInfo:
-    """Tests for read_db_info() method."""
-
-    @pytest.fixture
-    def temp_db_path(self, tmp_path):
-        return tmp_path / "test.db"
-
-    @pytest.fixture
-    def mock_db_config(self, temp_db_path):
-        from mkts_backend.config.db_config import DatabaseConfig
-
-        with patch.object(DatabaseConfig, '__init__', lambda self, *args, **kwargs: None):
-            db = DatabaseConfig()
-            db.path = str(temp_db_path)
-            db.alias = "test"
-            yield db
-
-    def test_returns_content_when_exists(self, mock_db_config, temp_db_path):
-        """Returns file content when -info file exists."""
-        info_path = Path(f"{temp_db_path}-info")
-        info_path.parent.mkdir(parents=True, exist_ok=True)
-        expected_data = {"generation": 5, "durable_frame_num": 500}
-        info_path.write_text(json.dumps(expected_data))
-
-        result = mock_db_config.read_db_info()
-
-        assert result is not None
-        parsed = json.loads(result)
-        assert parsed == expected_data
-
-    def test_returns_none_when_missing(self, mock_db_config, temp_db_path):
-        """Returns None when -info file doesn't exist."""
-        result = mock_db_config.read_db_info()
-
-        assert result is None
 
 
 class TestIntegrationScenarios:

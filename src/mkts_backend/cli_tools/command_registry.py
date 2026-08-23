@@ -553,15 +553,18 @@ def _register_all(reg: CommandRegistry) -> None:
             market_ctx = MarketContext.from_settings(mkt)
             db = DatabaseConfig(market_context=market_ctx)
             print(f"Validating database for market: {market_ctx.name} ({market_ctx.alias})")
-            valid = db.validate_sync()
-            if valid:
-                print(f"Database validated: {db.alias}")
+            if db.validate_sync():
+                print(f"Database validated: {db.alias} (no local changes pending push)")
             else:
-                print(f"Database {db.alias} is out of date. Run 'sync' to sync the database.")
+                print(f"Database {db.alias} has local changes that have not reached Turso.")
                 all_valid = False
         return all_valid
 
-    reg.register("validate", _handle_validate, description="Validate the database sync status")
+    reg.register(
+        "validate",
+        _handle_validate,
+        description="Report whether local writes are still waiting to be pushed to Turso",
+    )
 
     # ── update-builder-costs ───────────────────────────────────
     def _handle_update_builder_costs(args: list[str], market_alias: str) -> bool:

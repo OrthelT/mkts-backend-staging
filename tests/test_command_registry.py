@@ -102,3 +102,38 @@ class TestGlobalRegistry:
         # These used to be mkts-backend-only commands
         for name in ["sync", "validate", "equiv", "assets"]:
             assert reg.resolve(name) is not None, f"{name} not in registry"
+
+
+class TestValidateHandler:
+    """The validate handler, not just its registration.
+
+    ``validate`` called a DatabaseConfig method that the pyturso migration
+    deleted, so ``mkts-backend validate`` raised AttributeError while the
+    registration tests above stayed green.
+    """
+
+    def _run_validate(self, validate_sync_result: bool):
+        from unittest.mock import MagicMock, patch
+
+        db = MagicMock()
+        db.alias = "wcmkttest"
+        db.validate_sync.return_value = validate_sync_result
+        entry = get_registry().resolve("validate")
+        with patch("mkts_backend.config.db_config.DatabaseConfig", return_value=db):
+            return entry.handler([], "primary"), db
+
+    def test_reports_success_when_nothing_pending(self):
+        result, db = self._run_validate(True)
+        assert result is True
+        db.validate_sync.assert_called_once()
+
+    def test_reports_failure_when_changes_pending(self):
+        result, db = self._run_validate(False)
+        assert result is False
+
+    def test_validate_sync_exists_on_database_config(self):
+        """The handler mock cannot catch a deleted method — pin it directly."""
+        from mkts_backend.config.db_config import DatabaseConfig
+
+        assert callable(getattr(DatabaseConfig, "validate_sync", None))
+

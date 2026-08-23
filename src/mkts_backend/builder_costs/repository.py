@@ -173,7 +173,7 @@ def delete_orphan_builder_costs(db: DatabaseConfig) -> int:
     ensure build_watchlist is non-empty before invoking — the runner enforces
     this in ``run()`` before reaching the prune step.
     """
-    engine = db.remote_engine
+    engine = db.engine
     deleted = 0
     session = Session(bind=engine)
     try:
@@ -187,6 +187,10 @@ def delete_orphan_builder_costs(db: DatabaseConfig) -> int:
             deleted = result.rowcount or 0
     finally:
         session.close()
+    # Every other writer here pushes its own changes. Without this the prune
+    # only reaches Turso when a later caller happens to push — the runner does,
+    # but not if its next step raises.
+    db.push()
     if deleted:
         logger.info(f"Pruned {deleted} orphan rows from builder_costs")
     return deleted

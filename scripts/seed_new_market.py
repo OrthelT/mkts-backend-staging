@@ -198,13 +198,16 @@ def main() -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    # Required, not defaulted: this script wipes and re-seeds reference tables
+    # on the destination, so it must never guess which databases it is pointed
+    # at. Aliases come from settings.toml [markets.*] database_alias.
     parser.add_argument(
-        "--source", default="wcmktnewkeep",
-        help="Source market DB alias to copy from (LOCAL db). Default: wcmktnewkeep.",
+        "--source", required=True,
+        help="Source market DB alias to copy from (LOCAL db).",
     )
     parser.add_argument(
-        "--dest", default="wcmktbkg",
-        help="Destination market DB alias to seed (REMOTE Turso db). Default: wcmktbkg.",
+        "--dest", required=True,
+        help="Destination market DB alias to seed (REMOTE Turso db).",
     )
     parser.add_argument(
         "--only", action="append", metavar="table",
